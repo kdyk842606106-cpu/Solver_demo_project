@@ -233,117 +233,12 @@
 
 当前 `500` 响应会返回 traceback，这更偏开发态行为。
 
-## 建议中的主数据维护 API
+## 主数据维护 API（已实现）
 
-为支持“前端录入数据后直接求解”，建议在现有接口之外增加一层主数据维护 API。该部分属于建议中的最小重构，不是当前已实现能力。
+路由文件：`app/api/v1/master_data.py`
 
-### 目标
+提供设备、状态、活动、资源的 CRUD 接口，支持聚合读写（状态一次提交 features，活动一次提交 preconditions/effects/resource_reqs）。
 
-- 让前端可以直接维护设备、状态、活动、资源
-- 录入结果直接落现有数据库表
-- `POST /api/v1/solve` 继续复用现有 Planner 和 Scheduler
+覆盖端点：`/api/v1/machine-types`、`/machines`、`/states`、`/op-rules`、`/resources` 及其子资源。
 
-### 路由组织建议
-
-建议新增：
-
-- `app/api/v1/master_data.py`
-
-并在 `app.main` 中注册到 `/api/v1`。
-
-### 建议新增接口
-
-设备与特征：
-
-- `GET/POST /api/v1/machine-types`
-- `GET/PUT /api/v1/machine-types/{id}`
-- `GET/POST /api/v1/machine-types/{id}/feature-defs`
-- `PUT/DELETE /api/v1/feature-defs/{id}`
-- `GET/POST /api/v1/machines`
-- `GET/PUT /api/v1/machines/{id}`
-
-状态：
-
-- `GET /api/v1/machines/{id}/states`
-- `POST /api/v1/machines/{id}/states`
-- `PUT /api/v1/states/{id}`
-- `DELETE /api/v1/states/{id}`
-
-活动：
-
-- `GET /api/v1/machine-types/{id}/op-rules`
-- `POST /api/v1/machine-types/{id}/op-rules`
-- `PUT /api/v1/op-rules/{id}`
-- `DELETE /api/v1/op-rules/{id}`
-
-资源：
-
-- `GET/POST /api/v1/resources`
-- `PUT/DELETE /api/v1/resources/{id}`
-
-### 聚合接口要求
-
-为了让前端表单更友好，建议接口支持嵌套写入，而不是把子表拆成多次请求。
-
-状态创建/更新建议请求体：
-
-```json
-{
-  "state_type": "snapshot",
-  "label": "冷机/脏污/未校准",
-  "features": {
-    "temperature_level": "cold",
-    "clean_level": "dirty",
-    "calibration": "off"
-  }
-}
-```
-
-活动创建/更新建议请求体：
-
-```json
-{
-  "code": "OP_WARMUP",
-  "name": "升温",
-  "duration_min": 30,
-  "description": "将设备升温到工作温度",
-  "is_active": true,
-  "preconditions": [
-    {
-      "feature_key": "temperature_level",
-      "operator": "eq",
-      "feature_value": "cold"
-    }
-  ],
-  "effects": [
-    {
-      "feature_key": "temperature_level",
-      "new_value": "hot"
-    }
-  ],
-  "resource_reqs": [
-    {
-      "resource_type": "TECHNICIAN",
-      "quantity": 1,
-      "is_required": true
-    }
-  ]
-}
-```
-
-### 用户友好要求
-
-主数据 API 的返回结构应以业务对象为中心，而不是要求前端直接理解这些底层概念：
-
-- `machine_state_feature`
-- `op_rule_precond`
-- `op_rule_effect`
-- `op_rule_resource_req`
-- `predecessor_ids`
-
-### 最小校验建议
-
-- 状态保存时校验 `feature_key` 是否属于对应 `machine_type`
-- 枚举特征值必须在允许值范围内
-- 活动至少包含一个 `effect`
-- 求解前校验当前状态与目标状态不能相同
+详细接口格式请查阅 Swagger UI (`/docs`) 或直接阅读 `master_data.py` 源码。
