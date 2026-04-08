@@ -1,0 +1,177 @@
+# Roadmap — 状态驱动工艺规划 + 资源优化系统 (MVP)
+
+> **适用范围**：v0.1 DEMO 阶段，共 5 个里程碑，覆盖从数据层到端到端联调的完整主链路。
+>
+> **验收维度说明**：每个里程碑的验收包含三个维度 —— 技术验收（功能正确性）、测试覆盖（自动化测试）、文档交付（可查阅的文档产出）。
+
+---
+
+## 总览
+
+| 里程碑 | 名称 | 核心目标 | 前置依赖 |
+|--------|------|----------|----------|
+| M1 | 数据层搭建 | 13 张表建表完成，种子数据可查询 | 无 |
+| M2 | 工序路径规划模块 | 状态输入 → RAG 输出（依赖自推导，并行自涌现） | M1 |
+| M3 | 资源约束优化模块 | RAG 输入 → CP-SAT 并行排程输出 | M1 |
+| M4 | 端到端联调 | HTTP 请求 → 完整排程结果，全程无人工 | M2 + M3 |
+| M5 | 规则扩展验证 | 纯 SQL 新增规则，代码零修改 | M4 |
+
+> **注**：M2 和 M3 可并行开发，两者通过 `candidate_plan_step` 表结构解耦。
+
+---
+
+## M1 — 数据层搭建
+
+### 细分阶段
+
+| 阶段 | 任务 | 交付物 | 说明 |
+|------|------|--------|------|
+| M1.1 | 数据库环境初始化 | `docker-compose.yml` 或本地 PG 实例 + Alembic 初始化配置 | PostgreSQL 15+ 实例可连接，Alembic 迁移框架就绪 |
+| M1.2 | 机台与状态表（5 张） | `machine_type`, `machine`, `state_feature_def`, `machine_state`, `machine_state_feature` 的迁移脚本 | 含索引、约束、注释 |
+| M1.3 | 工序规则表（4 张） | `op_rule`, `op_rule_precond`, `op_rule_effect`, `op_rule_resource_req` 的迁移脚本 | precondition + effect 是 RAG 推导的核心数据基础 |
+| M1.4 | 资源 + 求解 + 结果表（4 张） | `resource`, `solve_request`, `candidate_plan`, `candidate_plan_step`, `schedule_result` 的迁移脚本 | `candidate_plan_step.predecessor_ids` 为 `INTEGER[]` 类型 |
+| M1.5 | 种子数据 | `seeds/` 目录下 SQL 文件 | 1 套机台（1 类型 + 1 实例）、5 条工序规则（含完整 precondition + effect 定义）、3 种资源、2 组状态快照（当前 + 目标） |
+| M1.6 | SQLAlchemy 模型 | `app/db/models.py` | 13 张表对应的 ORM 模型，与迁移脚本严格一致 |
+| M1.7 | Pydantic Schema | `app/db/schemas.py` | 请求/响应用的数据校验模型 |
+
+### 验收指标
+
+| 维度 | 指标 | 通过标准 |
+|------|------|----------|
+| 技术验收 | 迁移脚本执行 | `alembic upgrade head` 一次通过，13 张表全部创建成功 |
+| 技术验收 | 种子数据加载 | 种子 SQL 执行无错误，数据完整写入 |
+| 技术验收 | 状态匹配查询 | 给定 `machine_state_id=1`，SQL 能正确返回满足前提条件的工序规则列表 |
+| 技术验收 | Effect 匹配查询 | 给定目标特征值，SQL 能正确返回 effect 包含该值的工序规则列表 |
+| 测试覆盖 | ORM 模型测试 | 每张表至少 1 个 CRUD 测试用例（创建、查询），覆盖外键关系 |
+| 测试覆盖 | Schema 校验测试 | Pydantic Schema 的必填字段、类型、枚举值校验测试 |
+| 文档交付 | 数据字典 | 13 张表的字段说明文档（表名、字段名、类型、约束、业务含义） |
+
+---
+
+## M2 — 工序路径规划模块
+
+### 细分阶段
+
+| 阶段 | 任务 | 交付物 | 说明 |
+|------|------|--------|------|
+| M2.1 | 状态表示与差异计算 | `app/core/planner/state.py` | 从 DB 加载 `machine_state` + `machine_state_feature`，构建 `dict[str, str]` 状态表示；实现 `compute_state_delta(current, target)` 计算特征差异集；实现 `is_goal`、`freeze` 函数 |
+| M2.2 | 工序规则匹配器 | `app/core/planner/matcher.py` | 从 DB 加载 `op_rule` + `op_rule_precond` + `op_rule_effect`；实现 `check_preconditions(state, preconditions)` 正向匹配；实现 `find_ops_for_delta(feature_key, target_value, rules)` effect 匹配；实现 `find_provider(precond, needed_ops, exclude)` 反向匹配（多候选选最短耗时） |
+| M2.3 | 状态转换执行器 | `app/core/planner/executor.py` | 从 DB 加载 `op_rule_effect`，实现 `apply_effects(state, effects)` 函数；实现 `preview_effects(op_rule)` 预览效果；返回新状态（不可变，原状态不被修改） |
+| M2.4 | 状态推导 RAG 构建 | `app/core/planner/search.py` | 实现 `build_rag()` 核心函数：计算状态差 → 为每个差匹配最优工序（effect 匹配，多候选选最短耗时）→ 分析 precondition 推导依赖边 → 验证无环 → 输出 RAG；无解时返回明确错误 |
+| M2.5 | 候选方案持久化 | `app/core/planner/search.py`（或独立 `persistence.py`） | `save_candidate_plan()` 函数：将 RAG 写入 `candidate_plan` + `candidate_plan_step`（含 `predecessor_ids`，来自 precond/effect 推导） |
+
+### 验收指标
+
+| 维度 | 指标 | 通过标准 |
+|------|------|----------|
+| 技术验收 | 串行路径规划 | 输入种子数据中的 `current_state_id` 和 `target_state_id`，输出正确的工序序列（所有工序有前后依赖） |
+| 技术验收 | 并行自涌现 | 输入含独立状态差的种子数据，RAG 中无互相依赖的工序自然位于不同分支（predecessor 指向共同前置或为空） |
+| 技术验收 | 无解处理 | 输入不可达的目标状态（无工序能产出所需 effect），返回明确的无解标识（非崩溃、非空结果） |
+| 技术验收 | 循环依赖检测 | 当 precondition 互相依赖时，返回 `circular dependency` 错误（非死循环） |
+| 技术验收 | RAG 结构正确性 | 输出的 RAG 无环（拓扑排序验证）；`predecessor_ids` 与 `edges` 一致；每条边对应一个 effect→precondition 关系 |
+| 技术验收 | DB 持久化 | RAG 正确写入 `candidate_plan` + `candidate_plan_step` 表，`predecessor_ids` 字段值正确 |
+| 测试覆盖 | 单元测试 | `matcher.py`（正向+反向匹配）、`executor.py`、`state.py`（含 delta 计算）各至少 3 个测试用例（正常、边界、异常） |
+| 测试覆盖 | 集成测试 | `search.py` 至少 2 个端到端测试（串行场景 + 并行场景），使用真实 DB 或 test fixtures |
+| 文档交付 | 模块接口文档 | 每个 `.py` 文件的公共函数签名、参数说明、返回值说明（docstring 即可） |
+
+---
+
+## M3 — 资源约束优化模块
+
+### 细分阶段
+
+| 阶段 | 任务 | 交付物 | 说明 |
+|------|------|--------|------|
+| M3.1 | RAG 加载器 | `app/core/scheduler/loader.py` | 从 `candidate_plan_step` 表加载 RAG 结构（节点 + `predecessor_ids`）；关联加载 `op_rule` 获取工序时长 `duration_min`；关联加载 `op_rule_resource_req` 获取资源需求 |
+| M3.2 | CP-SAT 约束建模 | `app/core/scheduler/model.py` | 建立任务变量（`start`, `end`, `interval`）；RAG Precedence 约束（`successor.start >= predecessor.end`）；资源容量约束（`AddCumulative`）；目标函数（`Minimize(makespan)`） |
+| M3.3 | 求解与结果输出 | `app/core/scheduler/solver.py` | 调用 CP-SAT 求解（`max_time_in_seconds=30`）；结果格式化为标准 JSON 结构；从求解结果检测实际并行组（`detect_actual_parallel`）；写入 `schedule_result` 表 |
+| M3.4 | 资源分配逻辑 | `app/core/scheduler/solver.py` | MVP 简化策略：按资源类型匹配，同类资源按可用性分配；结果中标注每道工序绑定的 `resource_id` 和 `resource_code` |
+
+### 验收指标
+
+| 维度 | 指标 | 通过标准 |
+|------|------|----------|
+| 技术验收 | 串行排程正确 | 输入纯串行 RAG（所有工序顺序依赖），输出的 `start/end` 时间严格递增，`makespan = sum(duration)` |
+| 技术验收 | 并行排程正确 | 输入含并行分支的 RAG（如 op2/op3 依赖 op1 但互不依赖），op2 和 op3 的 `start` 相同，`makespan` 小于串行总时长 |
+| 技术验收 | 资源约束生效 | 当两个并行工序需要同一资源（容量=1）时，排程自动串行化（资源不超载） |
+| 技术验收 | 实际并行检测 | `parallel_groups` 来自求解结果检测，仅包含时间段实际重叠的步骤组 |
+| 技术验收 | 求解状态处理 | `OPTIMAL` / `FEASIBLE` 返回结果；`INFEASIBLE` / `MODEL_INVALID` 返回明确错误信息 |
+| 技术验收 | DB 持久化 | 结果正确写入 `schedule_result` 表，`tasks` JSONB 字段格式符合规范 |
+| 测试覆盖 | 单元测试 | `loader.py` 数据加载测试（至少 2 个用例）；`model.py` 约束构建测试（precedence + 资源约束各 1 个） |
+| 测试覆盖 | 集成测试 | 至少 2 个完整求解场景：纯串行 + 含并行，验证 makespan 数值正确 |
+| 文档交付 | 约束模型说明 | CP-SAT 建模的约束列表、变量定义、目标函数说明文档 |
+
+---
+
+## M4 — 端到端联调
+
+### 细分阶段
+
+| 阶段 | 任务 | 交付物 | 说明 |
+|------|------|--------|------|
+| M4.1 | FastAPI 接口实现 | `app/api/v1/solve.py` | `POST /api/v1/solve` 接口：接收 `machine_id`, `current_state_id`, `target_state_id`, `objective`；调用 M2 规划 → M3 优化 → 返回完整结果 |
+| M4.2 | 状态查询接口 | `app/api/v1/state.py` | `GET /api/v1/machines/{id}/state` 查询机台当前状态；`GET /api/v1/solve-requests/{id}` 查询求解结果 |
+| M4.3 | 请求生命周期管理 | `app/api/v1/solve.py` | `solve_request` 状态流转：`pending → running → done / failed`；异常处理与错误响应格式统一 |
+| M4.4 | 测试场景 1 — 串行 | `tests/e2e/test_serial.py` | 全链路测试：HTTP 请求 → 数据库状态变更 → 串行排程结果验证 |
+| M4.5 | 测试场景 2 — 并行 | `tests/e2e/test_parallel.py` | 全链路测试：HTTP 请求 → RAG 含并行分支 → 并行排程结果验证（makespan 优于串行） |
+| M4.6 | 甘特图输出 | 独立脚本或 Notebook | 基于 `schedule_result.tasks` 生成简易甘特图（matplotlib / plotly），可视化展示并行效果 |
+
+### 验收指标
+
+| 维度 | 指标 | 通过标准 |
+|------|------|----------|
+| 技术验收 | 主链路跑通 | `POST /api/v1/solve` 返回 HTTP 200，响应体包含完整的 `schedule` 字段（含 `makespan`, `tasks`, `parallel_groups`） |
+| 技术验收 | 状态流转 | `solve_request.status` 正确流转为 `done`（成功）或 `failed`（异常），`solved_at` 时间戳正确填充 |
+| 技术验收 | 错误处理 | 非法输入（不存在的 `machine_id`、不可达的目标状态）返回结构化错误响应（HTTP 4xx + 错误描述） |
+| 技术验收 | 并行收益可见 | 并行场景的 `makespan` 严格小于所有工序 `duration_min` 之和 |
+| 技术验收 | 甘特图输出 | 甘特图能直观展示并行工序的时间重叠 |
+| 测试覆盖 | E2E 测试 | 至少 2 个完整的端到端测试用例（串行 + 并行），从 HTTP 请求到数据库结果全程断言 |
+| 测试覆盖 | 异常路径测试 | 至少 2 个异常场景测试（无效输入、无解情况） |
+| 文档交付 | API 文档 | FastAPI 自动生成的 OpenAPI 文档可访问（`/docs`），接口描述、参数说明、响应示例完整 |
+| 文档交付 | 联调指南 | 如何启动服务、如何执行测试场景的操作步骤说明 |
+
+---
+
+## M5 — 规则扩展验证
+
+### 细分阶段
+
+| 阶段 | 任务 | 交付物 | 说明 |
+|------|------|--------|------|
+| M5.1 | 新增工序规则 | `seeds/extension_rules.sql` | 3-5 条新工序规则的 INSERT SQL（含 `op_rule`, `op_rule_precond`, `op_rule_effect`, `op_rule_resource_req`） |
+| M5.2 | 扩展后回归验证 | 测试脚本或手动验证 | 插入新规则后，重新调用 `POST /api/v1/solve`，验证新规则被系统自动识别和使用（RAG 自动包含新工序） |
+| M5.3 | 边界验证 | 测试脚本 | 验证工序规则达到 15-20 条时系统仍能正常工作（状态推导未产生循环依赖或超时） |
+
+### 验收指标
+
+| 维度 | 指标 | 通过标准 |
+|------|------|----------|
+| 技术验收 | 零代码修改 | 新增规则仅通过 SQL INSERT，不修改任何 Python 代码 |
+| 技术验收 | 自动生效 | 插入新规则后，求解接口的输出包含新规则对应的工序（无需重启服务） |
+| 技术验收 | RAG 结构更新 | 新规则的 precondition/effect 正确参与状态推导，RAG 自动反映新的依赖关系 |
+| 技术验收 | 排程结果变化 | 新规则导致的排程变化合理（如新增独立状态差的工序 → 并行自涌现 → makespan 可能不变或下降） |
+| 测试覆盖 | 回归测试 | 原有测试用例（M4 的 E2E 测试）在新规则插入后仍全部通过 |
+| 测试覆盖 | 规模测试 | 15-20 条工序规则下，求解过程正常完成（无超时、无死循环） |
+| 文档交付 | 规则编写指南 | 说明如何编写新的工序规则 SQL（precondition/effect 定义方法、注意事项） |
+
+---
+
+## 里程碑依赖关系
+
+```
+M1 (数据层)
+ ├──► M2 (路径规划 — RAG 构建)  ──┐
+ └──► M3 (资源优化)             ──┼──► M4 (端到端联调) ──► M5 (规则扩展)
+                                   │
+             可并行开发 ◄──────────┘
+```
+
+---
+
+## 验收维度速查
+
+| 维度 | 覆盖范围 | 执行方式 |
+|------|----------|----------|
+| 技术验收 | 功能正确性、数据一致性、错误处理 | SQL 查询验证、接口调用验证、算法输出比对 |
+| 测试覆盖 | 单元测试、集成测试、E2E 测试 | `pytest` 执行，关注核心模块覆盖率 |
+| 文档交付 | 数据字典、API 文档、模块接口文档、操作指南 | Docstring + OpenAPI 自动生成 + 独立说明文档 |

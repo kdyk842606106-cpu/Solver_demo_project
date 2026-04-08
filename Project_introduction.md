@@ -1,0 +1,867 @@
+# 状态驱动工艺规划 + 资源优化系统 — AI 开发上下文文档
+
+> **本文档用途**：为 AI 编程助手（如 Opencode）提供完整的系统背景、架构设计、数据模型、开发边界与阶段任务，使其能够在无额外解释的情况下，直接参与代码生成、数据库设计、模块实现等开发任务。
+
+---
+
+## 📌 文档元信息
+
+| 字段     | 值                                                        |
+| -------- | --------------------------------------------------------- |
+| 项目名称 | 状态驱动工艺规划 + 资源优化系统                           |
+| 当前版本 | v0.1 DEMO                                                 |
+| 开发阶段 | 流程可行性验证（MVP）                                     |
+| 主要语言 | Python                                                    |
+| 核心依赖 | Google OR-Tools (CP-SAT), FastAPI, PostgreSQL, SQLAlchemy |
+| 文档状态 | 草稿，持续更新                                            |
+
+---
+
+## 🧠 一、问题定义（AI 必读）
+
+### 1.1 这不是标准 RCPSP 问题
+
+本系统解决的是一个 **状态变换驱动的工艺规划 + 资源约束优化** 组合问题。
+
+它由两个子问题构成，必须分层处理：
+
+---
+
+#### 子问题 A：工序路径规划（RAG 生成 — 状态推导有向无环图）
+
+**本质**：给定机台的当前状态和目标状态，分析两者的状态特征差异，找到所有能消除差异的工序，并通过分析工序间的 **前置条件（precondition）与执行效果（effect）链** 自动推导依赖关系，生成 RAG（状态推导有向无环图）。
+
+**关键设计**：依赖关系完全从 precondition/effect 推导，不依赖显式依赖表。并行分支自然涌现——无共同前置依赖的工序天然可并行执行。当一个 precondition 可被多个工序的 effect 满足时，Planner 选择最优的一个（如耗时最短）。
+
+```
+输入: 当前状态 State_A  +  目标状态 State_B
+输出: RAG（节点=工序，边=状态依赖关系）
+  {
+    "nodes": [
+      {"id": "op1", "rule_id": 3, "predecessors": []},        ← 前置条件已由当前状态满足，可立即执行
+      {"id": "op2", "rule_id": 7, "predecessors": ["op1"]},   ← op1 的 effect 满足 op2 的 precondition
+      {"id": "op3", "rule_id": 12, "predecessors": ["op1"]}   ← op1 的 effect 满足 op3 的 precondition
+    ]
+  }
+  ← op2 和 op3 无相互依赖，自然可并行
+```
+
+**求解方法**：
+1. 计算当前状态与目标状态的特征差异集（state delta）
+2. 为每个差异找到能消除它的最优工序（effect 匹配目标值，多候选时选最短耗时）
+3. 分析每个工序的 precondition：当前状态已满足 → 无前置依赖；需要其他工序 effect 才满足 → 连边（provider → consumer）
+4. 输出 RAG，并行性自然涌现，无需单独识别步骤
+
+---
+
+#### 子问题 B：资源融合调度（约束优化，基于 RAG）
+
+**本质**：解析第一层生成的 RAG 结构，结合资源、人员、时间等约束，使用 CP-SAT 求解最优的资源分配与工序排程方案，支持并行执行。
+
+**核心能力**：
+- 解析 RAG 的 precedence 约束（而非简单串行顺序）
+- 在 RAG 并行分支基础上，叠加资源约束做最优排期
+- 支持多约束优化（makespan、资源负载均衡等）
+- 并行组从求解结果中检测（实际并行），而非理论预标记
+
+```
+输入: RAG 结构 + 可用资源列表
+输出: 每道工序的 开始时间 / 结束时间 / 绑定资源
+  {
+    "tasks": [
+      {"op_id": "op1", "op_rule_id": 3, "start": 0,  "end": 30,  "resources": ["TECH-01"]},
+      {"op_id": "op2", "op_rule_id": 7, "start": 30, "end": 60,  "resources": ["TECH-02"]},
+      {"op_id": "op3", "op_rule_id": 12, "start": 30, "end": 60,  "resources": ["TECH-01"]}  ← 与 op2 并行！
+    ],
+    "makespan": 60
+  }
+```
+
+**求解方法**：Google OR-Tools CP-SAT（解析 RAG precedence 约束 + 资源容量约束）
+
+---
+
+### 1.2 核心设计思想
+
+| 原则         | 说明                                                         |
+| ------------ | ------------------------------------------------------------ |
+| 输入最小化   | 用户只提供：当前状态、目标状态、少量偏好                     |
+| 规则内置     | 所有工艺规则、资源规则、状态转换规则存入数据库，系统自动展开 |
+| 两层解耦     | 路径规划层（生成 RAG）与资源优化层（解析 RAG）相互独立，可独立替换算法 |
+| 数据驱动     | 工艺规则不硬编码，全部由数据库驱动                           |
+| 依赖自推导   | 工序间的依赖关系从 precondition/effect 链自动推导，不需要显式维护依赖表 |
+| 并行自涌现   | 无共同前置依赖的工序天然可并行，无需单独标记或识别           |
+
+---
+
+## 🏗️ 二、系统架构
+
+### 2.1 两层架构总览
+
+```
+┌──────────────────────────────────────────┐
+│               用户输入层                  │
+│   当前状态  +  目标状态  +  偏好/例外      │
+└──────────────────┬───────────────────────┘
+                    │
+┌──────────────────▼───────────────────────┐
+│          第一层：工序路径规划              │
+│                                          │
+│  1. 从 DB 加载工序规则（precondition + effect）│
+│  2. 计算当前状态与目标状态的特征差异      │
+│  3. 为每个差异匹配最优工序（effect→目标值）│
+│  4. 分析 precondition 链，推导依赖关系    │
+│  5. 输出 RAG（依赖自推导，并行自涌现）    │
+│  6. 持久化到 candidate_plan_step          │
+│                                          │
+│  核心算法：状态差分析 + precond/effect 推导│
+└──────────────────┬───────────────────────┘
+                    │ candidate_plan_step（含 predecessor_ids）
+┌──────────────────▼───────────────────────┐
+│          第二层：资源融合优化              │
+│                                          │
+│  1. 加载 RAG 结构（解析 predecessor_ids）  │
+│  2. 加载资源列表与约束                    │
+│  3. CP-SAT 建模 precedence + 资源约束     │
+│  4. 求解最优并行排程方案                  │
+│  5. 从求解结果检测实际并行组              │
+│  6. 输出排程结果（写入 schedule_result）  │
+│                                          │
+│  核心算法：CP-SAT (OR-Tools) + RAG 解析  │
+└──────────────────┬───────────────────────┘
+                    │
+┌──────────────────▼───────────────────────┐
+│               输出层                      │
+│  工序 RAG + 资源分配 + 时间轴 + 解释      │
+└──────────────────────────────────────────┘
+```
+
+### 2.2 技术选型
+
+| 模块         | 技术                            | 说明                        |
+| ------------ | ------------------------------- | --------------------------- |
+| 后端语言     | Python 3.11+                    | OR-Tools 原生支持           |
+| 路径规划     | 自实现状态差分析 + precond/effect 推导算法 | 状态推导 RAG 构建  |
+| 约束优化     | `ortools.sat.python.cp_model` | CP-SAT 求解器 + precedence 约束 |
+| 图处理       | NetworkX (可选)                 | 处理 RAG 拓扑排序、环检测    |
+| 数据库       | PostgreSQL 15+                  | JSONB、递归查询、事务支持   |
+| ORM          | SQLAlchemy 2.0                  | 异步支持，类型安全          |
+| API 框架     | FastAPI                         | 异步，自动生成 OpenAPI 文档 |
+| 前端（DEMO） | Jupyter Notebook 或纯 API       | 验证阶段够用                |
+
+### 2.3 项目目录结构（推荐）
+
+```
+project/
+├── app/
+│   ├── api/                  # FastAPI 路由层
+│   │   └── v1/
+│   │       ├── solve.py      # 求解请求接口
+│   │       └── state.py      # 状态查询接口
+│   ├── core/                 # 核心业务逻辑
+│   │   ├── planner/          # 第一层：路径规划
+│   │   │   ├── state.py      # 状态表示、差异计算
+│   │   │   ├── matcher.py    # 工序规则匹配器（含反向匹配）
+│   │   │   ├── executor.py   # 状态转换执行器
+│   │   │   └── search.py     # 状态推导 RAG 构建
+│   │   └── scheduler/        # 第二层：资源优化
+│   │       ├── loader.py     # RAG 结构加载器
+│   │       ├── model.py      # CP-SAT 约束建模
+│   │       └── solver.py     # 求解与结果输出
+│   ├── db/
+│   │   ├── models.py         # SQLAlchemy 模型
+│   │   ├── schemas.py        # Pydantic 数据校验
+│   │   └── session.py        # DB 连接管理
+│   └── main.py               # FastAPI 入口
+├── migrations/               # Alembic 数据库迁移
+├── tests/                    # 测试用例
+├── seeds/                    # 测试数据种子文件
+├── requirements.txt
+└── .env
+```
+
+---
+
+## 🗄️ 三、数据模型设计（MVP 最小表集）
+
+> **重要**：DEMO 阶段只建以下 13 张表，覆盖完整主链路。
+
+### 3.1 表清单与职责
+
+#### 机台与状态相关（5 张表）
+
+```sql
+-- 1. 机台类型
+CREATE TABLE machine_type (
+    id          SERIAL PRIMARY KEY,
+    code        VARCHAR(64) UNIQUE NOT NULL,   -- 类型编码，如 'CNC_LATHE'
+    name        VARCHAR(128) NOT NULL,
+    description TEXT,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. 机台实例
+CREATE TABLE machine (
+    id              SERIAL PRIMARY KEY,
+    machine_type_id INTEGER NOT NULL REFERENCES machine_type(id),
+    code            VARCHAR(64) UNIQUE NOT NULL,  -- 机台编号，如 'M-001'
+    name            VARCHAR(128) NOT NULL,
+    location        VARCHAR(128),
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. 状态特征定义（描述状态由哪些维度构成）
+CREATE TABLE state_feature_def (
+    id              SERIAL PRIMARY KEY,
+    machine_type_id INTEGER NOT NULL REFERENCES machine_type(id),
+    feature_key     VARCHAR(64) NOT NULL,         -- 特征键，如 'temperature_level'
+    feature_name    VARCHAR(128),
+    value_type      VARCHAR(32) NOT NULL,          -- 'string' | 'number' | 'boolean' | 'enum'
+    allowed_values  JSONB,                         -- 枚举类型的合法值列表
+    UNIQUE (machine_type_id, feature_key)
+);
+
+-- 4. 机台状态快照
+CREATE TABLE machine_state (
+    id          SERIAL PRIMARY KEY,
+    machine_id  INTEGER NOT NULL REFERENCES machine(id),
+    state_type  VARCHAR(32) NOT NULL,              -- 'current' | 'target' | 'snapshot'
+    label       VARCHAR(128),                      -- 可读标签，如 '冷机待机状态'
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 5. 机台状态特征值（状态快照的具体特征值）
+CREATE TABLE machine_state_feature (
+    id               SERIAL PRIMARY KEY,
+    machine_state_id INTEGER NOT NULL REFERENCES machine_state(id),
+    feature_key      VARCHAR(64) NOT NULL,
+    feature_value    VARCHAR(256) NOT NULL,
+    UNIQUE (machine_state_id, feature_key)
+);
+```
+
+#### 工序规则相关（4 张表）
+
+```sql
+-- 6. 工序规则主表
+CREATE TABLE op_rule (
+    id              SERIAL PRIMARY KEY,
+    machine_type_id INTEGER NOT NULL REFERENCES machine_type(id),
+    code            VARCHAR(64) UNIQUE NOT NULL,   -- 工序编码，如 'OP_WARMUP'
+    name            VARCHAR(128) NOT NULL,
+    duration_min    INTEGER NOT NULL DEFAULT 30,   -- 默认工序时长（分钟）
+    description     TEXT,
+    is_active       BOOLEAN DEFAULT TRUE,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 7. 工序前提条件（执行该工序前，机台状态必须满足的特征值）
+CREATE TABLE op_rule_precond (
+    id            SERIAL PRIMARY KEY,
+    op_rule_id    INTEGER NOT NULL REFERENCES op_rule(id),
+    feature_key   VARCHAR(64) NOT NULL,
+    operator      VARCHAR(16) NOT NULL DEFAULT 'eq',  -- 'eq' | 'neq' | 'gt' | 'lt' | 'in'
+    feature_value VARCHAR(256) NOT NULL
+);
+
+-- 8. 工序执行效果（执行该工序后，机台状态特征值如何变化）
+CREATE TABLE op_rule_effect (
+    id            SERIAL PRIMARY KEY,
+    op_rule_id    INTEGER NOT NULL REFERENCES op_rule(id),
+    feature_key   VARCHAR(64) NOT NULL,
+    new_value     VARCHAR(256) NOT NULL
+);
+
+-- 9. 工序资源需求（执行该工序需要哪些资源）
+CREATE TABLE op_rule_resource_req (
+    id              SERIAL PRIMARY KEY,
+    op_rule_id      INTEGER NOT NULL REFERENCES op_rule(id),
+    resource_type   VARCHAR(64) NOT NULL,              -- 资源类型标识
+    quantity        INTEGER NOT NULL DEFAULT 1,
+    is_required     BOOLEAN DEFAULT TRUE
+);
+```
+
+#### 资源相关（1 张表）
+
+```sql
+-- 10. 资源（人员、工具、辅助设备等）
+CREATE TABLE resource (
+    id            SERIAL PRIMARY KEY,
+    code          VARCHAR(64) UNIQUE NOT NULL,
+    name          VARCHAR(128) NOT NULL,
+    resource_type VARCHAR(64) NOT NULL,              -- 与 op_rule_resource_req.resource_type 对应
+    capacity      INTEGER NOT NULL DEFAULT 1,        -- 同时可被使用次数
+    is_available  BOOLEAN DEFAULT TRUE,
+    meta          JSONB                               -- 扩展属性（技能等级、资质等）
+);
+```
+
+#### 求解请求相关（1 张表）
+
+```sql
+-- 11. 求解请求
+CREATE TABLE solve_request (
+    id                    SERIAL PRIMARY KEY,
+    machine_id            INTEGER NOT NULL REFERENCES machine(id),
+    current_state_id      INTEGER NOT NULL REFERENCES machine_state(id),
+    target_state_id       INTEGER NOT NULL REFERENCES machine_state(id),
+    objective             VARCHAR(64) DEFAULT 'minimize_makespan',  -- 优化目标
+    status                VARCHAR(32) DEFAULT 'pending',            -- pending|running|done|failed
+    overrides             JSONB,                                    -- 临时例外/覆盖规则
+    created_at            TIMESTAMPTZ DEFAULT NOW(),
+    solved_at             TIMESTAMPTZ
+);
+```
+
+#### 结果相关（2 张表）
+
+```sql
+-- 12. 候选工序方案（第一层输出，RAG 结构）
+CREATE TABLE candidate_plan (
+    id               SERIAL PRIMARY KEY,
+    solve_request_id INTEGER NOT NULL REFERENCES solve_request(id),
+    total_steps      INTEGER,
+    search_method    VARCHAR(32) DEFAULT 'state_inference',    -- 状态推导算法
+    created_at       TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 候选方案工序步骤（支持 RAG 依赖关系）
+CREATE TABLE candidate_plan_step (
+    id                SERIAL PRIMARY KEY,
+    candidate_plan_id INTEGER NOT NULL REFERENCES candidate_plan(id),
+    step_order        INTEGER NOT NULL,              -- 拓扑顺序编号（从 1 开始）
+    op_rule_id        INTEGER NOT NULL REFERENCES op_rule(id),
+    predecessor_ids   INTEGER[],                     -- 前置步骤 ID 列表（空数组表示无前置依赖，可立即执行）
+    UNIQUE (candidate_plan_id, step_order)
+);
+
+-- 13. 最终调度结果（第二层输出）
+CREATE TABLE schedule_result (
+    id                SERIAL PRIMARY KEY,
+    solve_request_id  INTEGER NOT NULL REFERENCES solve_request(id),
+    candidate_plan_id INTEGER NOT NULL REFERENCES candidate_plan(id),
+    makespan          INTEGER,                       -- 总完工时间（分钟）
+    solver_status     VARCHAR(32),                   -- CP-SAT 返回状态
+    tasks             JSONB NOT NULL,                -- 详细任务列表（见下方格式）
+    created_at        TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- tasks JSONB 字段格式示例（支持并行）：
+-- [
+--   {
+--     "step_order": 1,
+--     "op_rule_id": 3,
+--     "op_rule_code": "OP_WARMUP",
+--     "start_min": 0,
+--     "end_min": 30,
+--     "resources": [{"resource_id": 1, "resource_code": "TECH-01"}]
+--   },
+--   {
+--     "step_order": 2,
+--     "op_rule_id": 7,
+--     "op_rule_code": "OP_CLEANING",
+--     "start_min": 30,  -- 注意：与 step_order=3 同时开始（并行）
+--     "end_min": 60,
+--     "resources": [{"resource_id": 2, "resource_code": "TECH-02"}]
+--   },
+--   {
+--     "step_order": 3,
+--     "op_rule_id": 12,
+--     "op_rule_code": "OP_CALIBRATE",
+--     "start_min": 30,  -- 与 step_order=2 并行！
+--     "end_min": 60,
+--     "resources": [{"resource_id": 1, "resource_code": "TECH-01"}]
+--   }
+-- ]
+```
+
+---
+
+## 🔁 四、核心业务逻辑说明（供 AI 实现参考）
+
+### 4.1 第一层：工序路径规划（RAG 构建 — 状态推导）
+
+```python
+# 伪代码描述，AI 实现时遵循此逻辑
+
+def build_rag(current_state: dict, target_state: dict, op_rules: list) -> dict:
+    """
+    通过状态差分析 + precondition/effect 推导，构建 RAG（状态推导有向无环图）。
+    
+    依赖关系完全从 precondition/effect 链自动推导，不依赖显式依赖表。
+    并行分支自然涌现——无共同前置依赖的工序天然可并行。
+    多候选时选最优（最短耗时）。
+    
+    输入:
+    - current_state: {"temperature_level": "cold", "clean_level": "dirty", ...}
+    - target_state:  {"temperature_level": "hot",  "clean_level": "clean", ...}
+    - op_rules: 从数据库加载的所有活跃工序规则（含前提条件和执行效果）
+    
+    返回:
+    {
+        "nodes": [{"id": 1, "op_rule_id": 3, "predecessors": []}, ...],
+        "edges": [(1, 2), (1, 3), ...]
+    }
+    """
+    
+    # ========== 阶段 1: 计算状态差异 ==========
+    # 找出当前状态与目标状态之间所有不同的特征
+    delta = {}
+    for feature_key in target_state:
+        if current_state.get(feature_key) != target_state[feature_key]:
+            delta[feature_key] = {
+                "current": current_state.get(feature_key),
+                "target": target_state[feature_key]
+            }
+    
+    if not delta:
+        return None  # 已在目标状态，无需任何工序
+    
+    # ========== 阶段 2: 为每个状态差匹配最优工序 ==========
+    # 对于每个需要改变的特征，找到 effect 能产出目标值的工序
+    needed_ops = []
+    
+    for feature_key, values in delta.items():
+        target_value = values["target"]
+        
+        # 找所有 effect 包含 (feature_key → target_value) 的工序
+        candidates = [
+            rule for rule in op_rules
+            if any(
+                eff.feature_key == feature_key and eff.new_value == target_value
+                for eff in rule.effects
+            )
+        ]
+        
+        if not candidates:
+            return None  # 无解：没有工序能产出所需的状态变化
+        
+        # 多候选时选最优（最短耗时）
+        best = min(candidates, key=lambda r: r.duration_min)
+        
+        # 避免重复添加同一工序（一个工序可能同时消除多个状态差）
+        if best.id not in [op.id for op in needed_ops]:
+            needed_ops.append(best)
+    
+    # ========== 阶段 3: 从 precondition/effect 推导依赖关系 ==========
+    # 初始化 RAG 节点
+    nodes = [
+        {
+            "id": i + 1,
+            "op_rule_id": op.id,
+            "predecessors": []
+        }
+        for i, op in enumerate(needed_ops)
+    ]
+    
+    edges = []
+    op_id_to_node_id = {op.id: i + 1 for i, op in enumerate(needed_ops)}
+    
+    for i, op in enumerate(needed_ops):
+        node_id = i + 1
+        
+        for precond in op.preconditions:
+            # 检查当前状态是否已满足该前置条件
+            if check_precondition_against_state(current_state, precond):
+                continue  # 当前状态已满足，无需前置工序
+            
+            # 当前状态不满足 → 找 needed_ops 中谁的 effect 能满足
+            provider = find_provider(precond, needed_ops, exclude=op)
+            
+            if provider is None:
+                return None  # 无解：某个前置条件无法被满足
+            
+            provider_node_id = op_id_to_node_id[provider.id]
+            
+            # 连边：provider → consumer（provider 必须先完成）
+            edge = (provider_node_id, node_id)
+            if edge not in edges:
+                edges.append(edge)
+                nodes[i]["predecessors"].append(provider_node_id)
+    
+    # ========== 阶段 4: 验证 RAG 合法性 ==========
+    # 确保无环（通过拓扑排序验证）
+    if has_cycle(nodes, edges):
+        return None  # 异常：检测到循环依赖
+    
+    # ========== 结果：RAG 自然包含并行性 ==========
+    # predecessors 为空的节点 → 可立即执行（潜在并行）
+    # 有相同 predecessors 的节点 → 可在前置完成后并行执行
+    # 不需要单独的 parallel_groups 识别步骤
+    
+    return {
+        "nodes": nodes,
+        "edges": edges
+    }
+
+
+def find_provider(precond, needed_ops, exclude):
+    """
+    在 needed_ops 中找到 effect 能满足给定 precondition 的工序。
+    多候选时选最短耗时。
+    """
+    candidates = [
+        op for op in needed_ops
+        if op.id != exclude.id
+        and any(
+            eff.feature_key == precond.feature_key
+            and eff.new_value == precond.feature_value
+            for eff in op.effects
+        )
+    ]
+    
+    if not candidates:
+        return None
+    
+    return min(candidates, key=lambda r: r.duration_min)
+
+
+# 数据库写入
+def save_candidate_plan(rag: dict, solve_request_id: int, session):
+    candidate_plan = CandidatePlan(
+        solve_request_id=solve_request_id,
+        total_steps=len(rag["nodes"]),
+        search_method="state_inference"
+    )
+    session.add(candidate_plan)
+    session.flush()
+    
+    # 写入步骤（含 predecessor_ids — 来自状态推导）
+    for node in rag["nodes"]:
+        step = CandidatePlanStep(
+            candidate_plan_id=candidate_plan.id,
+            step_order=node["id"],
+            op_rule_id=node["op_rule_id"],
+            predecessor_ids=node["predecessors"]  # ← 关键：来自 precond/effect 推导
+        )
+        session.add(step)
+    
+    session.commit()
+```
+
+### 4.2 第二层：CP-SAT 约束建模（基于 RAG）
+
+```python
+# 伪代码描述，AI 实现时遵循此逻辑
+
+from ortools.sat.python import cp_model
+
+def build_and_solve_with_rag(rag: dict, steps: list, resources: list) -> dict:
+    """
+    解析 RAG 结构，构建 CP-SAT 模型支持并行排期
+    
+    输入:
+    - rag: {"nodes": [...], "edges": [(1,2), (1,3), ...]}
+    - steps: [{"step_order": 1, "op_rule_id": 3, "duration": 30, "resource_type": "TECHNICIAN"}, ...]
+    - resources: [{"id": 1, "resource_type": "TECHNICIAN", "capacity": 1}, ...]
+    
+    返回:
+    - 包含并行排程结果的字典
+    """
+    model = cp_model.CpModel()
+    horizon = sum(s["duration"] for s in steps)
+    
+    # ========== 建立任务变量 ==========
+    task_vars = {}
+    for step in steps:
+        step_order = step["step_order"]
+        start = model.NewIntVar(0, horizon, f"start_{step_order}")
+        end   = model.NewIntVar(0, horizon, f"end_{step_order}")
+        interval = model.NewIntervalVar(start, step["duration"], end, f"interval_{step_order}")
+        task_vars[step_order] = {"start": start, "end": end, "interval": interval}
+    
+    # ========== 约束 1: RAG Precedence 约束 ==========
+    # 基于 RAG 的边（来自 precondition/effect 推导）
+    for pred_step, succ_step in rag["edges"]:
+        # succ_step.start >= pred_step.end
+        model.Add(task_vars[succ_step]["start"] >= task_vars[pred_step]["end"])
+    
+    # ========== 约束 2: 资源容量约束 ==========
+    for res_type in set(s["resource_type"] for s in steps):
+        capacity = get_capacity(resources, res_type)
+        intervals = [task_vars[s["step_order"]]["interval"] for s in steps
+                     if s["resource_type"] == res_type]
+        # 同类资源不超载
+        model.AddCumulative(intervals, [1]*len(intervals), capacity)
+    
+    # ========== 目标函数：最小化 Makespan ==========
+    makespan = model.NewIntVar(0, horizon, "makespan")
+    model.AddMaxEquality(makespan, [tv["end"] for tv in task_vars.values()])
+    model.Minimize(makespan)
+    
+    # ========== 求解 ==========
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = 30.0
+    status = solver.Solve(model)
+    
+    # ========== 结果格式化 + 并行检测 ==========
+    step_order_to_op = {s["step_order"]: s for s in steps}
+    
+    tasks = [
+        {
+            "step_order": step_order,
+            "op_rule_id": step_order_to_op[step_order]["op_rule_id"],
+            "op_rule_code": step_order_to_op[step_order].get("op_rule_code", ""),
+            "start": solver.Value(task_vars[step_order]["start"]),
+            "end": solver.Value(task_vars[step_order]["end"])
+        }
+        for step_order in sorted(task_vars.keys())
+    ]
+    
+    # 从求解结果中检测实际并行执行的步骤组
+    parallel_groups = detect_actual_parallel(tasks)
+    
+    return {
+        "status": solver.StatusName(status),
+        "makespan": solver.Value(makespan),
+        "tasks": tasks,
+        "parallel_groups": parallel_groups  # ← 来自求解结果，非预标记
+    }
+
+
+def detect_actual_parallel(tasks):
+    """从求解结果中检测实际并行执行的步骤组（start 时间相同且时间段重叠）"""
+    from itertools import combinations
+    
+    parallel_groups = []
+    
+    # 找出所有时间段有重叠的任务对
+    for t1, t2 in combinations(tasks, 2):
+        if t1["start"] < t2["end"] and t2["start"] < t1["end"]:
+            # 时间段重叠 → 实际并行
+            group = sorted([t1["step_order"], t2["step_order"]])
+            if group not in parallel_groups:
+                parallel_groups.append(group)
+    
+    return parallel_groups
+```
+
+---
+
+## 📋 五、阶段里程碑与验收标准
+
+### Milestone 1 — 数据层搭建
+
+| 项目   | 内容                                                            |
+| ------ | --------------------------------------------------------------- |
+| 目标   | 数据库建表完成，能写入和查询基础数据                            |
+| 交付物 | 建表 SQL（13 张）、种子数据（1 套机台、5 条工序规则（含 precondition + effect）、3 种资源） |
+| 验收   | SQL 查询能返回"当前状态满足哪些工序的前提条件"以及"哪些工序的 effect 能产出目标状态值" |
+
+#### 验收 SQL 示例
+
+```sql
+-- 查询 1：当前状态 ID=1 满足哪些工序规则的所有前提条件
+SELECT op_rule.id, op_rule.code, op_rule.name
+FROM op_rule
+WHERE op_rule.is_active = TRUE
+  AND NOT EXISTS (
+    SELECT 1 FROM op_rule_precond p
+    WHERE p.op_rule_id = op_rule.id
+      AND NOT EXISTS (
+        SELECT 1 FROM machine_state_feature f
+        WHERE f.machine_state_id = 1
+          AND f.feature_key = p.feature_key
+          AND f.feature_value = p.feature_value
+      )
+  );
+
+-- 查询 2：哪些工序的 effect 能将 feature_key='temperature_level' 变为 'hot'
+SELECT op_rule.id, op_rule.code, op_rule.name, op_rule.duration_min
+FROM op_rule
+JOIN op_rule_effect e ON e.op_rule_id = op_rule.id
+WHERE op_rule.is_active = TRUE
+  AND e.feature_key = 'temperature_level'
+  AND e.new_value = 'hot';
+```
+
+---
+
+### Milestone 2 — 工序路径规划模块
+
+| 项目   | 内容                                                                      |
+| ------ | ------------------------------------------------------------------------- |
+| 目标   | 给定当前状态和目标状态，通过状态推导自动输出 RAG 结构的工序方案（依赖自推导，并行自涌现） |
+| 交付物 | `state.py` / `matcher.py` / `executor.py` / `search.py` |
+| 验收   | 输入 `state_id=1`（当前），`state_id=2`（目标），输出 RAG 节点列表及 predecessor_ids（来自 precond/effect 推导） |
+
+---
+
+### Milestone 3 — 资源约束优化模块
+
+| 项目         | 内容                                         |
+| ------------ | -------------------------------------------- |
+| 目标         | 基于 RAG，CP-SAT 输出考虑资源约束的最优并行排程 |
+| 交付物       | `loader.py` / `model.py` / `solver.py` |
+| 验收（示例） | 见下（注意并行执行）                         |
+
+```
+输入：RAG（含状态推导依赖：op2 依赖 op1，op3 依赖 op1）+ 资源列表
+期望输出：
+  op1 (OP_WARMUP):    start=0,  end=30,  resource=TECH-01
+  op2 (OP_CLEANING):  start=30, end=60,  resource=TECH-02
+  op3 (OP_CALIBRATE): start=30, end=60,  resource=TECH-01  ← op2 and op3 并行！
+  makespan = 60（如果是串行则是 90）
+```
+
+---
+
+### Milestone 4 — 端到端联调
+
+| 项目   | 内容                                                          |
+| ------ | ------------------------------------------------------------- |
+| 目标   | 主链路全自动跑通                                              |
+| 交付物 | FastAPI 接口 `POST /api/v1/solve`、2 个测试场景、甘特图输出 |
+| 验收   | 从 HTTP 请求到最终排程结果，全程无人工干预                    |
+
+#### API 接口格式
+
+```json
+// POST /api/v1/solve
+// 请求体
+{
+  "machine_id": 1,
+  "current_state_id": 1,
+  "target_state_id": 2,
+  "objective": "minimize_makespan"
+}
+
+// 响应体
+{
+  "solve_request_id": 42,
+  "status": "done",
+  "candidate_plan_id": 7,
+  "schedule": {
+    "makespan": 60,
+    "tasks": [
+      {"step": 1, "op_code": "OP_WARMUP",    "start": 0,  "end": 30, "resource": "TECH-01", "predecessors": []},
+      {"step": 2, "op_code": "OP_CLEANING",  "start": 30, "end": 60, "resource": "TECH-02", "predecessors": [1]},
+      {"step": 3, "op_code": "OP_CALIBRATE", "start": 30, "end": 60, "resource": "TECH-01", "predecessors": [1]}
+    ],
+    "parallel_groups": [[2, 3]]
+  }
+}
+```
+
+---
+
+### Milestone 5 — 规则扩展验证
+
+| 项目   | 内容                               |
+| ------ | ---------------------------------- |
+| 目标   | 验证扩展性：新增工序规则不修改代码 |
+| 交付物 | 新增 3-5 条工序规则的 INSERT SQL   |
+| 验收   | 纯 SQL 插入即可生效，代码零修改    |
+
+---
+
+## ⚠️ 六、风险与约束
+
+| 风险               | 等级 | 应对                                                            |
+| ------------------ | ---- | --------------------------------------------------------------- |
+| 状态差匹配歧义     | 中   | 多个工序 effect 可消除同一差异时，选最短耗时；后续可加权重策略   |
+| 循环依赖           | 中   | 状态推导可能产生 A 的 precond 需要 B，B 的 precond 需要 A；需拓扑排序检测并报错 |
+| 间接依赖链         | 中   | 某个 precondition 不被 needed_ops 直接满足，需要引入额外中间工序；MVP 阶段仅支持直接依赖 |
+| CP-SAT 超时        | 低   | 设置 `max_time_in_seconds=30`，超时取近似最优                 |
+| JSONB 规则表达不足 | 中   | `op_rule_precond.operator` 支持 `eq/neq/in`，先覆盖常见类型 |
+| 两层接口不匹配     | 低   | 以 `candidate_plan_step` 表结构为契约，两层严格遵守           |
+
+---
+
+## 🚫 七、DEMO 范围边界（明确不做的事）
+
+以下功能在 DEMO 阶段**不实现**，AI 生成代码时请勿引入相关逻辑：
+
+- ❌ 复杂资格认证（人员技能匹配）
+- ❌ 多机台并行调度
+- ❌ 排班日历（resource_calendar）
+- ❌ 用户权限与认证系统
+- ❌ 生产级 UI / 前端页面
+- ❌ 间接依赖链推导（需要引入额外中间工序的场景）
+- ❌ 多候选 RAG 方案对比（MVP 仅输出单一最优 RAG）
+
+**✅ MVP 已实现功能**：
+- ✅ 状态差分析（compute state delta）
+- ✅ precondition/effect 链推导依赖关系（无需显式依赖表）
+- ✅ RAG 结构存储（candidate_plan_step.predecessor_ids）
+- ✅ 并行自涌现（无需单独识别步骤）
+- ✅ CP-SAT 解析 RAG precedence 约束 + 资源约束
+- ✅ 从求解结果检测实际并行组
+
+---
+
+## ✅ 八、一句话核心目标
+
+> 用最小的代码和数据，跑通：
+> **输入状态 → 状态差分析 → precondition/effect 推导 → RAG 构建 → CP-SAT 资源约束优化 → 排程输出**
+> 这条完整主链路，验证"依赖自推导 + 并行自涌现"的两层架构，为正式系统开发奠定基础。
+
+**核心创新点**：
+- 第一层通过状态推导生成 RAG（非 BFS 线性搜索 + 显式依赖表），依赖关系从 precondition/effect 链自然涌现
+- 第二层解析 RAG，在并行基础上叠加资源约束，支持智能并行排期
+- 数据驱动规则（precondition + effect），扩展性强，新增工序只需 INSERT SQL
+---
+
+## 下一步最小化重构方向：用户可在前端维护数据并求解
+
+为了从当前 seed 演示模式演进到“用户可在前端自行维护数据并发起求解”，建议采用最小化重构路线。
+
+### 目标闭环
+
+```text
+前端数据管理
+  -> 主数据维护 API
+  -> PostgreSQL
+  -> Planner
+  -> Scheduler
+  -> 前端求解结果展示
+```
+
+### 演进原则
+
+- 不重写现有 Planner / Scheduler
+- 不新增前端专用配置表
+- 继续使用当前业务表作为求解唯一数据源
+- 在 API 层新增面向业务对象的聚合 CRUD
+- 在前端以表单和选择器隐藏底层表结构
+
+### 前端建议模块
+
+- 数据管理
+  - 设备与特征
+  - 状态管理
+  - 活动管理
+  - 资源管理
+- 求解
+  - 选择设备
+  - 选择当前状态
+  - 选择目标状态
+  - 发起求解
+  - 展示计划与排程结果
+
+### 后端建议模块
+
+新增 `master_data` 风格路由，负责维护：
+
+- `machine_type`
+- `machine`
+- `state_feature_def`
+- `machine_state`
+- `op_rule`
+- `resource`
+
+并支持嵌套保存：
+
+- 状态一次提交 `features`
+- 活动一次提交 `preconditions`、`effects`、`resource_reqs`
+
+### 本阶段的边界
+
+本轮最小化重构只解决“用户可维护数据并求解”的闭环，不包括：
+
+- 版本管理
+- 草稿/发布流
+- 批量导入导出
+- 多资源联合精细排程
+- 权限系统

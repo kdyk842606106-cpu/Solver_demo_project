@@ -1,0 +1,60 @@
+"""
+Database configuration module.
+
+Loads database settings from environment variables and provides
+connection URLs for both async and sync operations.
+"""
+
+import os
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings
+
+
+class DatabaseSettings(BaseSettings):
+    """Database configuration loaded from environment variables."""
+
+    db_host: str = "localhost"
+    db_port: int = 5432
+    db_user: str = "solver"
+    db_password: str = "solver123"
+    db_name: str = "solver_db"
+
+    # Optional: override full URL
+    database_url: str | None = None
+    database_url_sync: str | None = None
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        extra = "ignore"
+
+    @property
+    def async_url(self) -> str:
+        """Get async database URL (for asyncpg)."""
+        if self.database_url:
+            return self.database_url
+        return (
+            f"postgresql+asyncpg://{self.db_user}:{self.db_password}"
+            f"@{self.db_host}:{self.db_port}/{self.db_name}"
+        )
+
+    @property
+    def sync_url(self) -> str:
+        """Get sync database URL (for psycopg v3, used by Alembic)."""
+        if self.database_url_sync:
+            return self.database_url_sync
+        return (
+            f"postgresql+psycopg://{self.db_user}:{self.db_password}"
+            f"@{self.db_host}:{self.db_port}/{self.db_name}"
+        )
+
+
+@lru_cache
+def get_db_settings() -> DatabaseSettings:
+    """Get cached database settings instance."""
+    return DatabaseSettings()
+
+
+# Convenience exports
+db_settings = get_db_settings()
