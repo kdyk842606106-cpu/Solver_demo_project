@@ -14,6 +14,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     Text,
     func,
@@ -201,6 +202,9 @@ class OpRule(Base):
     duration_min: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_repair: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    valid_from: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_to: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -237,8 +241,9 @@ class OpRulePrecond(Base):
         Integer, ForeignKey("op_rule.id", ondelete="CASCADE"), nullable=False
     )
     feature_key: Mapped[str] = mapped_column(String(64), nullable=False)
-    operator: Mapped[str] = mapped_column(String(16), nullable=False, default="eq")  # eq | neq | gt | lt | in
+    operator: Mapped[str] = mapped_column(String(16), nullable=False, default="eq")
     feature_value: Mapped[str] = mapped_column(String(256), nullable=False)
+    value_list: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
 
     # Relationships
     op_rule: Mapped["OpRule"] = relationship("OpRule", back_populates="preconditions")
@@ -262,6 +267,8 @@ class OpRuleEffect(Base):
     )
     feature_key: Mapped[str] = mapped_column(String(64), nullable=False)
     new_value: Mapped[str] = mapped_column(String(256), nullable=False)
+    effect_type: Mapped[str] = mapped_column(String(32), nullable=False, default="set")
+    delta_value: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
 
     # Relationships
     op_rule: Mapped["OpRule"] = relationship("OpRule", back_populates="effects")
@@ -320,6 +327,25 @@ class Resource(Base):
         return f"<Resource(id={self.id}, code='{self.code}', name='{self.name}', resource_type='{self.resource_type}')>"
 
 
+class FeatureDefinition(Base):
+    """
+    特征类型定义表.
+
+    定义系统中所有可用的特征类型，用于前置条件匹配和效果应用。
+    """
+
+    __tablename__ = "feature_definition"
+
+    feature_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    allowed_values: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    unit: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<FeatureDefinition(feature_key='{self.feature_key}', value_type='{self.value_type}')>"
+
+
 # ============================================================
 # 求解请求相关（1 张表）
 # ============================================================
@@ -337,6 +363,48 @@ class SolveRequest(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     machine_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("machine.id", ondelete="CASCADE"), nullable=False
+    )
+    current_state_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("machine_state.id", ondelete="RESTRICT"), nullable=False
+    )
+    target_state_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("machine_state.id", ondelete="RESTRICT"), nullable=False
+    )
+    objective: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="minimize_makespan"
+    )
+    objectives: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    constraints: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    parent_plan_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("candidate_plan.id"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="pending"
+    )
+    overrides: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    solved_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Relationships
+    machine: Mapped["Machine"] = relationship("Machine", back_populates="solve_requests")
+    current_state: Mapped["MachineState"] = relationship(
+        "MachineState", foreign_keys=[current_state_id]
+    )
+    target_state: Mapped["MachineState"] = relationship(
+        "MachineState", foreign_keys=[target_state_id]
+    )
+    parent_plan: Mapped[Optional["CandidatePlan"]] = relationship(
+        "CandidatePlan", foreign_keys=[parent_plan_id]
+    )
+    candidate_plans: Mapped[list["CandidatePlan"]] = relationship(
+        "CandidatePlan", back_populates="solve_request", cascade="all, delete-orphan"
+    )
+    schedule_results: Mapped[list["ScheduleResult"]] = relationship(
+        "ScheduleResult", back_populates="solve_request", cascade="all, delete-orphan"
     )
     current_state_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("machine_state.id", ondelete="RESTRICT"), nullable=False
@@ -399,6 +467,12 @@ class CandidatePlan(Base):
     search_method: Mapped[str] = mapped_column(
         String(32), nullable=False, default="state_inference"
     )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    parent_plan_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("candidate_plan.id"), nullable=True
+    )
+    replan_reason: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -412,6 +486,15 @@ class CandidatePlan(Base):
     )
     schedule_results: Mapped[list["ScheduleResult"]] = relationship(
         "ScheduleResult", back_populates="candidate_plan", cascade="all, delete-orphan"
+    )
+    blockage_events: Mapped[list["BlockageEvent"]] = relationship(
+        "BlockageEvent", back_populates="candidate_plan", cascade="all, delete-orphan"
+    )
+    parent_plan: Mapped[Optional["CandidatePlan"]] = relationship(
+        "CandidatePlan", remote_side=[id], foreign_keys=[parent_plan_id]
+    )
+    child_plans: Mapped[list["CandidatePlan"]] = relationship(
+        "CandidatePlan", back_populates="parent_plan"
     )
 
     def __repr__(self) -> str:
@@ -438,6 +521,8 @@ class CandidatePlanStep(Base):
     predecessor_ids: Mapped[Optional[list[int]]] = mapped_column(
         ARRAY(Integer), nullable=True, default=[]
     )
+    not_before: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    step_role: Mapped[str] = mapped_column(String(32), nullable=False, default="normal")
 
     # Relationships
     candidate_plan: Mapped["CandidatePlan"] = relationship(
@@ -482,3 +567,37 @@ class ScheduleResult(Base):
 
     def __repr__(self) -> str:
         return f"<ScheduleResult(id={self.id}, makespan={self.makespan}, solver_status='{self.solver_status}')>"
+
+
+class BlockageEvent(Base):
+    """
+    阻塞事件表.
+
+    记录计划师标记的阻塞事件及处理策略。
+    """
+
+    __tablename__ = "blockage_event"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("candidate_plan.id", ondelete="CASCADE"), nullable=False
+    )
+    blocked_step_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("candidate_plan_step.id", ondelete="CASCADE"), nullable=False
+    )
+    strategy: Mapped[str] = mapped_column(String(8), nullable=False)
+    not_before_offset: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    blockage_reason: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    created_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+    # Relationships
+    candidate_plan: Mapped["CandidatePlan"] = relationship(
+        "CandidatePlan", back_populates="blockage_events"
+    )
+
+    def __repr__(self) -> str:
+        return f"<BlockageEvent(id={self.id}, strategy='{self.strategy}', blockage_reason='{self.blockage_reason}')>"

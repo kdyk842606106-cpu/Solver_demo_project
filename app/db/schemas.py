@@ -164,8 +164,9 @@ class OpRulePrecondCreate(BaseModel):
     """Schema for creating an operation rule precondition."""
 
     feature_key: str = Field(..., min_length=1, max_length=64, description="Feature key")
-    operator: str = Field(default="eq", description="Comparison operator: eq, neq, gt, lt, in")
+    operator: str = Field(default="eq", description="Comparison operator: eq, neq, gt, gte, lt, lte, in")
     feature_value: str = Field(..., min_length=1, max_length=256, description="Feature value")
+    value_list: Optional[list[Any]] = Field(None, description="Value list for 'in' operator")
 
 
 class OpRulePrecondResponse(BaseSchema):
@@ -175,6 +176,7 @@ class OpRulePrecondResponse(BaseSchema):
     feature_key: str
     operator: str
     feature_value: str
+    value_list: Optional[list[Any]] = None
 
 
 class OpRuleEffectCreate(BaseModel):
@@ -182,6 +184,8 @@ class OpRuleEffectCreate(BaseModel):
 
     feature_key: str = Field(..., min_length=1, max_length=64, description="Feature key")
     new_value: str = Field(..., min_length=1, max_length=256, description="New value after effect")
+    effect_type: str = Field(default="set", description="Effect type: set, increment, decrement")
+    delta_value: Optional[float] = Field(None, description="Delta value for increment/decrement")
 
 
 class OpRuleEffectResponse(BaseSchema):
@@ -190,6 +194,8 @@ class OpRuleEffectResponse(BaseSchema):
     id: int
     feature_key: str
     new_value: str
+    effect_type: str
+    delta_value: Optional[float] = None
 
 
 class OpRuleResourceReqCreate(BaseModel):
@@ -218,6 +224,9 @@ class OpRuleCreate(BaseModel):
     duration_min: int = Field(default=30, ge=1, description="Duration in minutes")
     description: Optional[str] = Field(None, description="Operation description")
     is_active: bool = Field(default=True, description="Whether the operation is active")
+    is_repair: bool = Field(default=False, description="Whether this is a repair operation")
+    valid_from: Optional[datetime] = Field(None, description="Valid start timestamp")
+    valid_to: Optional[datetime] = Field(None, description="Valid end timestamp")
     preconditions: list[OpRulePrecondCreate] = Field(default_factory=list, description="Preconditions")
     effects: list[OpRuleEffectCreate] = Field(default_factory=list, description="Effects")
     resource_reqs: list[OpRuleResourceReqCreate] = Field(default_factory=list, description="Resource requirements")
@@ -232,6 +241,9 @@ class OpRuleUpdate(BaseModel):
     duration_min: int = Field(default=30, ge=1, description="Duration in minutes")
     description: Optional[str] = Field(None, description="Operation description")
     is_active: bool = Field(default=True, description="Whether the operation is active")
+    is_repair: bool = Field(default=False, description="Whether this is a repair operation")
+    valid_from: Optional[datetime] = Field(None, description="Valid start timestamp")
+    valid_to: Optional[datetime] = Field(None, description="Valid end timestamp")
     preconditions: list[OpRulePrecondCreate] = Field(default_factory=list, description="Preconditions")
     effects: list[OpRuleEffectCreate] = Field(default_factory=list, description="Effects")
     resource_reqs: list[OpRuleResourceReqCreate] = Field(default_factory=list, description="Resource requirements")
@@ -247,6 +259,9 @@ class OpRuleResponse(BaseSchema):
     duration_min: int
     description: Optional[str] = None
     is_active: bool
+    is_repair: bool
+    valid_from: Optional[datetime] = None
+    valid_to: Optional[datetime] = None
     created_at: datetime
     preconditions: list[OpRulePrecondResponse] = Field(default_factory=list)
     effects: list[OpRuleEffectResponse] = Field(default_factory=list)
@@ -293,6 +308,31 @@ class ResourceResponse(BaseSchema):
 
 
 # ============================================================
+# 特征定义 Schemas
+# ============================================================
+
+
+class FeatureDefinitionCreate(BaseModel):
+    """Schema for creating a feature definition."""
+
+    feature_key: str = Field(..., min_length=1, max_length=64, description="Feature key")
+    value_type: str = Field(..., description="Value type: string, number, boolean, enum")
+    allowed_values: Optional[dict[str, Any]] = Field(None, description="Allowed values for enum type")
+    unit: Optional[str] = Field(None, max_length=32, description="Unit of measurement")
+    description: Optional[str] = Field(None, description="Feature description")
+
+
+class FeatureDefinitionResponse(BaseSchema):
+    """Schema for feature definition response."""
+
+    feature_key: str
+    value_type: str
+    allowed_values: Optional[dict[str, Any]] = None
+    unit: Optional[str] = None
+    description: Optional[str] = None
+
+
+# ============================================================
 # 求解请求相关 Schemas
 # ============================================================
 
@@ -304,6 +344,9 @@ class SolveRequestCreate(BaseModel):
     current_state_id: int = Field(..., gt=0, description="Current state ID")
     target_state_id: int = Field(..., gt=0, description="Target state ID")
     objective: str = Field(default="minimize_makespan", description="Optimization objective")
+    objectives: Optional[list[dict[str, Any]]] = Field(None, description="Objectives array")
+    constraints: Optional[dict[str, Any]] = Field(None, description="Constraints")
+    parent_plan_id: Optional[int] = Field(None, description="Parent plan ID for replanning")
     overrides: Optional[dict[str, Any]] = Field(None, description="Override rules")
 
 
@@ -315,6 +358,9 @@ class SolveRequestResponse(BaseSchema):
     current_state_id: int
     target_state_id: int
     objective: str
+    objectives: Optional[list[dict[str, Any]]] = None
+    constraints: Optional[dict[str, Any]] = None
+    parent_plan_id: Optional[int] = None
     status: str
     overrides: Optional[dict[str, Any]] = None
     created_at: datetime
@@ -346,6 +392,8 @@ class CandidatePlanStepResponse(BaseSchema):
     step_order: int
     op_rule_id: int
     predecessor_ids: list[int] = Field(default_factory=list)
+    not_before: Optional[int] = None
+    step_role: str = "normal"
 
 
 class CandidatePlanResponse(BaseSchema):
@@ -355,6 +403,10 @@ class CandidatePlanResponse(BaseSchema):
     solve_request_id: int
     total_steps: Optional[int] = None
     search_method: str
+    version: int = 1
+    parent_plan_id: Optional[int] = None
+    replan_reason: Optional[str] = None
+    status: str = "draft"
     created_at: datetime
     steps: list[CandidatePlanStepResponse] = Field(default_factory=list)
 
@@ -439,7 +491,61 @@ class OpRuleDetailResponse(BaseSchema):
     duration_min: int
     description: Optional[str] = None
     is_active: bool
+    is_repair: bool = False
+    valid_from: Optional[datetime] = None
+    valid_to: Optional[datetime] = None
     created_at: datetime
     preconditions: list[OpRulePrecondResponse] = Field(default_factory=list)
     effects: list[OpRuleEffectResponse] = Field(default_factory=list)
     resource_reqs: list[OpRuleResourceReqResponse] = Field(default_factory=list)
+
+
+# ============================================================
+# 阻塞事件 Schemas
+# ============================================================
+
+
+class BlockageEventCreate(BaseModel):
+    """Schema for creating a blockage event."""
+
+    plan_id: int = Field(..., gt=0, description="Plan ID")
+    blocked_step_id: int = Field(..., gt=0, description="Blocked step ID")
+    strategy: str = Field(..., description="Strategy: A, B, or AB")
+    not_before_offset: Optional[int] = Field(None, ge=0, description="Not before offset in minutes")
+    blockage_reason: Optional[str] = Field(None, max_length=64, description="Blockage reason")
+    note: Optional[str] = Field(None, description="Note")
+    created_by: Optional[str] = Field(None, max_length=64, description="Created by")
+
+
+class BlockageEventResponse(BaseSchema):
+    """Schema for blockage event response."""
+
+    id: int
+    plan_id: int
+    blocked_step_id: int
+    strategy: str
+    not_before_offset: Optional[int] = None
+    blockage_reason: Optional[str] = None
+    note: Optional[str] = None
+    created_at: datetime
+    created_by: Optional[str] = None
+
+
+# ============================================================
+# 调度任务扩展 Schemas
+# ============================================================
+
+
+class ScheduleTaskItem(BaseSchema):
+    """Schema for a single scheduled task."""
+
+    step_order: int = Field(..., description="Step order in the plan")
+    op_rule_id: int = Field(..., description="Operation rule ID")
+    op_rule_code: str = Field(..., description="Operation code")
+    start_min: int = Field(..., ge=0, description="Start time in minutes")
+    end_min: int = Field(..., ge=0, description="End time in minutes")
+    duration_min: int = Field(..., ge=1, description="Duration in minutes")
+    predecessors: list[int] = Field(default_factory=list, description="Predecessor step orders")
+    resources: list[dict[str, Any]] = Field(default_factory=list, description="Assigned resources")
+    not_before: Optional[int] = Field(None, description="Not before constraint in minutes")
+    step_role: str = "normal"
