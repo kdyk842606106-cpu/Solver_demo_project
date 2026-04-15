@@ -39,6 +39,7 @@ class ScheduleModel:
 def build_model(
     rag_data: RagData,
     resources: list[ResourceData],
+    objectives: list[dict] | None = None,
 ) -> ScheduleModel:
     """
     Build a CP-SAT model from RAG data and resources.
@@ -46,18 +47,21 @@ def build_model(
     Args:
         rag_data: RAG structure with step durations and resource types
         resources: Available resource instances
+        objectives: List of objective dicts, e.g. [{"type": "minimize_makespan", "weight": 1.0}]
 
     Returns:
         ScheduleModel ready for solving
     """
     model = cp_model.CpModel()
 
-    # Compute horizon (upper bound on makespan = sum of all durations)
     horizon = sum(s.duration_min for s in rag_data.steps)
+    max_not_before = max(
+        (s.not_before for s in rag_data.steps if s.not_before is not None),
+        default=0,
+    )
+    if max_not_before > 0:
+        horizon = max_not_before + horizon
 
-    # ================================================================
-    # 1. Create task variables
-    # ================================================================
     task_vars: dict[int, TaskVar] = {}
 
     for step in rag_data.steps:
@@ -77,24 +81,16 @@ def build_model(
             resource_type=step.resource_type,
         )
 
-    # ================================================================
-    # 2. Precedence constraints (from RAG edges)
-    # ================================================================
     for pred_so, succ_so in rag_data.edges:
         if pred_so in task_vars and succ_so in task_vars:
-            # successor can only start after predecessor finishes
             model.add(task_vars[succ_so].start >= task_vars[pred_so].end)
 
-    # ================================================================
-    # 3. Resource capacity constraints (cumulative)
-    # ================================================================
-    # Group tasks by resource type
     resource_type_set = {s.resource_type for s in rag_data.steps if s.resource_type != "NONE"}
 
     for res_type in resource_type_set:
         capacity = get_resource_capacity(resources, res_type)
         if capacity <= 0:
-            capacity = 1  # fallback: at least 1
+            capacity = 1
 
         intervals = []
         demands = []
@@ -108,16 +104,23 @@ def build_model(
         if intervals:
             model.add_cumulative(intervals, demands, capacity)
 
-    # ================================================================
-    # 4. Objective: minimize makespan
-    # ================================================================
     makespan = model.new_int_var(0, horizon, "makespan")
     model.add_max_equality(makespan, [tv.end for tv in task_vars.values()])
-    model.minimize(makespan)
 
-    return ScheduleModel(
+    for step in rag_data.steps:
+        if step.not_before is not None:
+            model.add(task_vars[step.step_order].start >= step.not_before)
+
+    schedule_model = ScheduleModel(
         model=model,
         task_vars=task_vars,
         makespan=makespan,
         horizon=horizon,
     )
+
+    if objectives is None:
+        objectives = [{"type": "minimize_makespan", "weight": 1.0}]
+    from app.core.solver.objectives import ObjectiveRegistry
+    ObjectiveRegistry.apply_all(objectives, schedule_model)
+
+    return schedule_model

@@ -7,8 +7,6 @@ consumed by the existing /solve pipeline without seed SQL.
 
 import pytest
 
-pytest_plugins = ("tests.e2e.conftest",)
-
 
 @pytest.mark.asyncio
 async def test_master_data_to_solve_flow(client):
@@ -27,19 +25,19 @@ async def test_master_data_to_solve_flow(client):
             "feature_key": "temperature_level",
             "feature_name": "Temperature",
             "value_type": "enum",
-            "allowed_values": {"values": ["cold", "hot"]},
+            "allowed_values": ["cold", "hot"],
         },
         {
             "feature_key": "clean_level",
             "feature_name": "Cleanliness",
             "value_type": "enum",
-            "allowed_values": {"values": ["dirty", "clean"]},
+            "allowed_values": ["dirty", "clean"],
         },
         {
             "feature_key": "calibration",
             "feature_name": "Calibration",
             "value_type": "enum",
-            "allowed_values": {"values": ["off", "on"]},
+            "allowed_values": ["off", "on"],
         },
     ]
     for item in feature_defs:

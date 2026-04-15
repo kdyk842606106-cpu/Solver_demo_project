@@ -213,44 +213,72 @@ app/core/solver/          ← 新增目录（或在 core/ 下扩展）
 ## 任务完成状态
 
 ```
-━━━━━━ STEP 1：数据模型扩展 ━━━━━━               [ ] 未开始
+━━━━━━ STEP 1：数据模型扩展 ━━━━━━               [✅] 已完成
 
-  □ 1-1  新增 feature_definition 表
-  □ 1-2  op_rule_precond 新增 operator / value_list
-  □ 1-3  op_rule_effect 新增 effect_type / delta_value
-  □ 1-4  op_rule 新增 is_repair / valid_from / valid_to
-  □ 1-5  solve_request 新增 objectives / constraints / parent_plan_id
-  □ 1-6  candidate_plan 新增 version / parent_plan_id / replan_reason / status
-  □ 1-7  candidate_plan_step 新增 not_before / step_role
-  □ 1-8  新增 blockage_event 表
-  □ 1-9  种子数据（feature_definition + OP_REPAIR 规则）
+  ✅ 1-1  新增 feature_definition 表
+  ✅ 1-2  op_rule_precond 新增 operator / value_list
+  ✅ 1-3  op_rule_effect 新增 effect_type / delta_value
+  ✅ 1-4  op_rule 新增 is_repair / valid_from / valid_to
+  ✅ 1-5  solve_request 新增 objectives / constraints / parent_plan_id
+  ✅ 1-6  candidate_plan 新增 version / parent_plan_id / replan_reason / status
+  ✅ 1-7  candidate_plan_step 新增 not_before / step_role
+  ✅ 1-8  新增 blockage_event 表
+  ✅ 1-9  种子数据（feature_definition + OP_REPAIR 规则）
 
-━━━━━━ STEP 2：领域层架构升级 ━━━━━━             [ ] 未开始
+━━━━━━ STEP 2：领域层架构升级 ━━━━━━             [✅] 已完成（准出审视通过）
 
-  □ 2-1  OperatorRegistry + 7 个 Operator (eq/neq/gt/gte/lt/lte/in)
-  □ 2-2  EffectRegistry + 3 个 Effect (set/increment/decrement)
-  □ 2-3  RuleEvaluator (evaluate_precond + apply_effect + 类型安全)
-  □ 2-4  RAGBuilder 升级（RuleEvaluator 调用 + 循环检测 + 深度限制）
-  □ 2-5  ObjectiveRegistry + MinimizeMakespanObjective
-  □ 2-6  Scheduler 升级（objectives 数组 + ConstraintConfig + not_before）
-  □ 2-7  Solver 主流程（blockage_constraints + 策略B注入 + 版本链 + step_role）
+  ✅ 2-1  OperatorRegistry + 7 个 Operator (eq/neq/gt/gte/lt/lte/in)
+  ✅ 2-2  EffectRegistry + 3 个 Effect (set/increment/decrement)
+  ✅ 2-3  RuleEvaluator（统一入口，类型安全）
+  ✅ 2-4  RAGBuilder 升级（RuleEvaluator 调用 + 循环检测 + 深度限制）
+  ✅ 2-5  ObjectiveRegistry + MinimizeMakespanObjective
+  ✅ 2-6a Scheduler not_before 约束注入
+  ✅ 2-6b Scheduler objectives 数组支持
+  ✅ 2-7a 阻塞处理编排主流程（策略 A/B/AB）
+  ✅ 2-7b step_role 计算算法
 
-━━━━━━ STEP 3：API 层扩展 ━━━━━━                 [ ] 未开始
+━━━━━━ TICKET-005：STEP 2 收口审计修复 ━━━━━━     [✅] 已完成
 
-  □ 3-1  /api/v1/features CRUD
-  □ 3-2  /api/v1/rules 升级（operator/value_list/effect_type/is_repair）
-  □ 3-3  POST /api/v1/solve 升级（objectives/constraints/blockage_constraints）
-  □ 3-4  GET /api/v1/plans/{id}/versions
-  □ 3-5  GET /api/v1/plans/{id}/diff/{other_id}
+  ✅ D1  新增 test_objectives.py（7 个测试）
+  ✅ D2  新增 pulled_forward / delayed 集成测试
+  ✅ D3  策略 AB 集成测试 >= 2 + 强断言
+  ✅ D4  step_role.py 非 repair 新增步骤标为 normal
+  ✅ D5  solve.py 异常兜底 try/except
+  ✅ D6  新增 solver/__init__.py
+  ✅ D7  删除 objectives.py 未使用 import
 
-━━━━━━ STEP 4：前端新增组件 ━━━━━━               [ ] 未开始
+━━━━━━ TICKET-006：STEP 2 准出审视修复 ━━━━━━     [✅] 已完成（190 测试全通过）
 
-  □ 4-1  FeatureDefinitionPage
-  □ 4-2  RulePage 升级（operator + effect_type + is_repair）
-  □ 4-3  StatePage 升级（value_type 联动控件）
-  □ 4-4  BlockageDialog 组件
-  □ 4-5  GanttChart 升级（step_role 颜色 + 对比模式）
-  □ 4-6  SolvePage 升级（版本历史 + 可解释性展示 + BlockageDialog 集成）
+  ✅ F1  移除 17 处 pytest.skip，替换为 assert
+  ✅ F2  删除重复 TestStrategyAB 类（行 316-364）
+  ✅ F3  删除 search.py 死导入 effects_satisfy_precondition
+
+━━━━━━ TICKET-003：STEP 1 补丁 + API 安全加固 ━━━━ [✅] 已完成
+
+  ✅ 3-P1 OpRule CRUD 补全 V0.2 字段（is_repair/valid_from/valid_to + value_list/effect_type/delta_value）
+  ✅ 3-P2 schemas.py 合并重复 ScheduleTaskItem + CandidatePlanStepResponse 补 op_rule_code
+  ✅ 3-P3 main.py traceback 泄露安全修复（DEBUG 开关）
+  ✅ 3-P4 state.py 补 state_type + 三端点添加 response_model
+
+━━━━━━ STEP 3：API 层扩展 ━━━━━━                 [✅] 已完成（TICKET-007 + TICKET-008）
+
+  ✅ 3-1  /api/v1/features CRUD（已在 TICKET-003 完成）
+  ✅ 3-2  /api/v1/rules 升级（已在 TICKET-003 完成）
+  ✅ 3-3  POST /api/v1/solve 升级（state_delta + critical_path + step_role/not_before）
+  ✅ 3-3b 清理遗留 objective 单值校验
+  ✅ 3-4  GET /api/v1/plans/{id}/versions
+  ✅ 3-5  GET /api/v1/plans/{id}/diff/{other_id}（211 测试全通过，含 null 边界场景）
+
+━━━━━━ STEP 4：前端重构为 Vue 3 + Element Plus + ECharts ━━━━━━  [✅] 已完成
+
+  ✅ 4-0  Vite 工程搭建（package.json / vite.config.js / src/main.js / App.vue）
+  ✅ 4-0b API 层封装（src/api/index.js + masterData.js + solve.js + utils/errorCodes.js）
+  ✅ 4-1  FeatureDefinitionPage（FeatureDefPage.vue — unit/description 字段）
+  ✅ 4-2  RulePage 升级（operator: gt/gte/lt/lte/in + effect_type + delta_value + is_repair）
+  ✅ 4-3  StatePage 升级（value_type 联动控件：enum/boolean/number/string）
+  ✅ 4-4  BlockageDialog 组件（策略A/B/AB，blockage_reason 动态读取）
+  ✅ 4-5  GanttChart 升级（ECharts custom series，step_role 颜色 + 对比模式）
+  ✅ 4-6  SolvePage 升级（版本历史 + state_delta + critical_path + BlockageDialog 集成）
 ```
 
 ---
@@ -290,7 +318,16 @@ app/core/solver/          ← 新增目录（或在 core/ 下扩展）
 
 ## 当前已知问题 / 决策悬挂
 
-暂无
+1. ~~`solver.py:115` — 同步阻塞~~ → ✅ 已修复：`solver.py:118` 使用 `asyncio.to_thread()` 包装
+2. ~~`search.py:207-209` — 硬编码 `==`~~ → ✅ 已修复：现使用 `RuleEvaluator().evaluate_precondition()`
+3. ~~领域层 `session.commit()`~~ → ✅ 已修复：`app/core/` 下无 `session.commit()` 调用
+4. 测试基础设施：`tests/e2e/conftest.py` 与 `tests/conftest.py` 存在双引擎 + 重复 fixture，长期需统一。（非阻塞，可延后）
+5. ~~`solve.py` 策略A not_before 约束不生效~~ → ✅ 已修复：`save_candidate_plan()` 创建的
+   `CandidatePlanStep` 未 flush 到 DB，而 session 配置了 `autoflush=False`，导致后续
+   `select(CandidatePlanStep)` 查询找不到步骤行，`not_before` 赋值被静默跳过。
+   修复方法：在查找 blocked step 之前添加 `await db.flush()`（`solve.py:207`）。
+   同时改进了 `test_step3_api.py` 中策略A测试，使用 `blocked_op_rule_id`（前端实际路径）
+   并增加 `not_before` 值和 `start_min` 约束的强断言。
 
 ---
 

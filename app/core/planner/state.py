@@ -144,48 +144,31 @@ def unfreeze(frozen: frozenset) -> StateDict:
 
 
 def state_matches_precondition(
-    state: StateDict, 
-    feature_key: str, 
-    operator: str, 
-    feature_value: str
+    state: StateDict,
+    feature_key: str,
+    operator: str,
+    feature_value: str,
+    value_list: list | None = None,
 ) -> bool:
     """
     Check if a state satisfies a single precondition.
-    
-    Args:
-        state: Current state dictionary
-        feature_key: Feature key to check
-        operator: Comparison operator (eq, neq, gt, lt, in)
-        feature_value: Expected value
-        
-    Returns:
-        True if the precondition is satisfied
+
+    Delegates to OperatorRegistry for type-safe comparison.
+    gte/lte/in operators are now supported via the registry.
     """
+    from app.core.solver.operators import OperatorRegistry
+
     current_value = state.get(feature_key)
-    
+
     if current_value is None:
         return False
-    
-    if operator == "eq":
-        return current_value == feature_value
-    elif operator == "neq":
-        return current_value != feature_value
-    elif operator == "gt":
-        try:
-            return float(current_value) > float(feature_value)
-        except ValueError:
-            return False
-    elif operator == "lt":
-        try:
-            return float(current_value) < float(feature_value)
-        except ValueError:
-            return False
-    elif operator == "in":
-        # feature_value is a comma-separated list of allowed values
-        allowed = [v.strip() for v in feature_value.split(",")]
-        return current_value in allowed
-    else:
-        raise ValueError(f"Unknown operator: {operator}")
+
+    return OperatorRegistry.evaluate_precond(
+        current_value=current_value,
+        operator_name=operator,
+        feature_value=feature_value,
+        value_list=value_list,
+    )
 
 
 def format_state(state: StateDict) -> str:

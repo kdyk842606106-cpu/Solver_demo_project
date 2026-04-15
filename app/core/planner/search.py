@@ -20,13 +20,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import CandidatePlan, CandidatePlanStep, Machine, MachineState, OpRule
 from app.core.planner.state import StateDict, load_state, compute_state_delta, is_goal
 from app.core.planner.matcher import (
-    load_rules, 
-    check_preconditions, 
+    load_rules,
+    check_preconditions,
     find_ops_for_delta,
     find_provider,
     rule_summary,
 )
-from app.core.planner.executor import effects_satisfy_precondition
+from app.core.solver.rule_evaluator import RuleEvaluator
 
 
 @dataclass
@@ -56,35 +56,40 @@ class PlanResult:
 async def build_rag(
     current_state_id: int,
     target_state_id: int,
-    session: AsyncSession
+    session: AsyncSession,
+    current_state_override: dict | None = None,
+    include_repair: bool = False,
 ) -> PlanResult:
     """
     Build a RAG (Resource-Aware Graph) from state inference.
-    
+
     This is the core algorithm for the Planner module. It:
     1. Computes the state delta (what needs to change)
     2. Finds operations that can eliminate each delta
     3. Analyzes preconditions to derive dependencies
     4. Constructs the RAG with parallel opportunities
-    
+
     Args:
         current_state_id: ID of the current machine state
         target_state_id: ID of the target machine state
         session: SQLAlchemy async session
-        
+        current_state_override: Optional dict of feature_key->value to inject into
+            current state before building RAG (used by Strategy B to inject blockage_reason)
+        include_repair: If True, include is_repair=TRUE operations in rule loading
+
     Returns:
         PlanResult with RAG or error
     """
-    # ============================================================
-    # Phase 1: Load states and compute delta
-    # ============================================================
-    
+    current_state_override = current_state_override or {}
+
     current_state = await load_state(current_state_id, session)
     if current_state is None:
         return PlanResult(
             status="error",
             error_message=f"Current state {current_state_id} not found"
         )
+
+    current_state = {**current_state, **current_state_override}
     
     target_state = await load_state(target_state_id, session)
     if target_state is None:
@@ -128,7 +133,7 @@ async def build_rag(
         )
     
     # Load all active operation rules
-    rules = await load_rules(machine.machine_type_id, session)
+    rules = await load_rules(machine.machine_type_id, session, include_repair=include_repair)
     
     if not rules:
         return PlanResult(
@@ -144,7 +149,7 @@ async def build_rag(
     
     for feature_key, (current_val, target_val) in delta.items():
         # Find operations that can produce this effect
-        candidates = find_ops_for_delta(feature_key, target_val, rules)
+        candidates = find_ops_for_delta(feature_key, target_val, rules, current_state)
         
         if not candidates:
             return PlanResult(
@@ -169,6 +174,18 @@ async def build_rag(
         # Avoid duplicates (one operation might fix multiple deltas)
         if best.id not in [op.id for op in needed_ops]:
             needed_ops.append(best)
+
+    # When a strategy B override is active, proactively include repair rules
+    # whose preconditions are satisfied by the (overridden) current state.
+    # These rules won't appear via the delta loop because the target state
+    # typically doesn't declare the injected feature key (e.g. blockage_reason).
+    if include_repair and current_state_override:
+        for rule in rules:
+            if not rule.is_repair:
+                continue
+            if check_preconditions(current_state, rule.preconditions):
+                if rule.id not in [op.id for op in needed_ops]:
+                    needed_ops.append(rule)
     
     # ============================================================
     # Phase 4: Analyze preconditions and build RAG
@@ -203,10 +220,9 @@ async def build_rag(
         node_id = op_id_to_node_id[op.id]
         
         for precond in op.preconditions:
-            # Current state already satisfies — no dependency
-            if precond.feature_key in current_state:
-                if current_state[precond.feature_key] == precond.feature_value:
-                    continue
+            evaluator = RuleEvaluator()
+            if evaluator.evaluate_precondition(current_state, precond):
+                continue
             
             # Look for a provider among already-needed ops
             provider = find_provider(
@@ -214,12 +230,13 @@ async def build_rag(
                 precond.feature_value,
                 needed_ops,
                 exclude=op,
+                current_state=current_state,
             )
             
             if provider is None:
                 # Search ALL rules for an intermediate operation
                 intermediate_candidates = find_ops_for_delta(
-                    precond.feature_key, precond.feature_value, rules,
+                    precond.feature_key, precond.feature_value, rules, current_state,
                 )
                 intermediate_candidates = [
                     c for c in intermediate_candidates if c.id != op.id
@@ -316,40 +333,45 @@ def has_cycle(nodes: list[RAGNode], edges: list[tuple[int, int]]) -> bool:
 async def save_candidate_plan(
     rag: RAG,
     solve_request_id: int,
-    session: AsyncSession
+    session: AsyncSession,
+    version: int = 1,
+    parent_plan_id: int | None = None,
+    replan_reason: str | None = None,
 ) -> int:
     """
     Save a RAG to the database as a candidate plan.
-    
+
     Args:
         rag: RAG to save
         solve_request_id: ID of the solve request
         session: SQLAlchemy async session
-        
+        version: Plan version number (default 1)
+        parent_plan_id: Parent plan ID for version chain (default None)
+        replan_reason: Reason for replan (default None)
+
     Returns:
         ID of the created candidate_plan
     """
-    # Create candidate plan
     candidate_plan = CandidatePlan(
         solve_request_id=solve_request_id,
         total_steps=len(rag.nodes),
-        search_method="state_inference"
+        search_method="state_inference",
+        version=version,
+        parent_plan_id=parent_plan_id,
+        replan_reason=replan_reason,
     )
     session.add(candidate_plan)
-    await session.flush()  # Get the ID
-    
-    # Create steps
+    await session.flush()
+
     for node in rag.nodes:
         step = CandidatePlanStep(
             candidate_plan_id=candidate_plan.id,
             step_order=node.id,
             op_rule_id=node.op_rule_id,
-            predecessor_ids=node.predecessors
+            predecessor_ids=node.predecessors,
         )
         session.add(step)
-    
-    await session.commit()
-    
+
     return candidate_plan.id
 
 

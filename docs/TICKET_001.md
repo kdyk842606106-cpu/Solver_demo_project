@@ -12,15 +12,15 @@
 ## 子任务清单
 
 ```
-□ 1-1  新增 feature_definition 表 + ORM Model + Schema
-□ 1-2  op_rule_precond 新增 operator / value_list 字段
-□ 1-3  op_rule_effect 新增 effect_type / delta_value 字段
-□ 1-4  op_rule 新增 is_repair / valid_from / valid_to 字段
-□ 1-5  solve_request 新增 objectives / constraints / parent_plan_id 字段
-□ 1-6  candidate_plan 新增 version / parent_plan_id / replan_reason / status 字段
-□ 1-7  candidate_plan_step 新增 not_before / step_role 字段
-□ 1-8  新增 blockage_event 表 + ORM Model + Schema
-□ 1-9  种子数据：feature_definition 基础特征 + OP_REPAIR_HARDWARE / OP_REPAIR_APPROVAL 规则
+✅ 1-1  新增 feature_definition 表 + ORM Model + Schema
+✅ 1-2  op_rule_precond 新增 operator / value_list 字段
+✅ 1-3  op_rule_effect 新增 effect_type / delta_value 字段
+✅ 1-4  op_rule 新增 is_repair / valid_from / valid_to 字段
+✅ 1-5  solve_request 新增 objectives / constraints / parent_plan_id 字段
+✅ 1-6  candidate_plan 新增 version / parent_plan_id / replan_reason / status 字段
+✅ 1-7  candidate_plan_step 新增 not_before / step_role 字段
+✅ 1-8  新增 blockage_event 表 + ORM Model + Schema
+✅ 1-9  种子数据：feature_definition 基础特征 + OP_REPAIR 规则
 ```
 
 ## 输入（已知信息）

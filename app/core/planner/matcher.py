@@ -16,12 +16,14 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models import OpRule, OpRuleEffect, OpRulePrecond
 from app.core.planner.state import StateDict, state_matches_precondition
+from app.core.solver.rule_evaluator import RuleEvaluator
 
 
 async def load_rules(
-    machine_type_id: int, 
+    machine_type_id: int,
     session: AsyncSession,
-    active_only: bool = True
+    active_only: bool = True,
+    include_repair: bool = False,
 ) -> list[OpRule]:
     """
     Load all operation rules for a machine type.
@@ -43,10 +45,12 @@ async def load_rules(
             selectinload(OpRule.resource_reqs),
         )
     )
-    
+
     if active_only:
         query = query.where(OpRule.is_active == True)
-    
+        if not include_repair:
+            query = query.where(OpRule.is_repair == False)
+
     result = await session.execute(query)
     return list(result.scalars().all())
 
@@ -54,36 +58,31 @@ async def load_rules(
 def check_preconditions(state: StateDict, preconditions: list[OpRulePrecond]) -> bool:
     """
     Check if a state satisfies all preconditions.
-    
+
     Forward matching: given a state and a list of preconditions,
     determine if the state satisfies all of them.
-    
+
+    Delegates to RuleEvaluator for type-safe evaluation.
+
     Args:
         state: Current state dictionary
         preconditions: List of OpRulePrecond objects
-        
+
     Returns:
         True if all preconditions are satisfied
     """
     if not preconditions:
         return True
-    
-    for precond in preconditions:
-        if not state_matches_precondition(
-            state, 
-            precond.feature_key, 
-            precond.operator, 
-            precond.feature_value
-        ):
-            return False
-    
-    return True
+
+    evaluator = RuleEvaluator()
+    return evaluator.evaluate_preconditions(state, preconditions)
 
 
 def find_ops_for_delta(
     feature_key: str,
     target_value: str,
-    rules: list[OpRule]
+    rules: list[OpRule],
+    current_state: StateDict | None = None,
 ) -> list[OpRule]:
     """
     Find operations that can produce a specific effect.
@@ -91,21 +90,40 @@ def find_ops_for_delta(
     Effect matching: given a feature key and target value,
     find all operations whose effects include that transformation.
     
+    For set effects: checks if effect.new_value == target_value
+    For increment/decrement effects: simulates applying the effect to
+    current_state and checks if result matches target_value.
+    
     Args:
         feature_key: Feature key to change
         target_value: Target value for the feature
         rules: List of OpRule objects to search
+        current_state: Current state dict for simulating increment/decrement
         
     Returns:
         List of OpRule objects that can produce the target effect
     """
     matching_ops = []
+    evaluator = RuleEvaluator()
     
     for rule in rules:
         for effect in rule.effects:
-            if effect.feature_key == feature_key and effect.new_value == target_value:
-                matching_ops.append(rule)
-                break  # Only add each rule once
+            if effect.feature_key != feature_key:
+                continue
+            
+            effect_type = getattr(effect, 'effect_type', 'set')
+            
+            if effect_type == 'set':
+                if effect.new_value == target_value:
+                    matching_ops.append(rule)
+                    break
+            else:
+                if current_state is not None:
+                    current_val = current_state.get(feature_key)
+                    result = evaluator.apply_effect(current_state, effect)
+                    if result.get(feature_key) == target_value:
+                        matching_ops.append(rule)
+                        break
     
     return matching_ops
 
@@ -114,7 +132,8 @@ def find_provider(
     feature_key: str,
     required_value: str,
     candidates: list[OpRule],
-    exclude: Optional[OpRule] = None
+    exclude: Optional[OpRule] = None,
+    current_state: StateDict | None = None,
 ) -> Optional[OpRule]:
     """
     Find an operation that can satisfy a precondition.
@@ -130,20 +149,35 @@ def find_provider(
         required_value: Value required by precondition
         candidates: List of candidate OpRule objects
         exclude: Optional OpRule to exclude from consideration
+        current_state: Current state dict for simulating increment/decrement
         
     Returns:
         Best OpRule that can satisfy the precondition, or None if not found
     """
     providers = []
+    evaluator = RuleEvaluator()
     
     for rule in candidates:
         if exclude and rule.id == exclude.id:
             continue
         
         for effect in rule.effects:
-            if effect.feature_key == feature_key and effect.new_value == required_value:
-                providers.append(rule)
-                break
+            if effect.feature_key != feature_key:
+                continue
+            
+            effect_type = getattr(effect, 'effect_type', 'set')
+            
+            if effect_type == 'set':
+                if effect.new_value == required_value:
+                    providers.append(rule)
+                    break
+            else:
+                if current_state is not None:
+                    current_val = current_state.get(feature_key)
+                    result = evaluator.apply_effect(current_state, effect)
+                    if result.get(feature_key) == required_value:
+                        providers.append(rule)
+                        break
     
     if not providers:
         return None

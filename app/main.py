@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.db.session import async_engine
-from app.api.v1 import master_data, solve, state
+from app.api.v1 import master_data, plans, solve, state
 
 FRONTEND_INDEX = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
 
@@ -65,16 +65,16 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
-    """Catch-all for unhandled exceptions — returns 500 with traceback in dev."""
-    tb = traceback.format_exc()
-    return JSONResponse(
-        status_code=500,
-        content={
-            "error_code": "INTERNAL_ERROR",
-            "error_message": str(exc),
-            "traceback": tb,
-        },
-    )
+    """Catch-all for unhandled exceptions — returns 500."""
+    import os
+
+    content = {
+        "error_code": "INTERNAL_ERROR",
+        "error_message": str(exc),
+    }
+    if os.getenv("DEBUG", "").lower() in ("1", "true"):
+        content["traceback"] = traceback.format_exc()
+    return JSONResponse(status_code=500, content=content)
 
 
 # ============================================================
@@ -85,6 +85,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
 app.include_router(solve.router, prefix="/api/v1")
 app.include_router(state.router, prefix="/api/v1")
 app.include_router(master_data.router, prefix="/api/v1")
+app.include_router(plans.router, prefix="/api/v1")
 
 
 @app.get("/health")

@@ -10,30 +10,25 @@ from typing import Any
 
 from app.db.models import OpRule, OpRuleEffect
 from app.core.planner.state import StateDict
+from app.core.solver.rule_evaluator import RuleEvaluator
 
 
 def apply_effects(state: StateDict, effects: list[OpRuleEffect]) -> StateDict:
     """
     Apply operation effects to a state, returning a new state.
-    
+
     This function is pure - it does not modify the input state.
-    Instead, it returns a new state dictionary with the effects applied.
-    
+    Delegates to RuleEvaluator for effect type handling.
+
     Args:
         state: Current state dictionary
         effects: List of OpRuleEffect objects to apply
-        
+
     Returns:
         New state dictionary with effects applied
     """
-    # Create a copy of the state
-    new_state = dict(state)
-    
-    # Apply each effect
-    for effect in effects:
-        new_state[effect.feature_key] = effect.new_value
-    
-    return new_state
+    evaluator = RuleEvaluator()
+    return evaluator.apply_effects(state, effects)
 
 
 def apply_rule(state: StateDict, rule: OpRule) -> StateDict:

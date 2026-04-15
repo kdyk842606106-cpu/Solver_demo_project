@@ -13,6 +13,7 @@ Orchestrates the full scheduling pipeline:
 from dataclasses import dataclass
 from itertools import combinations
 from typing import Any, Optional
+import asyncio
 
 from ortools.sat.python import cp_model
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -75,6 +76,7 @@ async def solve_schedule(
     candidate_plan_id: int,
     session: AsyncSession,
     max_time_seconds: float = 30.0,
+    objectives: list[dict] | None = None,
 ) -> ScheduleResultData:
     """
     Main entry point: solve a schedule for a candidate plan.
@@ -83,6 +85,7 @@ async def solve_schedule(
         candidate_plan_id: ID of the candidate plan (from Planner)
         session: SQLAlchemy async session
         max_time_seconds: CP-SAT time limit
+        objectives: List of objective dicts for CP-SAT (default: minimize_makespan)
 
     Returns:
         ScheduleResultData with full results or error
@@ -106,13 +109,13 @@ async def solve_schedule(
     resources = await load_resources(resource_types, session)
 
     # ---- 3. Build model ----
-    schedule_model = build_model(rag_data, resources)
+    schedule_model = build_model(rag_data, resources, objectives)
 
     # ---- 4. Solve ----
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = max_time_seconds
 
-    status = solver.solve(schedule_model.model)
+    status = await asyncio.to_thread(solver.solve, schedule_model.model)
 
     # ---- 5. Interpret result ----
     status_name = solver.status_name(status)
@@ -302,7 +305,7 @@ async def save_schedule_result(
         tasks=tasks_json,
     )
     session.add(record)
-    await session.commit()
+    await session.flush()
     await session.refresh(record)
 
     return record.id

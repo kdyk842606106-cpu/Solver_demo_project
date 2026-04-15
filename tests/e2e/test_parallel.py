@@ -48,7 +48,7 @@ class TestParallelSolve:
         tasks = resp.json()["schedule"]["tasks"]
         assert len(tasks) == 3
 
-        codes = {t["op_code"] for t in tasks}
+        codes = {t["op_rule_code"] for t in tasks}
         assert codes == {"OP_WARMUP", "OP_CLEANING", "OP_CALIBRATE"}
 
     async def test_parallel_makespan_better_than_serial(self, client):
@@ -73,10 +73,10 @@ class TestParallelSolve:
             "target_state_id": 2,
             "objective": "minimize_makespan",
         })
-        tasks = {t["op_code"]: t for t in resp.json()["schedule"]["tasks"]}
+        tasks = {t["op_rule_code"]: t for t in resp.json()["schedule"]["tasks"]}
 
-        assert tasks["OP_WARMUP"]["start"] == 0
-        assert tasks["OP_CLEANING"]["start"] == 0
+        assert tasks["OP_WARMUP"]["start_min"] == 0
+        assert tasks["OP_CLEANING"]["start_min"] == 0
 
     async def test_calibrate_after_warmup(self, client):
         """CALIBRATE starts only after WARMUP finishes."""
@@ -86,9 +86,9 @@ class TestParallelSolve:
             "target_state_id": 2,
             "objective": "minimize_makespan",
         })
-        tasks = {t["op_code"]: t for t in resp.json()["schedule"]["tasks"]}
+        tasks = {t["op_rule_code"]: t for t in resp.json()["schedule"]["tasks"]}
 
-        assert tasks["OP_CALIBRATE"]["start"] >= tasks["OP_WARMUP"]["end"]
+        assert tasks["OP_CALIBRATE"]["start_min"] >= tasks["OP_WARMUP"]["end_min"]
 
     async def test_parallel_groups_detected(self, client):
         """Solver detects WARMUP and CLEANING as overlapping."""
@@ -111,14 +111,14 @@ class TestParallelSolve:
             "target_state_id": 2,
             "objective": "minimize_makespan",
         })
-        tasks = {t["op_code"]: t for t in resp.json()["schedule"]["tasks"]}
+        tasks = {t["op_rule_code"]: t for t in resp.json()["schedule"]["tasks"]}
 
         # WARMUP and CALIBRATE should get TECH-xx
-        assert tasks["OP_WARMUP"]["resource"] in ("TECH-01", "TECH-02")
-        assert tasks["OP_CALIBRATE"]["resource"] in ("TECH-01", "TECH-02")
+        assert tasks["OP_WARMUP"]["resources"][0]["resource_code"] in ("TECH-01", "TECH-02")
+        assert tasks["OP_CALIBRATE"]["resources"][0]["resource_code"] in ("TECH-01", "TECH-02")
 
         # CLEANING should get CLEAN-xx
-        assert tasks["OP_CLEANING"]["resource"] == "CLEAN-01"
+        assert tasks["OP_CLEANING"]["resources"][0]["resource_code"] == "CLEAN-01"
 
     # ----------------------------------------------------------------
     # State query

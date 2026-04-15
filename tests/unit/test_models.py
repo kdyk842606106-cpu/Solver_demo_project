@@ -9,6 +9,7 @@ Tests cover:
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
@@ -157,7 +158,7 @@ class TestMachineState:
 
         # Verify
         result = await async_session.execute(
-            select(MachineState).where(MachineState.id == state.id)
+            select(MachineState).where(MachineState.id == state.id).options(selectinload(MachineState.features))
         )
         saved = result.scalar_one()
 
@@ -203,7 +204,7 @@ class TestMachineState:
         )
         async_session.add_all([feature1, feature2])
         await async_session.commit()
-        await async_session.refresh(state)
+        await async_session.refresh(state, ["features"])
 
         # Convert to dict
         features_dict = {f.feature_key: f.feature_value for f in state.features}
@@ -251,7 +252,7 @@ class TestOpRule:
         async_session.add(effect)
 
         await async_session.commit()
-        await async_session.refresh(op_rule)
+        await async_session.refresh(op_rule, ["preconditions", "effects"])
 
         # Verify
         assert len(op_rule.preconditions) == 1

@@ -16,30 +16,30 @@ from app.db.models import Machine, MachineState, OpRule, SolveRequest
 class TestRAGConstructionIntegration:
     """Integration tests for RAG construction with seed data."""
 
-    async def test_load_current_state(self, async_session):
+    async def test_load_current_state(self, integration_session):
         """Test loading the current state from seed data."""
         # State ID 1 is "Cold Standby State"
-        state = await load_state(1, async_session)
+        state = await load_state(1, integration_session)
         
         assert state is not None
         assert state["temperature_level"] == "cold"
         assert state["clean_level"] == "dirty"
         assert state["calibration"] == "off"
 
-    async def test_load_target_state(self, async_session):
+    async def test_load_target_state(self, integration_session):
         """Test loading the target state from seed data."""
         # State ID 2 is "Ready for Production"
-        state = await load_state(2, async_session)
+        state = await load_state(2, integration_session)
         
         assert state is not None
         assert state["temperature_level"] == "hot"
         assert state["clean_level"] == "clean"
         assert state["calibration"] == "on"
 
-    async def test_compute_state_delta(self, async_session):
+    async def test_compute_state_delta(self, integration_session):
         """Test computing state delta between current and target."""
-        current = await load_state(1, async_session)
-        target = await load_state(2, async_session)
+        current = await load_state(1, integration_session)
+        target = await load_state(2, integration_session)
         
         delta = compute_state_delta(current, target)
         
@@ -48,10 +48,10 @@ class TestRAGConstructionIntegration:
         assert delta["clean_level"] == ("dirty", "clean")
         assert delta["calibration"] == ("off", "on")
 
-    async def test_load_operation_rules(self, async_session):
+    async def test_load_operation_rules(self, integration_session):
         """Test loading operation rules for machine type."""
         # Machine type 1 is CNC_LATHE
-        rules = await load_rules(1, async_session)
+        rules = await load_rules(1, integration_session)
         
         assert len(rules) == 5
         
@@ -60,36 +60,36 @@ class TestRAGConstructionIntegration:
             assert rule.code is not None
             assert rule.duration_min > 0
 
-    async def test_find_ops_for_temperature(self, async_session):
+    async def test_find_ops_for_temperature(self, integration_session):
         """Test finding operations that can set temperature to hot."""
-        rules = await load_rules(1, async_session)
+        rules = await load_rules(1, integration_session)
         
         matching = find_ops_for_delta("temperature_level", "hot", rules)
         
         assert len(matching) == 1
         assert matching[0].code == "OP_WARMUP"
 
-    async def test_find_ops_for_clean(self, async_session):
+    async def test_find_ops_for_clean(self, integration_session):
         """Test finding operations that can set clean_level to clean."""
-        rules = await load_rules(1, async_session)
+        rules = await load_rules(1, integration_session)
         
         matching = find_ops_for_delta("clean_level", "clean", rules)
         
         assert len(matching) == 1
         assert matching[0].code == "OP_CLEANING"
 
-    async def test_find_ops_for_calibration(self, async_session):
+    async def test_find_ops_for_calibration(self, integration_session):
         """Test finding operations that can set calibration to on."""
-        rules = await load_rules(1, async_session)
+        rules = await load_rules(1, integration_session)
         
         matching = find_ops_for_delta("calibration", "on", rules)
         
         assert len(matching) == 1
         assert matching[0].code == "OP_CALIBRATE"
 
-    async def test_build_rag_full(self, async_session):
+    async def test_build_rag_full(self, integration_session):
         """Test full RAG construction from current to target state."""
-        result = await build_rag(1, 2, async_session)
+        result = await build_rag(1, 2, integration_session)
         
         assert result.status == "success"
         assert result.rag is not None
@@ -113,9 +113,9 @@ class TestRAGConstructionIntegration:
         # So they should have no predecessors and can run in parallel
         assert len(parallel_groups) >= 1
 
-    async def test_rag_dependencies(self, async_session):
+    async def test_rag_dependencies(self, integration_session):
         """Test that RAG correctly identifies dependencies."""
-        result = await build_rag(1, 2, async_session)
+        result = await build_rag(1, 2, integration_session)
         
         assert result.status == "success"
         rag = result.rag
@@ -132,9 +132,9 @@ class TestRAGConstructionIntegration:
         # WARMUP should have no predecessors (cold is satisfied by current state)
         assert len(warmup_node.predecessors) == 0
 
-    async def test_rag_format(self, async_session):
+    async def test_rag_format(self, integration_session):
         """Test RAG formatting."""
-        result = await build_rag(1, 2, async_session)
+        result = await build_rag(1, 2, integration_session)
         
         assert result.status == "success"
         
@@ -145,7 +145,7 @@ class TestRAGConstructionIntegration:
         assert "OP_CLEANING" in formatted
         assert "OP_CALIBRATE" in formatted
 
-    async def test_save_candidate_plan(self, async_session):
+    async def test_save_candidate_plan(self, integration_session):
         """Test saving RAG to database."""
         # First create a solve request
         solve_request = SolveRequest(
@@ -155,29 +155,29 @@ class TestRAGConstructionIntegration:
             objective="minimize_makespan",
             status="running"
         )
-        async_session.add(solve_request)
-        await async_session.commit()
-        await async_session.refresh(solve_request)
+        integration_session.add(solve_request)
+        await integration_session.commit()
+        await integration_session.refresh(solve_request)
         
         # Build RAG
-        result = await build_rag(1, 2, async_session)
+        result = await build_rag(1, 2, integration_session)
         assert result.status == "success"
         
         # Save to database
-        plan_id = await save_candidate_plan(result.rag, solve_request.id, async_session)
+        plan_id = await save_candidate_plan(result.rag, solve_request.id, integration_session)
         
         assert plan_id > 0
         
         # Verify the plan was saved
         from app.db.models import CandidatePlan, CandidatePlanStep
         
-        plan = await async_session.get(CandidatePlan, plan_id)
+        plan = await integration_session.get(CandidatePlan, plan_id)
         assert plan is not None
         assert plan.total_steps == 3
         assert plan.search_method == "state_inference"
         
         # Verify steps
-        steps_result = await async_session.execute(
+        steps_result = await integration_session.execute(
             select(CandidatePlanStep)
             .where(CandidatePlanStep.candidate_plan_id == plan_id)
             .order_by(CandidatePlanStep.step_order)
@@ -186,9 +186,9 @@ class TestRAGConstructionIntegration:
         
         assert len(steps) == 3
 
-    async def test_no_solution_same_state(self, async_session):
+    async def test_no_solution_same_state(self, integration_session):
         """Test that same state returns no_solution."""
-        result = await build_rag(1, 1, async_session)
+        result = await build_rag(1, 1, integration_session)
         
         assert result.status == "no_solution"
         assert "already at target" in result.error_message.lower()

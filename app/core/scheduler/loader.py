@@ -30,6 +30,7 @@ class StepData:
     duration_min: int
     resource_type: str
     resource_qty: int
+    not_before: int | None = None
 
 
 @dataclass
@@ -116,6 +117,7 @@ async def load_rag(
             duration_min=rule.duration_min,
             resource_type=resource_type,
             resource_qty=resource_qty,
+            not_before=step.not_before,
         ))
 
         # Build edges from predecessor_ids

@@ -63,7 +63,7 @@ class TestSerialSolve:
         tasks = resp.json()["schedule"]["tasks"]
         assert len(tasks) == 2
 
-        codes = {t["op_code"] for t in tasks}
+        codes = {t["op_rule_code"] for t in tasks}
         assert codes == {"OP_WARMUP", "OP_CALIBRATE"}
 
     async def test_serial_task_ordering(self, client):
@@ -74,15 +74,15 @@ class TestSerialSolve:
             "target_state_id": 2,
             "objective": "minimize_makespan",
         })
-        tasks_by_code = {t["op_code"]: t for t in resp.json()["schedule"]["tasks"]}
+        tasks_by_code = {t["op_rule_code"]: t for t in resp.json()["schedule"]["tasks"]}
 
         warmup = tasks_by_code["OP_WARMUP"]
         calibrate = tasks_by_code["OP_CALIBRATE"]
 
-        assert warmup["start"] == 0
-        assert warmup["end"] == 30
-        assert calibrate["start"] >= warmup["end"]
-        assert calibrate["end"] == 45
+        assert warmup["start_min"] == 0
+        assert warmup["end_min"] == 30
+        assert calibrate["start_min"] >= warmup["end_min"]
+        assert calibrate["end_min"] == 45
 
     async def test_serial_resource_assignment(self, client):
         """Each task has an assigned resource."""
@@ -93,7 +93,7 @@ class TestSerialSolve:
             "objective": "minimize_makespan",
         })
         for task in resp.json()["schedule"]["tasks"]:
-            assert task["resource"] is not None
+            assert len(task["resources"]) > 0
 
     # ----------------------------------------------------------------
     # Lifecycle & query endpoints
@@ -131,14 +131,20 @@ class TestSerialSolve:
         assert resp.status_code == 422
 
     async def test_invalid_objective(self, client):
-        """Unsupported objective returns 422."""
+        """Unknown objective string is accepted (V0.2: objectives array drives behavior).
+
+        V0.1 used to reject unknown objective values with 422.
+        V0.2 removed that validation — the 'objective' field is stored as metadata
+        while the actual solver uses the 'objectives' array.
+        A solve with an unknown objective string therefore succeeds (returns 200).
+        """
         resp = await client.post("/api/v1/solve", json={
             "machine_id": 1,
             "current_state_id": 1,
             "target_state_id": 2,
             "objective": "maximize_profit",
         })
-        assert resp.status_code == 422
+        assert resp.status_code == 200
 
     async def test_state_not_belonging_to_machine(self, client):
         """State belonging to a different machine returns 422."""

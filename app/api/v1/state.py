@@ -19,12 +19,17 @@ from app.db.models import (
     CandidatePlan,
     CandidatePlanStep,
 )
+from app.db.schemas import (
+    MachineCurrentStateResponse,
+    MachineStatesListResponse,
+    SolveRequestDetailResponse,
+)
 from app.db.session import get_db_session
 
 router = APIRouter(tags=["query"])
 
 
-@router.get("/machines/{machine_id}/states")
+@router.get("/machines/{machine_id}/states", response_model=MachineStatesListResponse)
 async def list_machine_states(
     machine_id: int,
     db: AsyncSession = Depends(get_db_session),
@@ -49,6 +54,7 @@ async def list_machine_states(
         "states": [
             {
                 "state_id": s.id,
+                "state_type": s.state_type,
                 "label": s.label,
                 "features": {f.feature_key: f.feature_value for f in s.features},
             }
@@ -57,7 +63,7 @@ async def list_machine_states(
     }
 
 
-@router.get("/machines/{machine_id}/state")
+@router.get("/machines/{machine_id}/state", response_model=MachineCurrentStateResponse)
 async def get_machine_state(
     machine_id: int,
     db: AsyncSession = Depends(get_db_session),
@@ -100,7 +106,7 @@ async def get_machine_state(
     }
 
 
-@router.get("/solve-requests/{request_id}")
+@router.get("/solve-requests/{request_id}", response_model=SolveRequestDetailResponse)
 async def get_solve_request(
     request_id: int,
     db: AsyncSession = Depends(get_db_session),

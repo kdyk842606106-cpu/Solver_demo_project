@@ -27,8 +27,15 @@ from app.db.models import (
     OpRulePrecond,
     OpRuleResourceReq,
     Resource,
+    SolveRequest,
     StateFeatureDef,
 )
+from sqlalchemy import JSON
+
+SolveRequest.__table__.c.overrides.type = JSON()
+SolveRequest.__table__.c.objectives.type = JSON()
+SolveRequest.__table__.c.constraints.type = JSON()
+SolveRequest.__table__.c.blockage_constraints.type = JSON()
 from app.db.session import get_db_session
 
 

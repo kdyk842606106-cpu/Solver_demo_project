@@ -89,7 +89,7 @@ class StateFeatureDefCreate(BaseModel):
     feature_key: str = Field(..., min_length=1, max_length=64, description="Feature key")
     feature_name: Optional[str] = Field(None, max_length=128, description="Feature name")
     value_type: str = Field(..., description="Value type: string, number, boolean, or enum")
-    allowed_values: Optional[dict[str, Any]] = Field(None, description="Allowed values for enum type")
+    allowed_values: Optional[list[Any]] = Field(None, description="Allowed values for enum type")
 
 
 class StateFeatureDefUpdate(BaseModel):
@@ -98,7 +98,7 @@ class StateFeatureDefUpdate(BaseModel):
     feature_key: str = Field(..., min_length=1, max_length=64, description="Feature key")
     feature_name: Optional[str] = Field(None, max_length=128, description="Feature name")
     value_type: str = Field(..., description="Value type: string, number, boolean, or enum")
-    allowed_values: Optional[dict[str, Any]] = Field(None, description="Allowed values for enum type")
+    allowed_values: Optional[list[Any]] = Field(None, description="Allowed values for enum type")
 
 
 class StateFeatureDefResponse(BaseSchema):
@@ -109,7 +109,7 @@ class StateFeatureDefResponse(BaseSchema):
     feature_key: str
     feature_name: Optional[str] = None
     value_type: str
-    allowed_values: Optional[dict[str, Any]] = None
+    allowed_values: Optional[list[Any]] = None
 
 
 class MachineStateFeatureCreate(BaseModel):
@@ -317,7 +317,7 @@ class FeatureDefinitionCreate(BaseModel):
 
     feature_key: str = Field(..., min_length=1, max_length=64, description="Feature key")
     value_type: str = Field(..., description="Value type: string, number, boolean, enum")
-    allowed_values: Optional[dict[str, Any]] = Field(None, description="Allowed values for enum type")
+    allowed_values: Optional[list[Any]] = Field(None, description="Allowed values for enum type")
     unit: Optional[str] = Field(None, max_length=32, description="Unit of measurement")
     description: Optional[str] = Field(None, description="Feature description")
 
@@ -327,7 +327,7 @@ class FeatureDefinitionResponse(BaseSchema):
 
     feature_key: str
     value_type: str
-    allowed_values: Optional[dict[str, Any]] = None
+    allowed_values: Optional[list[Any]] = None
     unit: Optional[str] = None
     description: Optional[str] = None
 
@@ -348,6 +348,10 @@ class SolveRequestCreate(BaseModel):
     constraints: Optional[dict[str, Any]] = Field(None, description="Constraints")
     parent_plan_id: Optional[int] = Field(None, description="Parent plan ID for replanning")
     overrides: Optional[dict[str, Any]] = Field(None, description="Override rules")
+    blockage_constraints: Optional[dict[str, Any]] = Field(
+        None,
+        description="Blockage constraints: {strategy: A|B|AB, blocked_step_id, strategy_a: {not_before_offset}, strategy_b: {blockage_reason}, ...}",
+    )
 
 
 class SolveRequestResponse(BaseSchema):
@@ -383,6 +387,8 @@ class ScheduleTaskItem(BaseSchema):
     duration_min: int = Field(..., ge=1, description="Duration in minutes")
     predecessors: list[int] = Field(default_factory=list, description="Predecessor step orders")
     resources: list[dict[str, Any]] = Field(default_factory=list, description="Assigned resources")
+    not_before: Optional[int] = Field(None, description="Not before constraint in minutes")
+    step_role: str = Field(default="normal", description="Step role: normal/repair/pulled_forward/delayed")
 
 
 class CandidatePlanStepResponse(BaseSchema):
@@ -391,6 +397,7 @@ class CandidatePlanStepResponse(BaseSchema):
     id: int
     step_order: int
     op_rule_id: int
+    op_rule_code: Optional[str] = None
     predecessor_ids: list[int] = Field(default_factory=list)
     not_before: Optional[int] = None
     step_role: str = "normal"
@@ -437,6 +444,40 @@ class SolveResponse(BaseSchema):
     schedule: Optional[ScheduleResultResponse] = None
     error_code: Optional[str] = None
     error_message: Optional[str] = None
+
+
+class PlanVersionItem(BaseSchema):
+    """Single entry in a plan version chain."""
+
+    id: int
+    version: int
+    replan_reason: Optional[str] = None
+    parent_plan_id: Optional[int] = None
+    status: str
+    total_steps: Optional[int] = None
+    created_at: datetime
+
+
+class PlanDiffStep(BaseModel):
+    """One step entry in a plan-vs-plan diff."""
+
+    op_code: str
+    base_start: Optional[int] = None
+    base_end: Optional[int] = None
+    new_start: Optional[int] = None
+    new_end: Optional[int] = None
+    step_role: str = "normal"
+    not_before: Optional[int] = None
+
+
+class PlanDiffResponse(BaseModel):
+    """Response for GET /plans/{id}/diff/{other_id}."""
+
+    base_plan_id: int
+    new_plan_id: int
+    base_makespan: Optional[int] = None
+    new_makespan: Optional[int] = None
+    steps: list[PlanDiffStep] = Field(default_factory=list)
 
 
 class ErrorResponse(BaseModel):
@@ -505,6 +546,70 @@ class OpRuleDetailResponse(BaseSchema):
 # ============================================================
 
 
+# ============================================================
+# State Query Response Schemas
+# ============================================================
+
+
+class StateListItem(BaseSchema):
+    """A single state entry in the machine states list."""
+
+    state_id: int
+    state_type: str
+    label: Optional[str] = None
+    features: dict[str, str] = Field(default_factory=dict)
+
+
+class MachineStatesListResponse(BaseSchema):
+    """Response for GET /machines/{id}/states."""
+
+    machine_id: int
+    machine_code: str
+    states: list[StateListItem] = Field(default_factory=list)
+
+
+class CurrentStateDetail(BaseSchema):
+    """Current state detail inside MachineCurrentStateResponse."""
+
+    state_id: int
+    label: Optional[str] = None
+    features: dict[str, str] = Field(default_factory=dict)
+
+
+class MachineCurrentStateResponse(BaseSchema):
+    """Response for GET /machines/{id}/state."""
+
+    machine_id: int
+    machine_code: str
+    current_state: CurrentStateDetail
+
+
+class ScheduleSummary(BaseSchema):
+    """Inline schedule summary for solve request response."""
+
+    makespan: Optional[int] = None
+    solver_status: Optional[str] = None
+    tasks: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class SolveRequestDetailResponse(BaseSchema):
+    """Response for GET /solve-requests/{id}."""
+
+    id: int
+    machine_id: int
+    status: str
+    objective: str
+    created_at: Optional[str] = None
+    solved_at: Optional[str] = None
+    candidate_plan_id: Optional[int] = None
+    schedule: Optional[ScheduleSummary] = None
+
+
+# ============================================================
+# 阻塞事件 Schemas
+# ============================================================
+
+
 class BlockageEventCreate(BaseModel):
     """Schema for creating a blockage event."""
 
@@ -531,21 +636,4 @@ class BlockageEventResponse(BaseSchema):
     created_by: Optional[str] = None
 
 
-# ============================================================
-# 调度任务扩展 Schemas
-# ============================================================
 
-
-class ScheduleTaskItem(BaseSchema):
-    """Schema for a single scheduled task."""
-
-    step_order: int = Field(..., description="Step order in the plan")
-    op_rule_id: int = Field(..., description="Operation rule ID")
-    op_rule_code: str = Field(..., description="Operation code")
-    start_min: int = Field(..., ge=0, description="Start time in minutes")
-    end_min: int = Field(..., ge=0, description="End time in minutes")
-    duration_min: int = Field(..., ge=1, description="Duration in minutes")
-    predecessors: list[int] = Field(default_factory=list, description="Predecessor step orders")
-    resources: list[dict[str, Any]] = Field(default_factory=list, description="Assigned resources")
-    not_before: Optional[int] = Field(None, description="Not before constraint in minutes")
-    step_role: str = "normal"

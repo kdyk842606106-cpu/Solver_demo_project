@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(python -m pytest tests/integration/test_step3_api.py::TestZeroIntrusionRegression::test_blockage_constraints_none_no_repair_steps -v --tb=long -s)",
+      "Bash(python -c ':*)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(grep -n \"GET /features\" /e/Solver_demo_project/app/api/v1/*.py)",
+      "Bash(grep:*)",
+      "Bash(python -m pytest tests/ -x -q --tb=short)",
+      "Bash(python -m pytest tests/ -q --tb=short)",
+      "Bash(python -c \"from app.api.v1.solve import router; print\\('solve.py imports OK'\\)\")",
+      "Bash(node -e \"const fs=require\\('fs'\\); const c=fs.readFileSync\\('src/views/SolvePage/index.vue','utf8'\\); ['await applyResult\\(result\\)', 'catch {', 'await applyResult\\(result\\)\\\\n  }'].forEach\\(s => { if\\(c.includes\\(s\\)\\) console.log\\('OK:', JSON.stringify\\(s\\)\\); else console.log\\('MISSING:', JSON.stringify\\(s\\)\\) }\\)\")",
+      "Bash(python -m pytest tests/integration/test_step3_api.py -q --tb=short)",
+      "Bash(python -m pytest tests/integration/test_step3_api.py -x -q)",
+      "Bash(python -m pytest tests/integration/test_step3_api.py::TestSolveEnrichedResponse::test_initial_solve_has_state_delta -x -q -s)",
+      "Bash(findstr \"allowed_values\")",
+      "Bash(python -m pytest tests/integration/test_step3_api.py::TestSolveEnrichedResponse::test_initial_solve_has_state_delta -x -q --tb=long)",
+      "Bash(python -m pytest tests/integration/test_step3_api.py -q)",
+      "Bash(python -m pytest -q)",
+      "Bash(python -m pytest tests/integration/test_master_data_api.py::test_master_data_to_solve_flow -q --tb=short)",
+      "Bash(python -m pytest tests/integration/test_step3_api.py -v --no-header -q)",
+      "Bash(python -m pytest tests/ -v --no-header -q)",
+      "Bash(python -m pytest tests/ --co -q)",
+      "Bash(python -m pytest tests/integration/test_step3_api.py::TestPlanDiff -v --no-header)",
+      "Bash(python -m pytest tests/integration/test_step3_api.py::TestPlanDiff::test_diff_repair_step_only_in_new_has_null_base_start tests/integration/test_step3_api.py::TestPlanDiff::test_diff_step_only_in_base_has_null_new_start -v --no-header)",
+      "Bash(python -m pytest tests/integration/test_step3_api.py::TestPlanDiff::test_diff_repair_step_only_in_new_has_null_base_start -v --no-header -s)",
+      "Bash(python -m pytest tests/ -q --no-header)"
+    ]
+  }
+}

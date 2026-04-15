@@ -2,7 +2,7 @@
 SQLAlchemy ORM Models for the State-Driven Process Planning System.
 
 This module defines all database tables according to the schema in Project_introduction.md.
-Total: 13 tables for MVP.
+Total: 16 tables (V0.2).
 """
 
 from datetime import datetime
@@ -382,43 +382,7 @@ class SolveRequest(Base):
         String(32), nullable=False, default="pending"
     )
     overrides: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    solved_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-
-    # Relationships
-    machine: Mapped["Machine"] = relationship("Machine", back_populates="solve_requests")
-    current_state: Mapped["MachineState"] = relationship(
-        "MachineState", foreign_keys=[current_state_id]
-    )
-    target_state: Mapped["MachineState"] = relationship(
-        "MachineState", foreign_keys=[target_state_id]
-    )
-    parent_plan: Mapped[Optional["CandidatePlan"]] = relationship(
-        "CandidatePlan", foreign_keys=[parent_plan_id]
-    )
-    candidate_plans: Mapped[list["CandidatePlan"]] = relationship(
-        "CandidatePlan", back_populates="solve_request", cascade="all, delete-orphan"
-    )
-    schedule_results: Mapped[list["ScheduleResult"]] = relationship(
-        "ScheduleResult", back_populates="solve_request", cascade="all, delete-orphan"
-    )
-    current_state_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("machine_state.id", ondelete="RESTRICT"), nullable=False
-    )
-    target_state_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("machine_state.id", ondelete="RESTRICT"), nullable=False
-    )
-    objective: Mapped[str] = mapped_column(
-        String(64), nullable=False, default="minimize_makespan"
-    )
-    status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="pending"
-    )  # pending | running | done | failed
-    overrides: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    blockage_constraints: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -435,7 +399,10 @@ class SolveRequest(Base):
         "MachineState", foreign_keys=[target_state_id]
     )
     candidate_plans: Mapped[list["CandidatePlan"]] = relationship(
-        "CandidatePlan", back_populates="solve_request", cascade="all, delete-orphan"
+        "CandidatePlan",
+        back_populates="solve_request",
+        cascade="all, delete-orphan",
+        primaryjoin="CandidatePlan.solve_request_id == SolveRequest.id"
     )
     schedule_results: Mapped[list["ScheduleResult"]] = relationship(
         "ScheduleResult", back_populates="solve_request", cascade="all, delete-orphan"
@@ -479,7 +446,7 @@ class CandidatePlan(Base):
 
     # Relationships
     solve_request: Mapped["SolveRequest"] = relationship(
-        "SolveRequest", back_populates="candidate_plans"
+        "SolveRequest", back_populates="candidate_plans", foreign_keys=[solve_request_id]
     )
     steps: Mapped[list["CandidatePlanStep"]] = relationship(
         "CandidatePlanStep", back_populates="candidate_plan", cascade="all, delete-orphan"
@@ -582,8 +549,8 @@ class BlockageEvent(Base):
     plan_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("candidate_plan.id", ondelete="CASCADE"), nullable=False
     )
-    blocked_step_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("candidate_plan_step.id", ondelete="CASCADE"), nullable=False
+    blocked_step_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("candidate_plan_step.id", ondelete="CASCADE"), nullable=True
     )
     strategy: Mapped[str] = mapped_column(String(8), nullable=False)
     not_before_offset: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

@@ -20,6 +20,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models import (
     CandidatePlanStep,
+    FeatureDefinition,
     Machine,
     MachineState,
     MachineStateFeature,
@@ -52,42 +53,47 @@ from app.db.schemas import (
     StateFeatureDefCreate,
     StateFeatureDefResponse,
     StateFeatureDefUpdate,
+    FeatureDefinitionCreate,
+    FeatureDefinitionResponse,
 )
 from app.db.session import get_db_session
 
 router = APIRouter(tags=["master-data"])
 
 
-def _extract_allowed_values(payload: Optional[dict[str, Any]]) -> Optional[set[str]]:
-    """Accept a few frontend-friendly shapes for enum values."""
+def _extract_allowed_values(payload: Any) -> Optional[set[str]]:
+    """Accept both list and legacy dict shapes for enum values."""
     if not payload:
         return None
 
-    candidates = None
-    for key in ("values", "options", "allowed_values", "items"):
-        if isinstance(payload.get(key), list):
-            candidates = payload[key]
-            break
+    if isinstance(payload, list):
+        return {str(item) for item in payload} if payload else None
 
-    if candidates is None and all(isinstance(k, str) for k in payload.keys()):
-        # Fallback: {"cold": "...", "hot": "..."} -> validate against keys
-        candidates = list(payload.keys())
+    if isinstance(payload, dict):
+        candidates = None
+        for key in ("values", "options", "allowed_values", "items"):
+            if isinstance(payload.get(key), list):
+                candidates = payload[key]
+                break
+        if candidates is None and all(isinstance(k, str) for k in payload.keys()):
+            candidates = list(payload.keys())
+        if not candidates:
+            return None
+        return {str(item) for item in candidates}
 
-    if not candidates:
-        return None
-
-    return {str(item) for item in candidates}
+    return None
 
 
-def _normalize_allowed_values(payload: Any) -> Optional[dict[str, Any]]:
-    """Return frontend-friendly allowed_values shape regardless of stored format."""
+def _normalize_allowed_values(payload: Any) -> Optional[list[Any]]:
+    """Return allowed_values as a list regardless of stored format."""
     if payload is None:
         return None
-    if isinstance(payload, dict):
-        return payload
     if isinstance(payload, list):
-        return {"values": [str(item) for item in payload]}
-    return {"values": [str(payload)]}
+        return payload
+    if isinstance(payload, dict):
+        # Legacy format: {"values": [...]} → unwrap to plain list
+        return payload.get("values", list(payload.values()))
+    return [payload]
 
 
 def _serialize_feature_def(feature_def: StateFeatureDef) -> dict[str, Any]:
@@ -255,6 +261,9 @@ def _serialize_rule(rule: OpRule) -> dict[str, Any]:
         "duration_min": rule.duration_min,
         "description": rule.description,
         "is_active": rule.is_active,
+        "is_repair": rule.is_repair,
+        "valid_from": rule.valid_from,
+        "valid_to": rule.valid_to,
         "created_at": rule.created_at,
         "preconditions": [
             {
@@ -262,6 +271,7 @@ def _serialize_rule(rule: OpRule) -> dict[str, Any]:
                 "feature_key": item.feature_key,
                 "operator": item.operator,
                 "feature_value": item.feature_value,
+                "value_list": item.value_list,
             }
             for item in rule.preconditions
         ],
@@ -270,6 +280,8 @@ def _serialize_rule(rule: OpRule) -> dict[str, Any]:
                 "id": item.id,
                 "feature_key": item.feature_key,
                 "new_value": item.new_value,
+                "effect_type": item.effect_type,
+                "delta_value": item.delta_value,
             }
             for item in rule.effects
         ],
@@ -321,6 +333,7 @@ async def _replace_rule_children(
                 feature_key=item.feature_key,
                 operator=item.operator,
                 feature_value=item.feature_value,
+                value_list=item.value_list,
             )
             for item in payload.preconditions
         ]
@@ -331,6 +344,8 @@ async def _replace_rule_children(
                 op_rule_id=rule.id,
                 feature_key=item.feature_key,
                 new_value=item.new_value,
+                effect_type=item.effect_type,
+                delta_value=item.delta_value,
             )
             for item in payload.effects
         ]
@@ -694,6 +709,9 @@ async def create_op_rule(
         duration_min=payload.duration_min,
         description=payload.description,
         is_active=payload.is_active,
+        is_repair=payload.is_repair,
+        valid_from=payload.valid_from,
+        valid_to=payload.valid_to,
     )
     db.add(rule)
     await db.flush()
@@ -722,6 +740,9 @@ async def update_op_rule(
     rule.duration_min = payload.duration_min
     rule.description = payload.description
     rule.is_active = payload.is_active
+    rule.is_repair = payload.is_repair
+    rule.valid_from = payload.valid_from
+    rule.valid_to = payload.valid_to
     await _replace_rule_children(rule, payload, db)
     await db.flush()
     rule = await _get_rule_or_404(rule.id, db)
@@ -791,5 +812,74 @@ async def update_resource(
 @router.delete("/resources/{resource_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_resource(resource_id: int, db: AsyncSession = Depends(get_db_session)):
     obj = await _get_resource_or_404(resource_id, db)
+    await db.delete(obj)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ============================================================
+# Feature Definition CRUD  GET/POST/PUT/DELETE /features
+# ============================================================
+
+
+async def _get_feature_def_or_404(feature_key: str, db: AsyncSession) -> FeatureDefinition:
+    obj = await db.get(FeatureDefinition, feature_key)
+    if obj is None:
+        raise HTTPException(status_code=404, detail=f"Feature definition '{feature_key}' not found")
+    return obj
+
+
+@router.get("/features", response_model=list[FeatureDefinitionResponse])
+async def list_feature_definitions(db: AsyncSession = Depends(get_db_session)):
+    """List all global feature definitions (feature_definition table)."""
+    result = await db.execute(select(FeatureDefinition).order_by(FeatureDefinition.feature_key))
+    return result.scalars().all()
+
+
+@router.post("/features", response_model=FeatureDefinitionResponse, status_code=status.HTTP_201_CREATED)
+async def create_feature_definition(
+    payload: FeatureDefinitionCreate,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Create a global feature definition."""
+    existing = await db.get(FeatureDefinition, payload.feature_key)
+    if existing is not None:
+        raise HTTPException(status_code=409, detail=f"Feature key '{payload.feature_key}' already exists")
+    obj = FeatureDefinition(
+        feature_key=payload.feature_key,
+        value_type=payload.value_type,
+        allowed_values=payload.allowed_values,
+        unit=payload.unit,
+        description=payload.description,
+    )
+    db.add(obj)
+    await db.flush()
+    await db.refresh(obj)
+    return obj
+
+
+@router.put("/features/{feature_key}", response_model=FeatureDefinitionResponse)
+async def update_feature_definition(
+    feature_key: str,
+    payload: FeatureDefinitionCreate,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Update a global feature definition."""
+    obj = await _get_feature_def_or_404(feature_key, db)
+    obj.value_type = payload.value_type
+    obj.allowed_values = payload.allowed_values
+    obj.unit = payload.unit
+    obj.description = payload.description
+    await db.flush()
+    await db.refresh(obj)
+    return obj
+
+
+@router.delete("/features/{feature_key}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_feature_definition(
+    feature_key: str,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Delete a global feature definition."""
+    obj = await _get_feature_def_or_404(feature_key, db)
     await db.delete(obj)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
