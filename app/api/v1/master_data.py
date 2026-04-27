@@ -821,7 +821,7 @@ async def delete_resource(resource_id: int, db: AsyncSession = Depends(get_db_se
 # ============================================================
 
 
-async def _get_feature_def_or_404(feature_key: str, db: AsyncSession) -> FeatureDefinition:
+async def _get_global_feature_definition_or_404(feature_key: str, db: AsyncSession) -> FeatureDefinition:
     obj = await db.get(FeatureDefinition, feature_key)
     if obj is None:
         raise HTTPException(status_code=404, detail=f"Feature definition '{feature_key}' not found")
@@ -864,7 +864,7 @@ async def update_feature_definition(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Update a global feature definition."""
-    obj = await _get_feature_def_or_404(feature_key, db)
+    obj = await _get_global_feature_definition_or_404(feature_key, db)
     obj.value_type = payload.value_type
     obj.allowed_values = payload.allowed_values
     obj.unit = payload.unit
@@ -880,6 +880,6 @@ async def delete_feature_definition(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Delete a global feature definition."""
-    obj = await _get_feature_def_or_404(feature_key, db)
+    obj = await _get_global_feature_definition_or_404(feature_key, db)
     await db.delete(obj)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

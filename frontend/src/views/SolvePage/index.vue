@@ -152,6 +152,9 @@
             <el-table :data="tasks" size="small" border stripe>
               <el-table-column prop="step_order" label="步骤" width="60" />
               <el-table-column prop="op_rule_code" label="活动编码" width="160" />
+              <el-table-column label="活动名称" min-width="160" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.op_rule_name || '—' }}</template>
+              </el-table-column>
               <el-table-column label="开始" width="70">
                 <template #default="{ row }">{{ row.start_min }}m</template>
               </el-table-column>
@@ -179,7 +182,7 @@
               </el-table-column>
               <el-table-column label="资源" show-overflow-tooltip>
                 <template #default="{ row }">
-                  {{ (row.resources ?? []).map((r) => r.code ?? r).join(', ') || '—' }}
+                  {{ formatResources(row.resources) }}
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="90" fixed="right">
@@ -267,6 +270,18 @@ const parallelGroups = computed(() => solveResult.value?.schedule?.parallel_grou
 function stateLabel(s) {
   const feats = Object.entries(s.features ?? {}).map(([k, v]) => `${k}:${v}`).join(' / ')
   return `${s.label ?? '未命名'} (${s.state_type})${feats ? ' — ' + feats : ''}`
+}
+
+function formatResources(resources) {
+  if (!Array.isArray(resources) || resources.length === 0) return '—'
+  const labels = resources
+    .map((r) => {
+      if (typeof r === 'string' || typeof r === 'number') return String(r)
+      if (!r || typeof r !== 'object') return ''
+      return r.resource_code ?? r.code ?? r.resource_name ?? ''
+    })
+    .filter(Boolean)
+  return labels.length ? labels.join(', ') : '—'
 }
 
 const ROLE_TAG = {

@@ -20,6 +20,9 @@ class DatabaseSettings(BaseSettings):
     db_password: str = "solver123"
     db_name: str = "solver_db"
 
+    # Connection timeout in seconds (shared by app and scripts)
+    db_connect_timeout: int = 10
+
     # Optional: override full URL
     database_url: str | None = None
     database_url_sync: str | None = None
@@ -47,6 +50,7 @@ class DatabaseSettings(BaseSettings):
         return (
             f"postgresql+psycopg://{self.db_user}:{self.db_password}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
+            f"?connect_timeout={self.db_connect_timeout}"
         )
 
 

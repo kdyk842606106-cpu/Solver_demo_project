@@ -40,9 +40,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { Grid, Cpu } from '@element-plus/icons-vue'
-import axios from 'axios'
 import DataManagement from './views/DataManagement/index.vue'
 import SolvePage from './views/SolvePage/index.vue'
+import { getHealth } from './api/system'
 
 const currentView = ref('data')
 const healthOk = ref(false)
@@ -50,9 +50,9 @@ const version = ref('')
 
 async function checkHealth() {
   try {
-    const res = await axios.get('/health')
+    const res = await getHealth()
     healthOk.value = true
-    version.value = `v${res.data.version ?? ''}`
+    version.value = `v${res.version ?? ''}`
   } catch {
     healthOk.value = false
   }

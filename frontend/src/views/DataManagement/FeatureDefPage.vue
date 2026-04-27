@@ -70,7 +70,7 @@
             </el-table-column>
             <el-table-column label="枚举值" show-overflow-tooltip>
               <template #default="{ row }">
-                {{ (row.allowed_values?.values ?? []).join(', ') }}
+                {{ normalizeAllowedValues(row.allowed_values).join(', ') }}
               </template>
             </el-table-column>
             <el-table-column prop="unit" label="单位" width="80" />
@@ -114,6 +114,12 @@ const form = ref({
   description: '',
 })
 
+function normalizeAllowedValues(allowedValues) {
+  if (Array.isArray(allowedValues)) return allowedValues
+  if (Array.isArray(allowedValues?.values)) return allowedValues.values
+  return []
+}
+
 async function onTypeChange() {
   editId.value = null
   if (!form.value.machine_type_id) { list.value = []; return }
@@ -133,9 +139,7 @@ async function save() {
       feature_key: form.value.feature_key.trim(),
       feature_name: form.value.feature_name.trim() || null,
       value_type: form.value.value_type,
-      allowed_values: form.value.value_type === 'enum' && vals.length ? { values: vals } : null,
-      unit: form.value.unit.trim() || null,
-      description: form.value.description.trim() || null,
+      allowed_values: form.value.value_type === 'enum' && vals.length ? vals : null,
     }
     if (editId.value) {
       await updateFeatureDef(editId.value, payload)
@@ -160,7 +164,7 @@ function editRow(row) {
     feature_key: row.feature_key,
     feature_name: row.feature_name ?? '',
     value_type: row.value_type,
-    allowedValuesRaw: (row.allowed_values?.values ?? []).join(', '),
+    allowedValuesRaw: normalizeAllowedValues(row.allowed_values).join(', '),
     unit: row.unit ?? '',
     description: row.description ?? '',
   }

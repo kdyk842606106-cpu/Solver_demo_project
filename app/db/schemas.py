@@ -382,6 +382,7 @@ class ScheduleTaskItem(BaseSchema):
     step_order: int = Field(..., description="Step order in the plan")
     op_rule_id: int = Field(..., description="Operation rule ID")
     op_rule_code: str = Field(..., description="Operation code")
+    op_rule_name: Optional[str] = Field(None, description="Operation display name")
     start_min: int = Field(..., ge=0, description="Start time in minutes")
     end_min: int = Field(..., ge=0, description="End time in minutes")
     duration_min: int = Field(..., ge=1, description="Duration in minutes")
@@ -462,6 +463,8 @@ class PlanDiffStep(BaseModel):
     """One step entry in a plan-vs-plan diff."""
 
     op_code: str
+    op_name: Optional[str] = None
+    step_order: Optional[int] = None
     base_start: Optional[int] = None
     base_end: Optional[int] = None
     new_start: Optional[int] = None
@@ -634,6 +637,4 @@ class BlockageEventResponse(BaseSchema):
     note: Optional[str] = None
     created_at: datetime
     created_by: Optional[str] = None
-
-
 

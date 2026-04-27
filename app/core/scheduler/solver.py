@@ -40,6 +40,7 @@ class TaskResult:
     step_order: int
     op_rule_id: int
     op_rule_code: str
+    op_rule_name: str | None
     start_min: int
     end_min: int
     duration_min: int
@@ -142,6 +143,7 @@ async def solve_schedule(
                 step_order=so,
                 op_rule_id=sd.op_rule_id,
                 op_rule_code=sd.op_rule_code,
+                op_rule_name=sd.op_rule_name,
                 start_min=solver.value(tv.start),
                 end_min=solver.value(tv.end),
                 duration_min=sd.duration_min,
@@ -290,6 +292,7 @@ async def save_schedule_result(
                 "step_order": t.step_order,
                 "op_rule_id": t.op_rule_id,
                 "op_rule_code": t.op_rule_code,
+                "op_rule_name": t.op_rule_name,
                 "start_min": t.start_min,
                 "end_min": t.end_min,
                 "duration_min": t.duration_min,

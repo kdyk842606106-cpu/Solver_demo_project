@@ -17,7 +17,7 @@
 
 ```
 机台与状态:
-  machine_type, machine, machine_state, machine_state_feature, feature_definition(空)
+  machine_type, machine, machine_state, machine_state_feature, feature_definition(已启用)
 
 工序规则:
   op_rule (id, code, name, duration_min, description)
@@ -29,10 +29,10 @@
   resource (id, code, name, resource_type, capacity)
 
 求解与结果:
-  solve_request (id, machine_id, start_state_id, goal_state_id, objective, status, error_code)
-  candidate_plan (id, solve_request_id, total_duration_min)
-  candidate_plan_step (id, plan_id, op_rule_id, step_order, start_min, duration_min, predecessor_ids)
-  schedule_result (id, plan_id, makespan_min, tasks JSONB, parallel_groups JSONB)
+  solve_request (id, machine_id, current_state_id, target_state_id, objective, status, error_code)
+  candidate_plan (id, solve_request_id, total_steps)
+  candidate_plan_step (id, candidate_plan_id, op_rule_id, step_order, predecessor_ids)
+  schedule_result (id, candidate_plan_id, makespan, tasks JSONB)
 ```
 
 ### 后端代码文件（实际路径）
@@ -233,7 +233,7 @@ app/core/solver/          ← 新增目录（或在 core/ 下扩展）
   ✅ 2-4  RAGBuilder 升级（RuleEvaluator 调用 + 循环检测 + 深度限制）
   ✅ 2-5  ObjectiveRegistry + MinimizeMakespanObjective
   ✅ 2-6a Scheduler not_before 约束注入
-  ✅ 2-6b Scheduler objectives 数组支持
+  ✅ 2-6b Scheduler objectives 数组支持（当前仅完整实现 minimize_makespan，weight 暂未参与加权求解）
   ✅ 2-7a 阻塞处理编排主流程（策略 A/B/AB）
   ✅ 2-7b step_role 计算算法
 
@@ -279,6 +279,13 @@ app/core/solver/          ← 新增目录（或在 core/ 下扩展）
   ✅ 4-4  BlockageDialog 组件（策略A/B/AB，blockage_reason 动态读取）
   ✅ 4-5  GanttChart 升级（ECharts custom series，step_role 颜色 + 对比模式）
   ✅ 4-6  SolvePage 升级（版本历史 + state_delta + critical_path + BlockageDialog 集成）
+
+━━━━━━ TICKET-010：Gantt 标题与任务显示增强 ━━━━━━  [✅] 已完成
+
+  ✅ T10-1  schedule.tasks[] 稳定返回 op_rule_name
+  ✅ T10-2  普通模式标题升级为「步骤编号 + 活动编码 + 活动名称」
+  ✅ T10-3  对比模式标题与 tooltip 同步增强并支持字段缺失降级
+  ✅ T10-4  任务明细表新增活动名称列（名称为空显示 "—"）
 ```
 
 ---
@@ -313,6 +320,14 @@ app/core/solver/          ← 新增目录（或在 core/ 下扩展）
   precond operator=gte, value=3.5, current=3.8
   → RuleEvaluator 正确 float 比较，返回 True
 ```
+
+### 验收结果（已验证）
+
+- 验证结论：✅ 已通过（2026-04-19）
+- 验证依据：
+  - STEP 2 准出修复：190 测试全通过
+  - STEP 3 API 扩展：211 测试全通过（含 diff 空值边界）
+  - TICKET-010：普通模式/对比模式/名称缺失降级均已完成回归验证
 
 ---
 

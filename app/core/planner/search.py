@@ -17,7 +17,14 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import CandidatePlan, CandidatePlanStep, Machine, MachineState, OpRule
+from app.db.models import (
+    CandidatePlan,
+    CandidatePlanStep,
+    Machine,
+    MachineState,
+    OpRule,
+    StateFeatureDef,
+)
 from app.core.planner.state import StateDict, load_state, compute_state_delta, is_goal
 from app.core.planner.matcher import (
     load_rules,
@@ -25,6 +32,11 @@ from app.core.planner.matcher import (
     find_ops_for_delta,
     find_provider,
     rule_summary,
+)
+from app.core.planner.numeric import (
+    NUMERIC_IMPLICIT_GOAL_CYCLE,
+    NUMERIC_NO_PROVIDER,
+    plan_exact_numeric_feature,
 )
 from app.core.solver.rule_evaluator import RuleEvaluator
 
@@ -51,6 +63,17 @@ class PlanResult:
     status: str  # "success" | "no_solution" | "error"
     rag: Optional[RAG] = None
     error_message: Optional[str] = None
+
+
+async def _load_feature_defs(
+    machine_type_id: int,
+    session: AsyncSession,
+) -> dict[str, StateFeatureDef]:
+    """Load feature definitions for value_type based planner routing."""
+    result = await session.execute(
+        select(StateFeatureDef).where(StateFeatureDef.machine_type_id == machine_type_id)
+    )
+    return {item.feature_key: item for item in result.scalars().all()}
 
 
 async def build_rag(
@@ -132,6 +155,8 @@ async def build_rag(
             error_message="Could not determine machine for state"
         )
     
+    feature_defs = await _load_feature_defs(machine.machine_type_id, session)
+
     # Load all active operation rules
     rules = await load_rules(machine.machine_type_id, session, include_repair=include_repair)
     
@@ -146,8 +171,33 @@ async def build_rag(
     # ============================================================
     
     needed_ops: list[OpRule] = []
-    
+    numeric_plans = []
+
     for feature_key, (current_val, target_val) in delta.items():
+        feature_def = feature_defs.get(feature_key)
+        if feature_def is not None and feature_def.value_type == "number":
+            numeric_result = plan_exact_numeric_feature(
+                feature_key=feature_key,
+                current_state=current_state,
+                target_value=target_val,
+                rules=rules,
+            )
+            if numeric_result.status == "success":
+                if numeric_result.steps:
+                    numeric_plans.append(numeric_result)
+                continue
+            # Existing V0.2 numeric scenarios can still use set effects for
+            # exact targets; only route to numeric chaining when a provider exists.
+            if numeric_result.error_code != NUMERIC_NO_PROVIDER:
+                return PlanResult(
+                    status=(
+                        "error"
+                        if numeric_result.error_code == NUMERIC_IMPLICIT_GOAL_CYCLE
+                        else "no_solution" if numeric_result.status == "no_solution" else "error"
+                    ),
+                    error_message=numeric_result.error_message,
+                )
+
         # Find operations that can produce this effect
         candidates = find_ops_for_delta(feature_key, target_val, rules, current_state)
         
@@ -268,7 +318,31 @@ async def build_rag(
                     nodes[node_id - 1].predecessors.append(provider_node_id)
         
         processed_idx += 1
-    
+
+    for numeric_result in numeric_plans:
+        instance_to_node_id: dict[str, int] = {}
+        for planned_step in numeric_result.steps:
+            node_id = len(nodes) + 1
+            instance_to_node_id[planned_step.instance_id] = node_id
+
+            predecessor_ids = [
+                instance_to_node_id[instance_id]
+                for instance_id in planned_step.predecessor_instance_ids
+                if instance_id in instance_to_node_id
+            ]
+
+            nodes.append(RAGNode(
+                id=node_id,
+                op_rule_id=planned_step.op_rule.id,
+                op_rule_code=planned_step.op_rule.code,
+                predecessors=predecessor_ids,
+            ))
+
+            for predecessor_id in predecessor_ids:
+                edge = (predecessor_id, node_id)
+                if edge not in edges:
+                    edges.append(edge)
+
     # ============================================================
     # Phase 5: Validate RAG (check for cycles)
     # ============================================================

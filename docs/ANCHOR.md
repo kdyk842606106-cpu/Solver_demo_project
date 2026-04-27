@@ -150,8 +150,8 @@ UI (Vue 3) → API (FastAPI) → Service → Domain (solver/) → Persistence (S
 
 ```
 约束 9：求解失败必须可诊断
-  SOLVE_NO_SOLUTION → 返回 unresolved_delta
-  SOLVE_CYCLE_DETECTED → 返回 cycle_path
+  求解失败必须返回稳定的结构化 error_code。
+  至少覆盖：无解、循环依赖、资源不可行、求解超时。
 
 约束 10：前端错误展示
   统一 ElMessage.error()，error_code → 中文映射表。
@@ -168,7 +168,7 @@ UI (Vue 3) → API (FastAPI) → Service → Domain (solver/) → Persistence (S
   类型注解完整。
 
 约束 12：前端
-  API 调用统一通过 src/api/ 封装。
+  API 调用统一通过 src/api/ 封装（包括健康检查等基础接口）。
   GanttChart / BlockageDialog 是纯组件，数据由父页面传入，事件通过 emit 传递。
 
 约束 13：注册表模式

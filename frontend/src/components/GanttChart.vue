@@ -67,11 +67,28 @@ function buildOption() {
   return buildNormalOption()
 }
 
+function formatNormalLabel(task, isCriticalPath) {
+  const stepNo = task.step_order != null ? `${task.step_order}. ` : ''
+  const code = task.op_rule_code ?? task.op_code ?? 'UNKNOWN'
+  const name = (task.op_rule_name ?? task.op_name ?? '').trim()
+  const base = name ? `${stepNo}${code} - ${name}` : `${stepNo}${code}`
+  return isCriticalPath ? `★ ${base}` : base
+}
+
+function formatDiffLabel(step) {
+  const prefix = step.base_start == null ? '[新增] ' : ''
+  const stepNo = step.step_order != null ? `${step.step_order}. ` : ''
+  const code = step.op_code ?? step.op_rule_code ?? 'UNKNOWN'
+  const name = (step.op_name ?? step.op_rule_name ?? '').trim()
+  const body = name ? `${stepNo}${code} - ${name}` : `${stepNo}${code}`
+  return `${prefix}${body}`
+}
+
 function buildNormalOption() {
   const sorted = [...props.tasks].sort((a, b) => a.start_min - b.start_min)
   const categories = sorted.map((t) => {
     const isCP = props.criticalPath.includes(t.op_rule_code ?? t.op_code)
-    return isCP ? `★ ${t.op_rule_code ?? t.op_code}` : (t.op_rule_code ?? t.op_code)
+    return formatNormalLabel(t, isCP)
   })
 
   const data = sorted.map((t, i) => {
@@ -95,10 +112,7 @@ function buildDiffOption() {
   const steps = [...props.diffSteps].sort((a, b) =>
     (a.new_start ?? 9999) - (b.new_start ?? 9999) || a.op_code.localeCompare(b.op_code)
   )
-  const categories = steps.map((s) => {
-    const prefix = s.base_start == null ? '[新增] ' : ''
-    return `${prefix}${s.op_code}`
-  })
+  const categories = steps.map((s) => formatDiffLabel(s))
 
   const newBars = steps.map((s, i) => {
     if (s.new_start == null) return null

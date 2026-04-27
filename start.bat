@@ -1,109 +1,11 @@
 @echo off
 set PYTHONIOENCODING=utf-8
 
-echo ============================================
-echo   工艺规划与资源优化系统 V0.2 - Quick Start
-echo ============================================
-echo.
-
-echo [1/9] Checking Docker...
-docker info >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0deploy\scripts\launch_dev.ps1" -Mode docker
 if errorlevel 1 (
-    echo [ERROR] Docker is not running. Please start Docker Desktop.
-    pause
-    exit /b 1
-)
-echo [OK] Docker is running
-
-echo.
-echo [2/9] Starting PostgreSQL...
-docker-compose up -d postgres 2>nul
-if errorlevel 1 (
-    echo [ERROR] Failed to start PostgreSQL
+    echo [ERROR] Docker launch failed.
     pause
     exit /b 1
 )
 
-echo.
-echo [3/9] Waiting for database to be ready...
-set /a retries=30
-:wait_loop
-timeout /t 2 /nobreak >nul
-docker exec solver_postgres pg_isready -U solver -d solver_db >nul 2>&1
-if not errorlevel 1 goto db_ready
-set /a retries-=1
-if %retries% gtr 0 goto wait_loop
-
-echo [ERROR] Database startup timeout
-pause
-exit /b 1
-
-:db_ready
-echo [OK] Database is ready
-
-echo.
-echo [4/9] Testing database connection...
-.venv\Scripts\python.exe scripts/test_db_connection.py
-if errorlevel 1 (
-    echo [ERROR] Database connection failed
-    pause
-    exit /b 1
-)
-
-echo.
-echo [5/9] Running database migrations...
-.venv\Scripts\alembic upgrade head
-if errorlevel 1 (
-    echo [ERROR] Database migration failed
-    pause
-    exit /b 1
-)
-
-echo.
-echo [6/9] Loading initial seed data...
-.venv\Scripts\python.exe scripts/load_seed_data.py --file seeds/001_initial_data.sql
-if errorlevel 1 (
-    echo [WARN] Initial seed data load failed (may already exist)
-)
-
-echo.
-echo [7/9] Loading expanded seed data...
-.venv\Scripts\python.exe scripts/load_seed_data.py --file seeds/002_expanded_data.sql
-if errorlevel 1 (
-    echo [WARN] Expanded seed data load failed (may already exist)
-)
-
-echo.
-echo [8/9] Loading V0.2 seed data (feature_definition + repair rules)...
-.venv\Scripts\python.exe scripts/load_seed_data.py --file seeds/003_v0.2_seed_data.sql
-if errorlevel 1 (
-    echo [WARN] V0.2 seed data load failed (may already exist)
-)
-
-echo.
-echo [9/9] Starting servers...
-
-echo   Starting backend (port 8000)...
-start "Backend Server" cmd /k "set PYTHONIOENCODING=utf-8 && .venv\Scripts\activate.bat && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
-
-echo   Starting frontend dev server (port 5173)...
-start "Frontend Dev Server" cmd /k "cd /d %~dp0frontend && npm run dev"
-
-echo.
-echo ============================================
-echo   Startup Complete!
-echo ============================================
-echo.
-echo   Backend API:  http://localhost:8000/docs
-echo   Frontend UI:  http://localhost:5173
-echo.
-echo   Waiting 4 seconds for Vite to start, then opening browser...
-timeout /t 4 /nobreak >nul
-
-start "" "http://localhost:5173"
-
-echo.
-echo Services are running in background.
-echo To stop: docker-compose down  (and close the two server windows)
-echo.
 pause

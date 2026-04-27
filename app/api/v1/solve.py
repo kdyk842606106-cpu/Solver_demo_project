@@ -33,6 +33,62 @@ from app.core.solver.step_role import compute_step_role_diff
 router = APIRouter(tags=["solve"])
 
 
+class AmbiguousBlockedStepError(Exception):
+    """Raised when a legacy blockage request cannot identify one instance."""
+
+
+async def _resolve_blocked_step_for_new_plan(
+    db: AsyncSession,
+    plan_id: int,
+    blocked_step_id: int | None,
+    blocked_op_rule_id: int | None,
+) -> CandidatePlanStep | None:
+    """Resolve which step in the new plan should receive the blockage.
+
+    Prefer an explicit parent blocked_step_id because it identifies a concrete
+    step instance. For legacy callers that only pass blocked_op_rule_id, fall
+    back to the unique matching step when possible.
+    """
+    parent_step: CandidatePlanStep | None = None
+    if blocked_step_id is not None:
+        parent_step = await db.get(CandidatePlanStep, blocked_step_id)
+        if parent_step is not None:
+            step_result = await db.execute(
+                select(CandidatePlanStep)
+                .where(CandidatePlanStep.candidate_plan_id == plan_id)
+                .where(CandidatePlanStep.step_order == parent_step.step_order)
+            )
+            blocked_step = step_result.scalar_one_or_none()
+            if blocked_step is not None:
+                return blocked_step
+            blocked_op_rule_id = parent_step.op_rule_id
+
+    if blocked_op_rule_id is None:
+        return None
+
+    step_result = await db.execute(
+        select(CandidatePlanStep)
+        .where(CandidatePlanStep.candidate_plan_id == plan_id)
+        .where(CandidatePlanStep.op_rule_id == blocked_op_rule_id)
+        .order_by(CandidatePlanStep.step_order)
+    )
+    matching_steps = step_result.scalars().all()
+    if not matching_steps:
+        return None
+
+    if len(matching_steps) == 1:
+        return matching_steps[0]
+
+    if parent_step is not None:
+        for step in matching_steps:
+            if step.step_order == parent_step.step_order:
+                return step
+
+    raise AmbiguousBlockedStepError(
+        "AMBIGUOUS_BLOCKED_STEP: repeated task requires blocked_step_id"
+    )
+
+
 def _compute_critical_path(tasks: list[TaskResult]) -> list[str]:
     """Return op_codes on the critical path, in chronological order.
 
@@ -212,26 +268,29 @@ async def solve(
 
         new_blocked_step_id = None
         if strategy in ("A", "AB") and strategy_a_offset is not None:
-            # Determine which op_rule_id to look for in the new plan's steps.
-            # Frontend sends blocked_op_rule_id; legacy callers may send blocked_step_id.
-            target_op_rule_id: int | None = None
-            if blocked_op_rule_id is not None:
-                target_op_rule_id = blocked_op_rule_id
-            elif blocked_step_id is not None:
-                parent_blocked_step = await db.get(CandidatePlanStep, blocked_step_id)
-                if parent_blocked_step is not None:
-                    target_op_rule_id = parent_blocked_step.op_rule_id
-
-            if target_op_rule_id is not None:
-                step_result = await db.execute(
-                    select(CandidatePlanStep)
-                    .where(CandidatePlanStep.candidate_plan_id == plan_id)
-                    .where(CandidatePlanStep.op_rule_id == target_op_rule_id)
+            try:
+                blocked_step = await _resolve_blocked_step_for_new_plan(
+                    db=db,
+                    plan_id=plan_id,
+                    blocked_step_id=blocked_step_id,
+                    blocked_op_rule_id=blocked_op_rule_id,
                 )
-                blocked_step = step_result.scalar_one_or_none()
-                if blocked_step is not None:
-                    blocked_step.not_before = strategy_a_offset
-                    new_blocked_step_id = blocked_step.id
+            except AmbiguousBlockedStepError as exc:
+                req_id = solve_req.id
+                solve_req.status = "failed"
+                solve_req.solved_at = datetime.now(timezone.utc)
+                await db.commit()
+                return {
+                    "solve_request_id": req_id,
+                    "status": "failed",
+                    "candidate_plan_id": plan_id,
+                    "error_code": "AMBIGUOUS_BLOCKED_STEP",
+                    "error_message": str(exc),
+                }
+
+            if blocked_step is not None:
+                blocked_step.not_before = strategy_a_offset
+                new_blocked_step_id = blocked_step.id
 
         if strategy in ("A", "B", "AB"):
             blockage_event = BlockageEvent(
@@ -279,7 +338,11 @@ async def solve(
             .where(CandidatePlanStep.candidate_plan_id == plan_id)
         )
         plan_steps = {
-            s.op_rule_id: {"not_before": s.not_before, "step_role": s.step_role or "normal"}
+            s.step_order: {
+                "step_id": s.id,
+                "not_before": s.not_before,
+                "step_role": s.step_role or "normal",
+            }
             for s in steps_result.scalars().all()
         }
 
@@ -296,11 +359,13 @@ async def solve(
 
         tasks_response = []
         for t in sched_result.tasks:
-            step_meta = plan_steps.get(t.op_rule_id)
+            step_meta = plan_steps.get(t.step_order)
             tasks_response.append({
                 "step_order": t.step_order,
+                "step_id": step_meta["step_id"] if step_meta else None,
                 "op_rule_id": t.op_rule_id,
                 "op_rule_code": t.op_rule_code,
+                "op_rule_name": t.op_rule_name,
                 "start_min": t.start_min,
                 "end_min": t.end_min,
                 "duration_min": t.duration_min,

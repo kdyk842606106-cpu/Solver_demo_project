@@ -10,7 +10,138 @@ from sqlalchemy import select
 from app.core.planner.state import load_state, compute_state_delta, is_goal
 from app.core.planner.matcher import load_rules, check_preconditions, find_ops_for_delta
 from app.core.planner.search import build_rag, save_candidate_plan, format_rag, find_parallel_groups
-from app.db.models import Machine, MachineState, OpRule, SolveRequest
+from app.db.models import (
+    CandidatePlanStep,
+    Machine,
+    MachineState,
+    MachineStateFeature,
+    MachineType,
+    OpRule,
+    OpRuleEffect,
+    OpRulePrecond,
+    OpRuleResourceReq,
+    SolveRequest,
+    StateFeatureDef,
+)
+
+
+async def _seed_numeric_planner_data(session):
+    """Seed a small numeric exact-target planning scenario."""
+    session.add(MachineType(id=20, code="NUMERIC_PLANNER", name="Numeric Planner Machine"))
+    session.add(Machine(id=20, machine_type_id=20, code="M-NUM-020", name="Numeric Machine"))
+    session.add_all([
+        StateFeatureDef(
+            id=200,
+            machine_type_id=20,
+            feature_key="water_level",
+            feature_name="Water Level",
+            value_type="number",
+        ),
+        StateFeatureDef(
+            id=201,
+            machine_type_id=20,
+            feature_key="calibration",
+            feature_name="Calibration",
+            value_type="enum",
+        ),
+    ])
+
+    session.add(MachineState(id=200, machine_id=20, state_type="current", label="Empty"))
+    await session.flush()
+    session.add_all([
+        MachineStateFeature(machine_state_id=200, feature_key="water_level", feature_value="0"),
+        MachineStateFeature(machine_state_id=200, feature_key="calibration", feature_value="off"),
+    ])
+
+    session.add(MachineState(id=201, machine_id=20, state_type="target", label="Filled"))
+    await session.flush()
+    session.add_all([
+        MachineStateFeature(machine_state_id=201, feature_key="water_level", feature_value="80"),
+        MachineStateFeature(machine_state_id=201, feature_key="calibration", feature_value="off"),
+    ])
+
+    session.add(MachineState(id=202, machine_id=20, state_type="target", label="Filled And Calibrated"))
+    await session.flush()
+    session.add_all([
+        MachineStateFeature(machine_state_id=202, feature_key="water_level", feature_value="40"),
+        MachineStateFeature(machine_state_id=202, feature_key="calibration", feature_value="on"),
+    ])
+
+    session.add(OpRule(id=200, machine_type_id=20, code="OP_FILL_WATER",
+                       name="Fill Water", duration_min=5, is_active=True))
+    session.add(OpRuleEffect(op_rule_id=200, feature_key="water_level",
+                             new_value="", effect_type="increment", delta_value=20))
+    session.add(OpRuleResourceReq(op_rule_id=200, resource_type="TECHNICIAN",
+                                  quantity=1, is_required=True))
+
+    session.add(OpRule(id=201, machine_type_id=20, code="OP_CALIBRATE_NUM",
+                       name="Calibrate Numeric Machine", duration_min=10, is_active=True))
+    session.add(OpRuleEffect(op_rule_id=201, feature_key="calibration",
+                             new_value="on", effect_type="set"))
+    session.add(OpRuleResourceReq(op_rule_id=201, resource_type="TECHNICIAN",
+                                  quantity=1, is_required=True))
+
+    await session.commit()
+
+
+async def _seed_numeric_precondition_data(session):
+    """Seed numeric scenario that requires implicit numeric preconditions."""
+    session.add(MachineType(id=30, code="NUMERIC_PRECOND", name="Numeric Precondition Machine"))
+    session.add(Machine(id=30, machine_type_id=30, code="M-NUM-030", name="Numeric Precondition Machine"))
+    session.add_all([
+        StateFeatureDef(
+            id=300,
+            machine_type_id=30,
+            feature_key="water_level",
+            feature_name="Water Level",
+            value_type="number",
+        ),
+        StateFeatureDef(
+            id=301,
+            machine_type_id=30,
+            feature_key="pressure",
+            feature_name="Pressure",
+            value_type="number",
+        ),
+    ])
+
+    session.add(MachineState(id=300, machine_id=30, state_type="current", label="Low Pressure Empty"))
+    await session.flush()
+    session.add_all([
+        MachineStateFeature(machine_state_id=300, feature_key="water_level", feature_value="0"),
+        MachineStateFeature(machine_state_id=300, feature_key="pressure", feature_value="0"),
+    ])
+
+    session.add(MachineState(id=301, machine_id=30, state_type="target", label="Filled"))
+    await session.flush()
+    session.add_all([
+        MachineStateFeature(machine_state_id=301, feature_key="water_level", feature_value="40"),
+        MachineStateFeature(machine_state_id=301, feature_key="pressure", feature_value="0"),
+    ])
+
+    session.add(OpRule(id=300, machine_type_id=30, code="OP_FILL_WATER_PRECOND",
+                       name="Fill Water With Pressure", duration_min=5, is_active=True))
+    session.add(OpRulePrecond(op_rule_id=300, feature_key="pressure", operator="gte", feature_value="2"))
+    session.add(OpRuleEffect(op_rule_id=300, feature_key="water_level",
+                             new_value="", effect_type="increment", delta_value=20))
+    session.add(OpRuleResourceReq(op_rule_id=300, resource_type="TECHNICIAN",
+                                  quantity=1, is_required=True))
+
+    session.add(OpRule(id=301, machine_type_id=30, code="OP_PRESSURIZE",
+                       name="Pressurize", duration_min=3, is_active=True))
+    session.add(OpRuleEffect(op_rule_id=301, feature_key="pressure",
+                             new_value="", effect_type="increment", delta_value=1))
+    session.add(OpRuleResourceReq(op_rule_id=301, resource_type="TECHNICIAN",
+                                  quantity=1, is_required=True))
+
+    await session.commit()
+
+
+async def _seed_numeric_precondition_cycle_data(session):
+    """Seed numeric scenario that creates an implicit goal cycle."""
+    await _seed_numeric_precondition_data(session)
+    session.add(OpRulePrecond(op_rule_id=301, feature_key="water_level", operator="gte", feature_value="20"))
+    await session.commit()
 
 
 class TestRAGConstructionIntegration:
@@ -192,3 +323,114 @@ class TestRAGConstructionIntegration:
         
         assert result.status == "no_solution"
         assert "already at target" in result.error_message.lower()
+
+
+class TestNumericRAGConstructionIntegration:
+    """Integration tests for numeric Phase 1 build_rag integration."""
+
+    async def test_build_rag_generates_repeated_numeric_nodes(self, integration_session):
+        await _seed_numeric_planner_data(integration_session)
+
+        result = await build_rag(200, 201, integration_session)
+
+        assert result.status == "success"
+        assert result.rag is not None
+        assert len(result.rag.nodes) == 4
+        assert [node.op_rule_code for node in result.rag.nodes] == ["OP_FILL_WATER"] * 4
+        assert len({node.op_rule_id for node in result.rag.nodes}) == 1
+
+    async def test_numeric_steps_are_serialized_by_predecessors(self, integration_session):
+        await _seed_numeric_planner_data(integration_session)
+
+        result = await build_rag(200, 201, integration_session)
+
+        assert result.status == "success"
+        assert [node.predecessors for node in result.rag.nodes] == [[], [1], [2], [3]]
+        assert result.rag.edges == [(1, 2), (2, 3), (3, 4)]
+
+    async def test_save_candidate_plan_preserves_duplicate_op_rule_ids(self, integration_session):
+        await _seed_numeric_planner_data(integration_session)
+        solve_request = SolveRequest(
+            machine_id=20,
+            current_state_id=200,
+            target_state_id=201,
+            objective="minimize_makespan",
+            status="running",
+        )
+        integration_session.add(solve_request)
+        await integration_session.commit()
+        await integration_session.refresh(solve_request)
+
+        result = await build_rag(200, 201, integration_session)
+        assert result.status == "success"
+
+        plan_id = await save_candidate_plan(result.rag, solve_request.id, integration_session)
+        await integration_session.flush()
+
+        steps_result = await integration_session.execute(
+            select(CandidatePlanStep)
+            .where(CandidatePlanStep.candidate_plan_id == plan_id)
+            .order_by(CandidatePlanStep.step_order)
+        )
+        steps = list(steps_result.scalars().all())
+
+        assert len(steps) == 4
+        assert [step.step_order for step in steps] == [1, 2, 3, 4]
+        assert len({step.op_rule_id for step in steps}) == 1
+        assert [step.predecessor_ids for step in steps] == [[], [1], [2], [3]]
+
+    async def test_mixed_enum_and_numeric_target_keeps_both_paths(self, integration_session):
+        await _seed_numeric_planner_data(integration_session)
+
+        result = await build_rag(200, 202, integration_session)
+
+        assert result.status == "success"
+        codes = [node.op_rule_code for node in result.rag.nodes]
+
+        assert codes.count("OP_FILL_WATER") == 2
+        assert codes.count("OP_CALIBRATE_NUM") == 1
+
+    async def test_implicit_numeric_precondition_inserts_support_steps(self, integration_session):
+        await _seed_numeric_precondition_data(integration_session)
+
+        result = await build_rag(300, 301, integration_session)
+
+        assert result.status == "success"
+        codes = [node.op_rule_code for node in result.rag.nodes]
+        assert codes.count("OP_PRESSURIZE") == 2
+        assert codes.count("OP_FILL_WATER_PRECOND") == 2
+        fill_nodes = [node for node in result.rag.nodes if node.op_rule_code == "OP_FILL_WATER_PRECOND"]
+        assert fill_nodes[0].predecessors == [2]
+
+    async def test_implicit_numeric_goal_cycle_returns_error(self, integration_session):
+        await _seed_numeric_precondition_cycle_data(integration_session)
+
+        result = await build_rag(300, 301, integration_session)
+
+        assert result.status == "error"
+        assert "cycle" in (result.error_message or "").lower()
+
+    async def test_scheduler_supports_repeated_numeric_steps(self, integration_session):
+        from app.core.scheduler.solver import solve_schedule
+
+        await _seed_numeric_planner_data(integration_session)
+        solve_request = SolveRequest(
+            machine_id=20,
+            current_state_id=200,
+            target_state_id=201,
+            objective="minimize_makespan",
+            status="running",
+        )
+        integration_session.add(solve_request)
+        await integration_session.commit()
+        await integration_session.refresh(solve_request)
+
+        result = await build_rag(200, 201, integration_session)
+        plan_id = await save_candidate_plan(result.rag, solve_request.id, integration_session)
+        await integration_session.flush()
+
+        sched_result = await solve_schedule(plan_id, integration_session)
+
+        assert sched_result.status in ("optimal", "feasible")
+        assert len(sched_result.tasks or []) == 4
+        assert [task.step_order for task in sched_result.tasks] == [1, 2, 3, 4]

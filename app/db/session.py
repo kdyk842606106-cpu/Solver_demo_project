@@ -28,6 +28,7 @@ async_engine = create_async_engine(
     pool_pre_ping=True,
     pool_size=5,
     max_overflow=10,
+    connect_args={"timeout": db_settings.db_connect_timeout},
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -70,6 +71,7 @@ sync_engine = create_engine(
     db_settings.sync_url,
     echo=False,
     pool_pre_ping=True,
+    connect_args={"connect_timeout": db_settings.db_connect_timeout},
 )
 
 SyncSessionLocal = sessionmaker(

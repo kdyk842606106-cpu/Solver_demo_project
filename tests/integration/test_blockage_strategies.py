@@ -14,6 +14,7 @@ from sqlalchemy import select
 from app.core.planner.search import build_rag, save_candidate_plan
 from app.core.scheduler.solver import solve_schedule, save_schedule_result
 from app.core.solver.step_role import compute_step_role_diff
+from app.api.v1.solve import _resolve_blocked_step_for_new_plan
 from app.db.models import (
     OpRule,
     OpRulePrecond,
@@ -148,6 +149,62 @@ async def _seed_repair_strategy_data(session):
         MachineStateFeature(machine_state_id=4, feature_key="blockage_reason",
                             feature_value=""),
     ])
+
+    await session.commit()
+
+
+async def _seed_numeric_blockage_data(session):
+    """Seed numeric repeated-step data for blockage compatibility tests."""
+    from app.db.models import MachineState, StateFeatureDef
+
+    session.add(StateFeatureDef(
+        id=60, machine_type_id=1, feature_key="water_level",
+        feature_name="Water Level", value_type="number"
+    ))
+    session.add(StateFeatureDef(
+        id=61, machine_type_id=1, feature_key="pressure",
+        feature_name="Pressure", value_type="number"
+    ))
+
+    session.add(MachineState(id=60, machine_id=1, state_type="current", label="Numeric Current"))
+    await session.flush()
+    session.add_all([
+        MachineStateFeature(machine_state_id=60, feature_key="water_level", feature_value="0"),
+        MachineStateFeature(machine_state_id=60, feature_key="pressure", feature_value="0"),
+    ])
+
+    session.add(MachineState(id=61, machine_id=1, state_type="target", label="Numeric Target"))
+    await session.flush()
+    session.add_all([
+        MachineStateFeature(machine_state_id=61, feature_key="water_level", feature_value="40"),
+        MachineStateFeature(machine_state_id=61, feature_key="pressure", feature_value="0"),
+    ])
+
+    session.add(OpRule(id=60, machine_type_id=1, code="OP_FILL_WATER_NUM",
+                       name="Fill Water Numeric", duration_min=5, is_active=True))
+    session.add(OpRulePrecond(op_rule_id=60, feature_key="pressure",
+                              operator="gte", feature_value="2"))
+    session.add(OpRuleEffect(op_rule_id=60, feature_key="water_level",
+                             new_value="", effect_type="increment", delta_value=20))
+    session.add(OpRuleResourceReq(op_rule_id=60, resource_type="TECHNICIAN",
+                                  quantity=1, is_required=True))
+
+    session.add(OpRule(id=61, machine_type_id=1, code="OP_PRESSURIZE_NUM",
+                       name="Pressurize Numeric", duration_min=3, is_active=True))
+    session.add(OpRuleEffect(op_rule_id=61, feature_key="pressure",
+                             new_value="", effect_type="increment", delta_value=1))
+    session.add(OpRuleResourceReq(op_rule_id=61, resource_type="TECHNICIAN",
+                                  quantity=1, is_required=True))
+
+    session.add(OpRule(id=62, machine_type_id=1, code="OP_REPAIR_NUMERIC",
+                       name="Numeric Repair", duration_min=12, is_active=True,
+                       is_repair=True))
+    session.add(OpRulePrecond(op_rule_id=62, feature_key="blockage_reason",
+                              operator="eq", feature_value="numeric_fault"))
+    session.add(OpRuleEffect(op_rule_id=62, feature_key="blockage_reason",
+                             new_value="none", effect_type="set"))
+    session.add(OpRuleResourceReq(op_rule_id=62, resource_type="TECHNICIAN",
+                                  quantity=1, is_required=True))
 
     await session.commit()
 
@@ -664,6 +721,150 @@ class TestStepRoleIntegration:
             f"Expected at least one 'pulled_forward' step; roles={roles}, "
             f"parent_starts={parent_start_map}, new_starts={new_start_map}"
         )
+
+
+class TestNumericBlockageCompatibility:
+    """Cross-validation tests for blockage + numeric repeated steps."""
+
+    async def test_strategy_a_can_target_numeric_repeated_step(self, integration_session):
+        await _seed_numeric_blockage_data(integration_session)
+
+        initial_result = await build_rag(60, 61, integration_session)
+        assert initial_result.status == "success", initial_result.error_message
+
+        initial_solve_req = SolveRequest(
+            machine_id=1,
+            current_state_id=60,
+            target_state_id=61,
+            objective="minimize_makespan",
+            status="running",
+        )
+        integration_session.add(initial_solve_req)
+        await integration_session.flush()
+
+        initial_plan_id = await save_candidate_plan(initial_result.rag, initial_solve_req.id, integration_session)
+        initial_steps_result = await integration_session.execute(
+            select(CandidatePlanStep).where(CandidatePlanStep.candidate_plan_id == initial_plan_id)
+        )
+        initial_steps = list(initial_steps_result.scalars().all())
+        initial_sched = await solve_schedule(initial_plan_id, integration_session)
+        assert initial_sched.status in ("optimal", "feasible")
+        await save_schedule_result(initial_sched, initial_solve_req.id, initial_plan_id, integration_session)
+
+        fill_step = next(step for step in initial_steps if step.op_rule_id == 60)
+
+        replan_result = await build_rag(60, 61, integration_session)
+        assert replan_result.status == "success", replan_result.error_message
+
+        replan_req = SolveRequest(
+            machine_id=1,
+            current_state_id=60,
+            target_state_id=61,
+            objective="minimize_makespan",
+            status="running",
+            parent_plan_id=initial_plan_id,
+            blockage_constraints={
+                "strategy": "A",
+                "blocked_step_id": fill_step.id,
+                "strategy_a": {"not_before_offset": 25},
+            },
+        )
+        integration_session.add(replan_req)
+        await integration_session.flush()
+
+        replan_id = await save_candidate_plan(replan_result.rag, replan_req.id, integration_session,
+                                              version=2, parent_plan_id=initial_plan_id,
+                                              replan_reason="blockage_strategy_a")
+
+        blocked_step = await _resolve_blocked_step_for_new_plan(
+            db=integration_session,
+            plan_id=replan_id,
+            blocked_step_id=fill_step.id,
+            blocked_op_rule_id=fill_step.op_rule_id,
+        )
+        assert blocked_step is not None
+        blocked_step.not_before = 25
+        await integration_session.flush()
+
+        sched_result = await solve_schedule(replan_id, integration_session)
+        assert sched_result.status in ("optimal", "feasible"), sched_result.error_message
+
+    async def test_strategy_b_keeps_numeric_repeat_chain_intact(self, integration_session):
+        await _seed_numeric_blockage_data(integration_session)
+
+        result = await build_rag(60, 61, integration_session, include_repair=True,
+                                 current_state_override={"blockage_reason": "numeric_fault"})
+        assert result.status == "success", result.error_message
+
+        codes = [node.op_rule_code for node in result.rag.nodes]
+        assert codes.count("OP_FILL_WATER_NUM") == 2
+        assert "OP_REPAIR_NUMERIC" in codes
+
+    async def test_strategy_ab_numeric_repeated_steps_have_stable_roles(self, integration_session):
+        await _seed_numeric_blockage_data(integration_session)
+
+        parent_result = await build_rag(60, 61, integration_session)
+        assert parent_result.status == "success", parent_result.error_message
+
+        parent_req = SolveRequest(
+            machine_id=1, current_state_id=60, target_state_id=61,
+            objective="minimize_makespan", status="running",
+        )
+        integration_session.add(parent_req)
+        await integration_session.flush()
+
+        parent_plan_id = await save_candidate_plan(parent_result.rag, parent_req.id, integration_session)
+        parent_sched = await solve_schedule(parent_plan_id, integration_session)
+        assert parent_sched.status in ("optimal", "feasible")
+        await save_schedule_result(parent_sched, parent_req.id, parent_plan_id, integration_session)
+
+        child_result = await build_rag(60, 61, integration_session, include_repair=True,
+                                      current_state_override={"blockage_reason": "numeric_fault"})
+        assert child_result.status == "success", child_result.error_message
+
+        child_req = SolveRequest(
+            machine_id=1, current_state_id=60, target_state_id=61,
+            objective="minimize_makespan", status="running",
+            parent_plan_id=parent_plan_id,
+            blockage_constraints={
+                "strategy": "AB",
+                "blocked_step_id": parent_plan_id,
+                "strategy_a": {"not_before_offset": 20},
+                "strategy_b": {"blockage_reason": "numeric_fault"},
+            },
+        )
+        integration_session.add(child_req)
+        await integration_session.flush()
+
+        child_plan_id = await save_candidate_plan(child_result.rag, child_req.id, integration_session,
+                                                  version=2, parent_plan_id=parent_plan_id,
+                                                  replan_reason="blockage_strategy_ab")
+
+        child_steps_result = await integration_session.execute(
+            select(CandidatePlanStep).where(CandidatePlanStep.candidate_plan_id == child_plan_id)
+        )
+        child_steps = list(child_steps_result.scalars().all())
+        assert child_steps
+        blocked_child_step = next((s for s in child_steps if s.op_rule_id == 60), None)
+        assert blocked_child_step is not None
+        blocked_child_step.not_before = 20
+        await integration_session.flush()
+
+        child_sched = await solve_schedule(child_plan_id, integration_session)
+        assert child_sched.status in ("optimal", "feasible"), child_sched.error_message
+        await save_schedule_result(child_sched, child_req.id, child_plan_id, integration_session)
+
+        child_steps_result = await integration_session.execute(
+            select(CandidatePlanStep).where(CandidatePlanStep.candidate_plan_id == child_plan_id)
+        )
+        child_steps = list(child_steps_result.scalars().all())
+        blocked_child_step = next((s for s in child_steps if s.op_rule_id == 60), None)
+        assert blocked_child_step is not None
+        assert blocked_child_step.not_before == 20
+
+        roles = await compute_step_role_diff(child_plan_id, parent_plan_id, integration_session)
+        assert roles
+        assert any(role in {"repair", "delayed", "pulled_forward"} for role in roles.values())
 
     async def test_step_role_normal_for_initial_plan(self, integration_session):
         """Parent None → all steps should be 'normal'."""

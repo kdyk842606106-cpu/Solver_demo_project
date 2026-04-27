@@ -144,6 +144,7 @@ async function submit() {
   }
 
   const blockageConstraints = {
+    blocked_step_id: props.task.step_id ?? null,
     blocked_op_rule_id: props.task.op_rule_id ?? null,
     strategy: form.value.strategy,
     note: form.value.note.trim() || null,

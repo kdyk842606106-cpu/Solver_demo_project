@@ -115,7 +115,7 @@ class IncrementEffect(Effect):
             base = float(current_value) if current_value else 0.0
         except ValueError:
             base = 0.0
-        delta = delta_value if delta_value is not None else 0.0
+        delta = float(delta_value) if delta_value is not None else 0.0
         return _round_to_max_2_decimal(base + delta)
 
 
@@ -135,5 +135,5 @@ class DecrementEffect(Effect):
             base = float(current_value) if current_value else 0.0
         except ValueError:
             base = 0.0
-        delta = delta_value if delta_value is not None else 0.0
+        delta = float(delta_value) if delta_value is not None else 0.0
         return _round_to_max_2_decimal(base - delta)

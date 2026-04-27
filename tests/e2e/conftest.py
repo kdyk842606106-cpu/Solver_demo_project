@@ -264,6 +264,86 @@ async def seed_parallel_states(session: AsyncSession) -> None:
     await session.commit()
 
 
+async def seed_numeric_rules(session: AsyncSession) -> None:
+    """Numeric rules for repeated steps and implicit preconditions."""
+    session.add_all([
+        StateFeatureDef(id=10, machine_type_id=1, feature_key="water_level",
+                        feature_name="Water Level", value_type="number"),
+        StateFeatureDef(id=11, machine_type_id=1, feature_key="pressure",
+                        feature_name="Pressure", value_type="number"),
+    ])
+
+    session.add(OpRule(id=10, machine_type_id=1, code="OP_FILL_WATER",
+                       name="Fill Water", duration_min=5, is_active=True))
+    session.add(OpRulePrecond(op_rule_id=10, feature_key="pressure",
+                              operator="gte", feature_value="2"))
+    session.add(OpRuleEffect(op_rule_id=10, feature_key="water_level",
+                             new_value="1", effect_type="increment", delta_value=20))
+    session.add(OpRuleResourceReq(op_rule_id=10, resource_type="TECHNICIAN",
+                                  quantity=1, is_required=True))
+
+    session.add(OpRule(id=11, machine_type_id=1, code="OP_PRESSURIZE",
+                       name="Pressurize", duration_min=3, is_active=True))
+    session.add(OpRuleEffect(op_rule_id=11, feature_key="pressure",
+                             new_value="1", effect_type="increment", delta_value=1))
+    session.add(OpRuleResourceReq(op_rule_id=11, resource_type="TECHNICIAN",
+                                  quantity=1, is_required=True))
+
+    session.add(OpRule(id=12, machine_type_id=1, code="OP_FILL_EXACT_10",
+                       name="Fill Exact 10", duration_min=2, is_active=True))
+    session.add(OpRuleEffect(op_rule_id=12, feature_key="water_level",
+                             new_value="1", effect_type="increment", delta_value=10))
+    session.add(OpRuleResourceReq(op_rule_id=12, resource_type="TECHNICIAN",
+                                  quantity=1, is_required=True))
+
+    await session.commit()
+
+
+async def seed_numeric_states(session: AsyncSession) -> None:
+    """States for numeric E2E scenarios."""
+    session.add(MachineState(id=10, machine_id=1, state_type="current", label="Numeric Current"))
+    await session.flush()
+    session.add_all([
+        MachineStateFeature(machine_state_id=10, feature_key="temperature_level", feature_value="cold"),
+        MachineStateFeature(machine_state_id=10, feature_key="clean_level", feature_value="dirty"),
+        MachineStateFeature(machine_state_id=10, feature_key="calibration", feature_value="off"),
+        MachineStateFeature(machine_state_id=10, feature_key="water_level", feature_value="0"),
+        MachineStateFeature(machine_state_id=10, feature_key="pressure", feature_value="0"),
+    ])
+
+    session.add(MachineState(id=11, machine_id=1, state_type="target", label="Numeric 40"))
+    await session.flush()
+    session.add_all([
+        MachineStateFeature(machine_state_id=11, feature_key="temperature_level", feature_value="cold"),
+        MachineStateFeature(machine_state_id=11, feature_key="clean_level", feature_value="dirty"),
+        MachineStateFeature(machine_state_id=11, feature_key="calibration", feature_value="off"),
+        MachineStateFeature(machine_state_id=11, feature_key="water_level", feature_value="40"),
+        MachineStateFeature(machine_state_id=11, feature_key="pressure", feature_value="0"),
+    ])
+
+    session.add(MachineState(id=12, machine_id=1, state_type="target", label="Numeric Mixed"))
+    await session.flush()
+    session.add_all([
+        MachineStateFeature(machine_state_id=12, feature_key="temperature_level", feature_value="cold"),
+        MachineStateFeature(machine_state_id=12, feature_key="clean_level", feature_value="dirty"),
+        MachineStateFeature(machine_state_id=12, feature_key="calibration", feature_value="on"),
+        MachineStateFeature(machine_state_id=12, feature_key="water_level", feature_value="40"),
+        MachineStateFeature(machine_state_id=12, feature_key="pressure", feature_value="0"),
+    ])
+
+    session.add(MachineState(id=13, machine_id=1, state_type="target", label="Numeric Unreachable"))
+    await session.flush()
+    session.add_all([
+        MachineStateFeature(machine_state_id=13, feature_key="temperature_level", feature_value="cold"),
+        MachineStateFeature(machine_state_id=13, feature_key="clean_level", feature_value="dirty"),
+        MachineStateFeature(machine_state_id=13, feature_key="calibration", feature_value="off"),
+        MachineStateFeature(machine_state_id=13, feature_key="water_level", feature_value="25"),
+        MachineStateFeature(machine_state_id=13, feature_key="pressure", feature_value="0"),
+    ])
+
+    await session.commit()
+
+
 # ============================================================
 # Composite seed fixtures
 # ============================================================
@@ -283,3 +363,12 @@ async def parallel_scenario(db_session):
     await seed_base_data(db_session)
     await seed_op_rules(db_session)
     await seed_parallel_states(db_session)
+
+
+@pytest_asyncio.fixture
+async def numeric_scenario(db_session):
+    """Seed everything for numeric E2E scenario."""
+    await seed_base_data(db_session)
+    await seed_op_rules(db_session)
+    await seed_numeric_rules(db_session)
+    await seed_numeric_states(db_session)

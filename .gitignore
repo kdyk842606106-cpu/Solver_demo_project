@@ -60,8 +60,13 @@ logs/
 .DS_Store
 Thumbs.db
 
-# Playwright MCP cache
-.playwright-mcp/
 
-# Temp files
-frontend/_tmp_check.js
+# Frontend node_modules (WSL path issue)
+frontend/node_modules/
+node_modules/
+package-lock.json
+package.json
+
+# OpenClaw / MCP files
+.opencode/
+

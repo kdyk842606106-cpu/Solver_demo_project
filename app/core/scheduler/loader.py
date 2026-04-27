@@ -27,6 +27,7 @@ class StepData:
     step_order: int
     op_rule_id: int
     op_rule_code: str
+    op_rule_name: str | None
     duration_min: int
     resource_type: str
     resource_qty: int
@@ -114,6 +115,7 @@ async def load_rag(
             step_order=step.step_order,
             op_rule_id=rule.id,
             op_rule_code=rule.code,
+            op_rule_name=rule.name,
             duration_min=rule.duration_min,
             resource_type=resource_type,
             resource_qty=resource_qty,
