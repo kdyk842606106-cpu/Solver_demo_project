@@ -114,10 +114,10 @@ async def seed_op_rules(session):
                                   quantity=1, is_required=True))
 
 
-async def seed_serial_states(session):
-    """Seed serial scenario states (id=1,2)."""
+async def seed_parallel_scenario(session):
+    """Seed parallel scenario at id=1,2 so auto-select picks these first."""
     session.add(MachineState(id=1, machine_id=1, state_type="current",
-                             label="Cold Standby"))
+                             label="Cold Dirty Standby"))
     await session.flush()
     session.add_all([
         MachineStateFeature(machine_state_id=1, feature_key="temperature_level",
@@ -129,13 +129,13 @@ async def seed_serial_states(session):
     ])
 
     session.add(MachineState(id=2, machine_id=1, state_type="target",
-                             label="Hot Calibrated"))
+                             label="Hot Clean Calibrated"))
     await session.flush()
     session.add_all([
         MachineStateFeature(machine_state_id=2, feature_key="temperature_level",
                             feature_value="hot"),
         MachineStateFeature(machine_state_id=2, feature_key="clean_level",
-                            feature_value="dirty"),
+                            feature_value="clean"),
         MachineStateFeature(machine_state_id=2, feature_key="calibration",
                             feature_value="on"),
     ])
@@ -189,11 +189,10 @@ async def seed_repair_data(session):
     ])
 
 
-async def seed_parallel_scenario(session):
-    """Seed parallel scenario: WARMUP + CLEANING can run in parallel."""
-    # New current state: Cold Dirty Standby
+async def seed_serial_states(session):
+    """Seed serial scenario states at id=5,6."""
     session.add(MachineState(id=5, machine_id=1, state_type="current",
-                             label="Cold Dirty Standby"))
+                             label="Cold Standby"))
     await session.flush()
     session.add_all([
         MachineStateFeature(machine_state_id=5, feature_key="temperature_level",
@@ -204,15 +203,14 @@ async def seed_parallel_scenario(session):
                             feature_value="off"),
     ])
 
-    # New target state: Hot Clean Calibrated
     session.add(MachineState(id=6, machine_id=1, state_type="target",
-                             label="Hot Clean Calibrated"))
+                             label="Hot Calibrated"))
     await session.flush()
     session.add_all([
         MachineStateFeature(machine_state_id=6, feature_key="temperature_level",
                             feature_value="hot"),
         MachineStateFeature(machine_state_id=6, feature_key="clean_level",
-                            feature_value="clean"),
+                            feature_value="dirty"),
         MachineStateFeature(machine_state_id=6, feature_key="calibration",
                             feature_value="on"),
     ])
@@ -228,9 +226,9 @@ async def main():
     async with Session() as session:
         await seed_base_data(session)
         await seed_op_rules(session)
-        await seed_serial_states(session)
-        await seed_repair_data(session)
         await seed_parallel_scenario(session)
+        await seed_repair_data(session)
+        await seed_serial_states(session)
         await session.commit()
 
     print(f"Seeded: {DB_PATH}")
