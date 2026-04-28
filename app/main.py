@@ -23,6 +23,8 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
     print("Starting up...")
+    from app.db.session import patch_sqlite_types
+    patch_sqlite_types()
     yield
     # Shutdown
     print("Shutting down...")

@@ -18,6 +18,42 @@ from sqlalchemy import create_engine
 from app.db.config import db_settings
 
 
+def patch_sqlite_types():
+    """Patch PostgreSQL-specific column types for SQLite compatibility.
+
+    SQLAlchemy's ARRAY and JSONB types don't work with SQLite.
+    This function detects SQLite URLs and patches the column types
+    to JSON (which SQLite supports via TEXT with JSON serialization).
+    """
+    url = str(db_settings.async_url)
+    if 'sqlite' not in url.lower():
+        return
+
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("SQLite detected — patching PostgreSQL-specific column types")
+
+    from sqlalchemy import JSON, Numeric as sa_Numeric
+    from app.db import models
+
+    # Patch ARRAY(Integer) -> JSON
+    models.CandidatePlanStep.__table__.c.predecessor_ids.type = JSON()
+    # Patch JSONB -> JSON
+    models.StateFeatureDef.__table__.c.allowed_values.type = JSON()
+    models.Resource.__table__.c.meta.type = JSON()
+    models.SolveRequest.__table__.c.overrides.type = JSON()
+    models.SolveRequest.__table__.c.objectives.type = JSON()
+    models.SolveRequest.__table__.c.constraints.type = JSON()
+    models.SolveRequest.__table__.c.blockage_constraints.type = JSON()
+    models.ScheduleResult.__table__.c.tasks.type = JSON()
+    models.FeatureDefinition.__table__.c.allowed_values.type = JSON()
+    models.OpRulePrecond.__table__.c.value_list.type = JSON()
+    # Numeric parent_plan_id for SQLite compatibility
+    models.CandidatePlan.__table__.c.parent_plan_id.type = sa_Numeric()
+
+    logger.info("SQLite type patches applied")
+
+
 # ============================================================
 # Async Engine and Session (for FastAPI application)
 # ============================================================
