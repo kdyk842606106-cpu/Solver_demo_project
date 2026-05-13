@@ -24,7 +24,6 @@ from app.db.session import get_db_session
 from app.core.planner.search import build_rag, save_candidate_plan
 from app.core.planner.state import load_state, compute_state_delta
 from app.core.scheduler.solver import (
-    TaskResult,
     solve_schedule,
     save_schedule_result,
 )
@@ -87,41 +86,6 @@ async def _resolve_blocked_step_for_new_plan(
     raise AmbiguousBlockedStepError(
         "AMBIGUOUS_BLOCKED_STEP: repeated task requires blocked_step_id"
     )
-
-
-def _compute_critical_path(tasks: list[TaskResult]) -> list[str]:
-    """Return op_codes on the critical path, in chronological order.
-
-    Algorithm: from tasks that end at makespan, trace backwards through
-    "tight" edges (task.start_min == predecessor.end_min).
-    """
-    if not tasks:
-        return []
-
-    by_order: dict[int, TaskResult] = {t.step_order: t for t in tasks}
-    makespan = max(t.end_min for t in tasks)
-
-    on_path: set[int] = set()
-    stack = [t.step_order for t in tasks if t.end_min == makespan]
-
-    while stack:
-        order = stack.pop()
-        if order in on_path:
-            continue
-        task = by_order.get(order)
-        if task is None:
-            continue
-        on_path.add(order)
-        for pred_order in task.predecessors:
-            pred = by_order.get(pred_order)
-            if pred is not None and pred.end_min == task.start_min:
-                stack.append(pred_order)
-
-    path_tasks = sorted(
-        [by_order[o] for o in on_path],
-        key=lambda t: t.start_min,
-    )
-    return [t.op_rule_code for t in path_tasks]
 
 
 @router.post("/solve")
@@ -355,7 +319,7 @@ async def solve(
             for k, v in sorted(delta.items())
         ]
 
-        critical_path = _compute_critical_path(sched_result.tasks or [])
+        critical_path = sched_result.critical_path or []
 
         tasks_response = []
         for t in sched_result.tasks:

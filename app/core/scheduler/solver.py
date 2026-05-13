@@ -27,6 +27,11 @@ from app.core.scheduler.loader import (
     load_resources,
 )
 from app.core.scheduler.model import ScheduleModel, build_model
+from app.core.scheduler.schedule_graph import (
+    ScheduleGraph,
+    build_schedule_graph,
+    compute_critical_path,
+)
 
 
 # ============================================================
@@ -66,6 +71,8 @@ class ScheduleResultData:
     parallel_groups: Optional[list[list[int]]] = None
     solver_stats: Optional[SolverStats] = None
     error_message: Optional[str] = None
+    schedule_graph: Optional[ScheduleGraph] = None
+    critical_path: Optional[list[str]] = None
 
 
 # ============================================================
@@ -161,6 +168,10 @@ async def solve_schedule(
         # ---- 7. Detect actual parallel groups ----
         parallel_groups = _detect_actual_parallel(tasks)
 
+        # ---- 8. Build schedule graph and compute critical path ----
+        schedule_graph = build_schedule_graph(tasks, rag_data.edges, makespan_val)
+        critical_path = compute_critical_path(schedule_graph)
+
         stats = SolverStats(
             solver_status=status_name,
             wall_time_sec=round(solver.wall_time, 4),
@@ -173,6 +184,8 @@ async def solve_schedule(
             tasks=tasks,
             parallel_groups=parallel_groups,
             solver_stats=stats,
+            schedule_graph=schedule_graph,
+            critical_path=critical_path,
         )
 
     elif status == cp_model.INFEASIBLE:
