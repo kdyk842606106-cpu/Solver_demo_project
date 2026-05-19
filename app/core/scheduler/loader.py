@@ -5,8 +5,8 @@ Loads candidate plan steps from database, reconstructs the RAG
 with operation durations and resource requirements for CP-SAT modeling.
 """
 
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Any, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,8 +29,9 @@ class StepData:
     op_rule_code: str
     op_rule_name: str | None
     duration_min: int
-    resource_type: str
-    resource_qty: int
+    resource_reqs: list[dict[str, Any]] = field(default_factory=list)
+    resource_type: str = "NONE"       # backward compat: primary resource
+    resource_qty: int = 0             # backward compat: primary qty
     not_before: int | None = None
 
 
@@ -102,14 +103,19 @@ async def load_rag(
         if rule is None:
             continue
 
-        # Get primary resource requirement (first required one)
+        # Collect ALL required resource requirements
+        resource_reqs = []
         resource_type = "NONE"
         resource_qty = 0
         for req in rule.resource_reqs:
             if req.is_required:
-                resource_type = req.resource_type
-                resource_qty = req.quantity
-                break
+                resource_reqs.append({
+                    "resource_type": req.resource_type,
+                    "quantity": req.quantity,
+                })
+                if resource_type == "NONE":
+                    resource_type = req.resource_type
+                    resource_qty = req.quantity
 
         steps.append(StepData(
             step_order=step.step_order,
@@ -117,6 +123,7 @@ async def load_rag(
             op_rule_code=rule.code,
             op_rule_name=rule.name,
             duration_min=rule.duration_min,
+            resource_reqs=resource_reqs,
             resource_type=resource_type,
             resource_qty=resource_qty,
             not_before=step.not_before,
