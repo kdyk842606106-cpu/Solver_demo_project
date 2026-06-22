@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>MS010 整机集成 - 活动网络图 + 甘特图</title>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; background: #f5f6fa; }
+        h1 { color: #2c3e50; text-align: center; }
+        h2 { color: #34495e; margin-top: 30px; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        .summary { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
+        .summary-item { text-align: center; }
+        .summary-value { font-size: 24px; font-weight: bold; color: #2c3e50; }
+        .summary-label { font-size: 12px; color: #7f8c8d; margin-top: 5px; }
+        #network { width: 100%; height: 600px; border: 1px solid #ddd; border-radius: 8px; background: white; }
+        .gantt-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow-x: auto; }
+        .gantt-row { display: flex; align-items: center; height: 30px; margin-bottom: 2px; }
+        .gantt-label { width: 280px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; text-align: right; flex-shrink: 0; }
+        .gantt-bar-container { flex: 1; position: relative; height: 24px; background: #ecf0f1; border-radius: 4px; }
+        .gantt-bar { position: absolute; height: 20px; top: 2px; border-radius: 3px; font-size: 9px; color: white; display: flex; align-items: center; padding-left: 5px; overflow: hidden; white-space: nowrap; }
+        .gantt-timeline { display: flex; margin-left: 290px; margin-bottom: 10px; border-bottom: 1px solid #bdc3c7; padding-bottom: 5px; }
+        .timeline-mark { flex: 1; text-align: right; font-size: 10px; color: #7f8c8d; }
+        .legend { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px; }
+        .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+        .legend-color { width: 16px; height: 16px; border-radius: 3px; }
+        .critical { background: #ffeaa7 !important; border: 2px solid #fdcb6e !important; }
+    </style>
+</head>
+<body>
+    <h1>MS010 整机集成装配计划</h1>
+    
+    <div class="summary">
+        <div class="summary-grid">
+            <div class="summary-item">
+                <div class="summary-value">27</div>
+                <div class="summary-label">总活动数</div>
+            </div>
+            <div class="summary-item">
+                <div class="summary-value">480.6h</div>
+                <div class="summary-label">总工期 (Makespan)</div>
+            </div>
+            <div class="summary-item">
+                <div class="summary-value">31</div>
+                <div class="summary-label">并行组数</div>
+            </div>
+            <div class="summary-item">
+                <div class="summary-value">7</div>
+                <div class="summary-label">空间资源</div>
+            </div>
+        </div>
+    </div>
+
+    <h2>1. 活动网络图 (Activity Network)</h2>
+    <div id="network"></div>
+
+    <h2>2. 甘特图 (Gantt Chart)</h2>
+    <div class="gantt-container">
+        <div class="gantt-timeline">
+            <div class="timeline-mark">0h</div><div class="timeline-mark">48h</div><div class="timeline-mark">96h</div><div class="timeline-mark">144h</div><div class="timeline-mark">192h</div><div class="timeline-mark">240h</div><div class="timeline-mark">288h</div><div class="timeline-mark">336h</div><div class="timeline-mark">384h</div><div class="timeline-mark">433h</div><div class="timeline-mark">481h</div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label"> 1. 集成入口条件检查 (450min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 0.0%; width: 1.5606034333275534%; background: #95a5a6;">
+                    MS010-OPS001
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label"> 2. 机台安装前准备 (2430min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 1.5606034333275534%; width: 8.427258539968788%; background: #95a5a6;">
+                    MS010-OPS002
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label"> 3. 主机中部模块安装前准备 (1980min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 9.987861973296342%; width: 6.866655106641234%; background: #e74c3c;">
+                    MS010-OPS003
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label"> 4. 主机中部模块安装 (3360min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 16.854517079937576%; width: 11.652505635512398%; background: #e74c3c;">
+                    MS010-OPS004
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label"> 5. 顶部拖链模块主体安装 (900min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 28.507022715449974%; width: 3.1212068666551067%; background: #f1c40f;">
+                    MS010-OPS005
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label">15. 中框气体分析模块安装 (810min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 28.507022715449974%; width: 2.809086179989596%; background: #2ecc71;">
+                    MS010-OPS015
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label">17. 顶部计量框架安装 (1140min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 28.507022715449974%; width: 3.953528697763135%; background: #3498db;">
+                    MS010-OPS017
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label">16. 机械臂1推入恢复 (180min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 31.31610889543957%; width: 0.6242413733310214%; background: #2ecc71;">
+                    MS010-OPS016
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label"> 8. 光源导轨精调节 (1032min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 31.62822958210508%; width: 3.578983873764522%; background: #f1c40f;">
+                    MS010-OPS008
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label">18. 中框公共线缆布线 (5520min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 32.4605514132131%; width: 19.143402115484655%; background: #2ecc71;">
+                    MS010-OPS018
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label"> 9. 光源连接模块安装与调节 (3120min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 35.2072134558696%; width: 10.820183804404369%; background: #f1c40f;">
+                    MS010-OPS009
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label">12. 动态气体开关安装 (2100min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 46.02739726027397%; width: 7.282816022195249%; background: #f39c12;">
+                    MS010-OPS012
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label"> 6. 供气盒模块安装 (1740min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 51.603953528697765%; width: 6.034333275533206%; background: #2ecc71;">
+                    MS010-OPS006
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label">19. 大气机械臂2安装与调节 (1967min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 51.603953528697765%; width: 6.821571007456216%; background: #1abc9c;">
+                    MS010-OPS019
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label">13. 光学传感器组件安装 (960min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 53.31021328246922%; width: 3.329287324432114%; background: #f39c12;">
+                    MS010-OPS013
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label">14. 热屏蔽板安装 (1380min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 56.639500606901336%; width: 4.785850528871164%; background: #f39c12;">
+                    MS010-OPS014
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label"> 7. 中框真空系统前级管路安装 (420min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 57.638286804230965%; width: 1.4565632044390497%; background: #2ecc71;">
+                    MS010-OPS007
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label">20. 真空机械臂2安装与调节 (3258min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 58.425524536153986%; width: 11.298768857291485%; background: #1abc9c;">
+                    MS010-OPS020
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label">10. 光源主体对准 (2520min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 59.09485000867002%; width: 8.739379226634298%; background: #f1c40f;">
+                    MS010-OPS010
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label">25. 底部运动台安装 (3222min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 61.4253511357725%; width: 11.173920582625282%; background: #f39c12;">
+                    MS010-OPS025
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label">21. 机械支柱安装 (1080min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 69.72429339344546%; width: 3.745448239986128%; background: #2ecc71;">
+                    MS010-OPS021
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label">22. 顶部运动台安装与调节 (720min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 73.4697416334316%; width: 2.4969654933240855%; background: #3498db;">
+                    MS010-OPS022
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label">26. 整机管路安装 (1680min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 73.4697416334316%; width: 5.826252817756199%; background: #2ecc71;">
+                    MS010-OPS026
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label">23. 顶部拖链模块及机械支柱功能调试安装 (1800min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 75.96670712675568%; width: 6.242413733310213%; background: #f1c40f;">
+                    MS010-OPS023
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label">27. 外防护安装 (5760min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 79.2959944511878%; width: 19.975723946592684%; background: #2ecc71;">
+                    MS010-OPS027
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label">11. 光源组件对准 (4680min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 83.76972429339344%; width: 16.23027570660655%; background: #95a5a6;">
+                    MS010-OPS011
+                </div>
+            </div>
+        </div>
+        
+        <div class="gantt-row">
+            <div class="gantt-label">24. 顶部区域真空抽排管路安装 (210min)</div>
+            <div class="gantt-bar-container">
+                <div class="gantt-bar" style="left: 99.27171839778048%; width: 0.7282816022195249%; background: #2ecc71;">
+                    MS010-OPS024
+                </div>
+            </div>
+        </div>
+        
+    </div>
+
+    <div class="legend">
+        <div class="legend-item"><div class="legend-color" style="background: #e74c3c;"></div>主机台右侧维护位 (SPACE_R)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #e67e22;"></div>主机台左侧维护位 (SPACE_L)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #f39c12;"></div>主机台中部-下腔内 (SPACE_DOWN)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #f1c40f;"></div>光源工作位 (SPACE_LIGHT)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #2ecc71;"></div>主机台中部-腔外 (SPACE_OUT)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #1abc9c;"></div>主机台前部 (SPACE_FRONT)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #3498db;"></div>主机台中部-上腔内 (SPACE_UP)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #95a5a6;"></div>无空间约束</div>
+    </div>
+
+    <script>
+        // Network diagram
+        const nodes = new vis.DataSet([{"id": 1, "label": "MS010-OPS001\n\u96c6\u6210\u5165\u53e3\u6761\u4ef6\u68c0\u67e5", "title": "\u96c6\u6210\u5165\u53e3\u6761\u4ef6\u68c0\u67e5\nDuration: 450min\nResource: None", "color": {"background": "#95a5a6", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 2, "label": "MS010-OPS002\n\u673a\u53f0\u5b89\u88c5\u524d\u51c6\u5907", "title": "\u673a\u53f0\u5b89\u88c5\u524d\u51c6\u5907\nDuration: 2430min\nResource: None", "color": {"background": "#95a5a6", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 3, "label": "MS010-OPS003\n\u4e3b\u673a\u4e2d\u90e8\u6a21\u5757\u5b89\u88c5\u524d\u51c6", "title": "\u4e3b\u673a\u4e2d\u90e8\u6a21\u5757\u5b89\u88c5\u524d\u51c6\u5907\nDuration: 1980min\nResource: SPACE_R", "color": {"background": "#e74c3c", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 4, "label": "MS010-OPS004\n\u4e3b\u673a\u4e2d\u90e8\u6a21\u5757\u5b89\u88c5", "title": "\u4e3b\u673a\u4e2d\u90e8\u6a21\u5757\u5b89\u88c5\nDuration: 3360min\nResource: SPACE_R", "color": {"background": "#e74c3c", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 5, "label": "MS010-OPS005\n\u9876\u90e8\u62d6\u94fe\u6a21\u5757\u4e3b\u4f53\u5b89\u88c5", "title": "\u9876\u90e8\u62d6\u94fe\u6a21\u5757\u4e3b\u4f53\u5b89\u88c5\nDuration: 900min\nResource: SPACE_LIGHT", "color": {"background": "#f1c40f", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 15, "label": "MS010-OPS015\n\u4e2d\u6846\u6c14\u4f53\u5206\u6790\u6a21\u5757\u5b89\u88c5", "title": "\u4e2d\u6846\u6c14\u4f53\u5206\u6790\u6a21\u5757\u5b89\u88c5\nDuration: 810min\nResource: SPACE_OUT", "color": {"background": "#2ecc71", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 17, "label": "MS010-OPS017\n\u9876\u90e8\u8ba1\u91cf\u6846\u67b6\u5b89\u88c5", "title": "\u9876\u90e8\u8ba1\u91cf\u6846\u67b6\u5b89\u88c5\nDuration: 1140min\nResource: SPACE_UP", "color": {"background": "#3498db", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 16, "label": "MS010-OPS016\n\u673a\u68b0\u81c21\u63a8\u5165\u6062\u590d", "title": "\u673a\u68b0\u81c21\u63a8\u5165\u6062\u590d\nDuration: 180min\nResource: SPACE_OUT", "color": {"background": "#2ecc71", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 8, "label": "MS010-OPS008\n\u5149\u6e90\u5bfc\u8f68\u7cbe\u8c03\u8282", "title": "\u5149\u6e90\u5bfc\u8f68\u7cbe\u8c03\u8282\nDuration: 1032min\nResource: SPACE_LIGHT", "color": {"background": "#f1c40f", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 18, "label": "MS010-OPS018\n\u4e2d\u6846\u516c\u5171\u7ebf\u7f06\u5e03\u7ebf", "title": "\u4e2d\u6846\u516c\u5171\u7ebf\u7f06\u5e03\u7ebf\nDuration: 5520min\nResource: SPACE_OUT", "color": {"background": "#2ecc71", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 9, "label": "MS010-OPS009\n\u5149\u6e90\u8fde\u63a5\u6a21\u5757\u5b89\u88c5\u4e0e\u8c03", "title": "\u5149\u6e90\u8fde\u63a5\u6a21\u5757\u5b89\u88c5\u4e0e\u8c03\u8282\nDuration: 3120min\nResource: SPACE_LIGHT", "color": {"background": "#f1c40f", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 12, "label": "MS010-OPS012\n\u52a8\u6001\u6c14\u4f53\u5f00\u5173\u5b89\u88c5", "title": "\u52a8\u6001\u6c14\u4f53\u5f00\u5173\u5b89\u88c5\nDuration: 2100min\nResource: SPACE_DOWN", "color": {"background": "#f39c12", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 6, "label": "MS010-OPS006\n\u4f9b\u6c14\u76d2\u6a21\u5757\u5b89\u88c5", "title": "\u4f9b\u6c14\u76d2\u6a21\u5757\u5b89\u88c5\nDuration: 1740min\nResource: SPACE_OUT", "color": {"background": "#2ecc71", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 19, "label": "MS010-OPS019\n\u5927\u6c14\u673a\u68b0\u81c22\u5b89\u88c5\u4e0e\u8c03", "title": "\u5927\u6c14\u673a\u68b0\u81c22\u5b89\u88c5\u4e0e\u8c03\u8282\nDuration: 1967min\nResource: SPACE_FRONT", "color": {"background": "#1abc9c", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 13, "label": "MS010-OPS013\n\u5149\u5b66\u4f20\u611f\u5668\u7ec4\u4ef6\u5b89\u88c5", "title": "\u5149\u5b66\u4f20\u611f\u5668\u7ec4\u4ef6\u5b89\u88c5\nDuration: 960min\nResource: SPACE_DOWN", "color": {"background": "#f39c12", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 14, "label": "MS010-OPS014\n\u70ed\u5c4f\u853d\u677f\u5b89\u88c5", "title": "\u70ed\u5c4f\u853d\u677f\u5b89\u88c5\nDuration: 1380min\nResource: SPACE_DOWN", "color": {"background": "#f39c12", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 7, "label": "MS010-OPS007\n\u4e2d\u6846\u771f\u7a7a\u7cfb\u7edf\u524d\u7ea7\u7ba1\u8def", "title": "\u4e2d\u6846\u771f\u7a7a\u7cfb\u7edf\u524d\u7ea7\u7ba1\u8def\u5b89\u88c5\nDuration: 420min\nResource: SPACE_OUT", "color": {"background": "#2ecc71", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 20, "label": "MS010-OPS020\n\u771f\u7a7a\u673a\u68b0\u81c22\u5b89\u88c5\u4e0e\u8c03", "title": "\u771f\u7a7a\u673a\u68b0\u81c22\u5b89\u88c5\u4e0e\u8c03\u8282\nDuration: 3258min\nResource: SPACE_FRONT", "color": {"background": "#1abc9c", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 10, "label": "MS010-OPS010\n\u5149\u6e90\u4e3b\u4f53\u5bf9\u51c6", "title": "\u5149\u6e90\u4e3b\u4f53\u5bf9\u51c6\nDuration: 2520min\nResource: SPACE_LIGHT", "color": {"background": "#f1c40f", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 25, "label": "MS010-OPS025\n\u5e95\u90e8\u8fd0\u52a8\u53f0\u5b89\u88c5", "title": "\u5e95\u90e8\u8fd0\u52a8\u53f0\u5b89\u88c5\nDuration: 3222min\nResource: SPACE_DOWN", "color": {"background": "#f39c12", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 21, "label": "MS010-OPS021\n\u673a\u68b0\u652f\u67f1\u5b89\u88c5", "title": "\u673a\u68b0\u652f\u67f1\u5b89\u88c5\nDuration: 1080min\nResource: SPACE_OUT", "color": {"background": "#2ecc71", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 22, "label": "MS010-OPS022\n\u9876\u90e8\u8fd0\u52a8\u53f0\u5b89\u88c5\u4e0e\u8c03\u8282", "title": "\u9876\u90e8\u8fd0\u52a8\u53f0\u5b89\u88c5\u4e0e\u8c03\u8282\nDuration: 720min\nResource: SPACE_UP", "color": {"background": "#3498db", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 26, "label": "MS010-OPS026\n\u6574\u673a\u7ba1\u8def\u5b89\u88c5", "title": "\u6574\u673a\u7ba1\u8def\u5b89\u88c5\nDuration: 1680min\nResource: SPACE_OUT", "color": {"background": "#2ecc71", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 23, "label": "MS010-OPS023\n\u9876\u90e8\u62d6\u94fe\u6a21\u5757\u53ca\u673a\u68b0\u652f", "title": "\u9876\u90e8\u62d6\u94fe\u6a21\u5757\u53ca\u673a\u68b0\u652f\u67f1\u529f\u80fd\u8c03\u8bd5\u5b89\u88c5\nDuration: 1800min\nResource: SPACE_LIGHT", "color": {"background": "#f1c40f", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 27, "label": "MS010-OPS027\n\u5916\u9632\u62a4\u5b89\u88c5", "title": "\u5916\u9632\u62a4\u5b89\u88c5\nDuration: 5760min\nResource: SPACE_OUT", "color": {"background": "#2ecc71", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 11, "label": "MS010-OPS011\n\u5149\u6e90\u7ec4\u4ef6\u5bf9\u51c6", "title": "\u5149\u6e90\u7ec4\u4ef6\u5bf9\u51c6\nDuration: 4680min\nResource: None", "color": {"background": "#95a5a6", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}, {"id": 24, "label": "MS010-OPS024\n\u9876\u90e8\u533a\u57df\u771f\u7a7a\u62bd\u6392\u7ba1\u8def", "title": "\u9876\u90e8\u533a\u57df\u771f\u7a7a\u62bd\u6392\u7ba1\u8def\u5b89\u88c5\nDuration: 210min\nResource: SPACE_OUT", "color": {"background": "#2ecc71", "border": "#2c3e50"}, "shape": "box", "font": {"size": 10}}]);
+        const edges = new vis.DataSet([{"from": 1, "to": 2, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 2, "to": 3, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 3, "to": 4, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 4, "to": 5, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 4, "to": 15, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 4, "to": 17, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 15, "to": 16, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 4, "to": 16, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 4, "to": 8, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 5, "to": 8, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 17, "to": 18, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 8, "to": 9, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 9, "to": 12, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 4, "to": 12, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 5, "to": 6, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 18, "to": 19, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 12, "to": 13, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 13, "to": 14, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 6, "to": 7, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 19, "to": 20, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 9, "to": 10, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 7, "to": 10, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 14, "to": 25, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 20, "to": 21, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 21, "to": 22, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 25, "to": 26, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 16, "to": 26, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 22, "to": 23, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 26, "to": 27, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 10, "to": 11, "arrows": "to", "color": {"color": "#7f8c8d"}}, {"from": 23, "to": 24, "arrows": "to", "color": {"color": "#7f8c8d"}}]);
+        
+        const container = document.getElementById('network');
+        const data = { nodes: nodes, edges: edges };
+        const options = {
+            layout: {
+                hierarchical: {
+                    direction: 'LR',
+                    sortMethod: 'directed',
+                    levelSeparation: 150,
+                    nodeSpacing: 100
+                }
+            },
+            physics: {
+                enabled: false
+            },
+            nodes: {
+                borderWidth: 2,
+                shadow: true
+            },
+            edges: {
+                width: 1,
+                smooth: {
+                    type: 'cubicBezier',
+                    forceDirection: 'horizontal'
+                }
+            }
+        };
+        
+        new vis.Network(container, data, options);
+    </script>
+</body>
+</html>

@@ -305,7 +305,7 @@ class TestRAGConstructionIntegration:
         plan = await integration_session.get(CandidatePlan, plan_id)
         assert plan is not None
         assert plan.total_steps == 3
-        assert plan.search_method == "state_inference"
+        assert plan.search_method == "partial_order"
         
         # Verify steps
         steps_result = await integration_session.execute(
@@ -402,13 +402,13 @@ class TestNumericRAGConstructionIntegration:
         fill_nodes = [node for node in result.rag.nodes if node.op_rule_code == "OP_FILL_WATER_PRECOND"]
         assert fill_nodes[0].predecessors == [2]
 
-    async def test_implicit_numeric_goal_cycle_returns_error(self, integration_session):
+    async def test_implicit_numeric_goal_cycle_returns_no_solution(self, integration_session):
         await _seed_numeric_precondition_cycle_data(integration_session)
 
         result = await build_rag(300, 301, integration_session)
 
-        assert result.status == "error"
-        assert "cycle" in (result.error_message or "").lower()
+        assert result.status == "no_solution"
+        assert "provider" in (result.error_message or "").lower()
 
     async def test_scheduler_supports_repeated_numeric_steps(self, integration_session):
         from app.core.scheduler.solver import solve_schedule

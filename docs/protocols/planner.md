@@ -1,24 +1,27 @@
-# Planner 模块协议
+# Planner Module Protocol
 
-路径：`app/core/planner/`
+Path: `app/core/planner/`
 
-Planner 的职责是从当前状态与目标状态的差异出发，自动选择工序，并根据 precondition/effect 链推导依赖关系，最终生成 RAG（Resource-Aware Graph）。
+Planner is responsible for deriving a legal operation DAG from a current
+machine state, a target machine state, and the active operation rule library.
+The current main strategy is an instance-level Partial Order Planner (POP).
 
-## 核心入口
+## Core Entry Points
 
-### `build_rag(current_state_id, target_state_id, session) -> PlanResult`
+### `build_rag(current_state_id, target_state_id, session, current_state_override=None, include_repair=False) -> PlanResult`
 
-返回值结构：
+Returns:
 
 ```python
 PlanResult(
     status="success" | "no_solution" | "error",
     rag=RAG(...) | None,
     error_message=str | None,
+    diagnostics=dict | None,
 )
 ```
 
-其中 `RAG` 结构为：
+`RAG` remains Scheduler-compatible:
 
 ```python
 RAG(
@@ -27,111 +30,140 @@ RAG(
             id=1,
             op_rule_id=3,
             op_rule_code="OP_WARMUP",
-            predecessors=[]
+            predecessors=[],
         )
     ],
-    edges=[(1, 2)]
+    edges=[(1, 2)],
 )
 ```
 
 ### `save_candidate_plan(rag, solve_request_id, session) -> int`
 
-将 RAG 落库到：
+Persists the RAG to:
 
 - `candidate_plan`
 - `candidate_plan_step`
 
-`search_method` 当前固定写入 `state_inference`。
+`candidate_plan.search_method` is now `partial_order`.
 
-## 当前实现算法
+## Main Strategy: Partial Order Planner
 
-### 1. 加载状态
+The planner no longer uses `forward_bfs` as the `build_rag()` main path.
+`bfs.py` is retained as a historical implementation and regression reference.
 
-- 通过 `load_state(...)` 读取 `machine_state_feature`
-- 生成 `dict[str, str]` 形式状态快照
+Current POP flow:
 
-### 2. 计算状态差异
+1. Load `current_state` and `target_state`.
+2. Apply `current_state_override` when Strategy B/AB injects repair state.
+3. Compute target obligations from the current/target state delta.
+4. Load active `OpRule` rows for the machine type.
+5. Create virtual `START` and `FINISH` instances.
+6. Add all target facts as open preconditions of `FINISH`.
+7. Resolve open preconditions by selecting providers:
+   - `START` facts when current state already satisfies the fact;
+   - existing activity instances when their effects can safely support the fact;
+   - new `OpRule` activity instances.
+8. Add causal links and ordering constraints.
+9. Detect and protect causal links from threats.
+10. Convert real activity instances to the existing RAG contract.
+11. Apply transitive reduction before returning edges.
 
-- 通过 `compute_state_delta(current, target)` 得到需要修复的 feature 集合
-- 若当前状态已满足目标状态，则返回：
-  - `status="no_solution"`
-  - `error_message="Already at target state, no operations needed"`
+Planner objective:
 
-### 3. 加载规则
+```text
+minimize selected activity instance count
+tie-break by lower total duration_min
+```
 
-- 根据 `current_state_id` 反查机台，再读取该机型所有 `is_active=True` 的 `OpRule`
-- 规则包含：
-  - `preconditions`
-  - `effects`
-  - `resource_reqs`
+Scheduler still optimizes makespan on the generated DAG.
 
-### 4. 为每个 delta 选择工序
+## POP Internal Structures
 
-- 通过 `find_ops_for_delta(feature_key, target_value, rules)` 找出所有可产生目标 effect 的工序
-- 优先选择“当前状态已满足其 preconditions”的候选
-- 若都不直接满足，则选择耗时最短者
-- 同一工序可同时修复多个 delta，不重复加入
+The following structures are in memory only:
 
-### 5. 递归补齐前置依赖
+- `Fact`
+- `ActivityInstance`
+- `OpenPrecondition`
+- `CausalLink`
+- `OrderingConstraint`
+- `PopPlanResult`
 
-对于已选工序的每个 precondition：
+No database migration is required for the POP replacement.
 
-- 若当前状态已满足，则不建依赖
-- 否则在已选工序中查找 provider
-- 若未找到，则在全量规则中查找能提供该条件的中间工序
-- 找到后加入 RAG，并继续分析其中间工序自己的 preconditions
+## Effect and Precondition Semantics
 
-### 6. 环检测
+- All precondition evaluation still goes through `RuleEvaluator`.
+- All effect application semantics still come from the registered effect system.
+- `set` / `reset` effects can directly provide exact facts.
+- `increment` / `decrement` / `sub` effects can synthesize repeated numeric provider
+  chains, such as `0 -> 20 -> 40`.
+- Existing `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, and `in` preconditions can be
+  represented as open preconditions.
+- `sub` is treated as a `decrement` alias. `reset` is treated as a set-like
+  effect that restores a feature to `new_value`.
+- No database migration is required for `sub` / `reset`; `effect_type` is stored
+  as `String(32)` and the semantics are provided by the registered effect
+  system.
 
-- 使用 DFS 做 cycle detection
-- 若出现环，返回：
-  - `status="error"`
-  - `error_message="Circular dependency detected in RAG"`
+Current repeated-activity capability:
 
-## 与文档契约相关的真实行为
+- Repeated maintenance activities should be driven by downstream preconditions,
+  not by a hardcoded global trigger concept. For example, activities that need a
+  clean environment should declare `cleanliness > threshold`; if prior mechanical
+  effects make that false, Planner should insert a cleaning provider before the
+  affected consumer.
+- This is the same POP obligation shape as repeated power switching: an effect
+  breaks a support fact, and a later consumer requires that fact again.
+- The planner performs state/effect replay plus re-provider closure for unmet
+  preconditions and repairable final goal drift. Final drift applies to numeric
+  and non-numeric facts when a direct provider exists, such as restoring
+  `cleanliness=100` or `power=off` before finish.
+- Re-provider insertion must add only the minimal required ordering edges
+  around the affected feature, such as `latest_writer -> provider -> consumer`.
+  Unrelated branches remain unconstrained so Scheduler can still discover
+  resource-feasible parallel execution.
 
-- 当前实现不是 BFS 状态空间搜索，而是“delta 匹配 + 依赖补齐”
-- 当前实现确实会自动引入中间工序，不要求所有目标工序都能直接执行
-- `max_ops = 50` 是一个硬编码安全上限，用于避免异常规则导致无限扩张
+## Repair / Blockage Semantics
 
-## 关键辅助函数
+- Strategy B / AB still injects `blockage_reason` through
+  `current_state_override`.
+- `include_repair=True` still controls whether repair rules are loaded.
+- RAGBuilder remains generic: it does not know the business concept of
+  blockage. It only sees state features, preconditions, effects, and rules.
 
-| 文件 | 函数 | 作用 |
-|------|------|------|
-| `state.py` | `load_state` | 从数据库加载状态特征 |
-| `state.py` | `compute_state_delta` | 比较当前与目标状态 |
-| `state.py` | `is_goal` | 判断是否已达到目标 |
-| `matcher.py` | `load_rules` | 加载工序规则 |
-| `matcher.py` | `check_preconditions` | 校验某状态是否满足前提 |
-| `matcher.py` | `find_ops_for_delta` | 查找可产生目标 effect 的工序 |
-| `matcher.py` | `find_provider` | 查找满足某 precondition 的提供者工序 |
-| `executor.py` | `effects_satisfy_precondition` | 用于 effect/precondition 匹配辅助判断 |
+## Output Contract
 
-## 输出契约
+Planner to Scheduler still uses `candidate_plan_step`:
 
-Planner 对 Scheduler 的共享数据契约是 `candidate_plan_step`：
+| Field | Meaning |
+|---|---|
+| `step_order` | RAG node id, starting at 1 |
+| `op_rule_id` | Referenced operation rule; duplicates are allowed |
+| `predecessor_ids` | Predecessor `step_order` values |
 
-| 字段 | 说明 |
-|------|------|
-| `step_order` | 当前直接使用 `RAGNode.id`，从 1 开始 |
-| `op_rule_id` | 关联工序规则 |
-| `predecessor_ids` | 本步骤的前驱步骤 `step_order` 列表 |
+Repeated `op_rule_id` values represent separate activity instances and remain
+valid for Scheduler, blockage positioning, and step role diff.
 
-注意：
+## Diagnostics
 
-- 当前 `step_order` 并不是重新拓扑排序后的结果，而是节点创建顺序
-- 只要图无环，Scheduler 仍可根据 `predecessor_ids` 正确建 precedence 约束
+POP diagnostics include:
 
-## 失败语义
+```json
+{
+  "planner_strategy": "partial_order",
+  "planner_objective": "minimize_activity_instances",
+  "planner_tie_break": "total_duration_min",
+  "selected_instance_count": 0,
+  "total_duration_min": 0,
+  "open_precondition_count_peak": 0,
+  "causal_link_count": 0,
+  "ordering_count_before_reduction": 0,
+  "ordering_count_after_reduction": 0,
+  "threats_detected": 0,
+  "threats_resolved": 0,
+  "provider_branches": 0,
+  "provider_rejections": {}
+}
+```
 
-| 场景 | 返回 |
-|------|------|
-| 当前状态已等于目标状态 | `status="no_solution"` |
-| 没有任何规则可产生所需 effect | `status="no_solution"` |
-| 查不到当前/目标状态 | `status="error"` |
-| 找不到机台或规则集为空 | `status="error"` 或 `status="no_solution"`，取决于具体分支 |
-| 依赖图成环 | `status="error"` |
-
-## 并行相关说明
-
-Planner 内部保留了 `find_parallel_groups(rag)` 这样的分析函数，但 API 返回的 `parallel_groups` 并不来自这里。当前对外暴露的并行组以 Scheduler 根据任务时间重叠检测出的结果为准。
+API still maps Planner `no_solution` to `NO_SOLUTION`.

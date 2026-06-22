@@ -22,6 +22,7 @@ from app.db.models import (
     MachineState,
     MachineStateFeature,
     MachineType,
+    MaintenanceIntentTemplate,
     OpRule,
     OpRuleEffect,
     OpRulePrecond,
@@ -36,6 +37,11 @@ SolveRequest.__table__.c.overrides.type = JSON()
 SolveRequest.__table__.c.objectives.type = JSON()
 SolveRequest.__table__.c.constraints.type = JSON()
 SolveRequest.__table__.c.blockage_constraints.type = JSON()
+MaintenanceIntentTemplate.__table__.c.target_state_node_ids.type = JSON()
+MaintenanceIntentTemplate.__table__.c.candidate_activity_scope_ids.type = JSON()
+MaintenanceIntentTemplate.__table__.c.observed_fact_templates.type = JSON()
+MaintenanceIntentTemplate.__table__.c.desired_fact_templates.type = JSON()
+MaintenanceIntentTemplate.__table__.c.metadata_json.type = JSON()
 from app.db.session import get_db_session
 
 
@@ -123,11 +129,11 @@ async def seed_base_data(session: AsyncSession) -> None:
     session.add(Machine(id=1, machine_type_id=1, code="M-001",
                         name="Main CNC Lathe", location="Workshop A"))
     session.add_all([
-        Resource(id=1, code="TECH-01", name="Technician Alice",
+        Resource(id=1, machine_id=1, code="TECH-01", name="Technician Alice",
                  resource_type="TECHNICIAN", capacity=1, is_available=True),
-        Resource(id=2, code="TECH-02", name="Technician Bob",
+        Resource(id=2, machine_id=1, code="TECH-02", name="Technician Bob",
                  resource_type="TECHNICIAN", capacity=1, is_available=True),
-        Resource(id=3, code="CLEAN-01", name="Cleaning Robot",
+        Resource(id=3, machine_id=1, code="CLEAN-01", name="Cleaning Robot",
                  resource_type="CLEANER", capacity=1, is_available=True),
     ])
     await session.commit()

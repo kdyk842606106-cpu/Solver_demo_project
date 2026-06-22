@@ -134,9 +134,9 @@ CROSS JOIN (
 -- 4. Resources
 -- ============================================================
 
-INSERT INTO resource (code, name, resource_type, capacity, is_available, meta) VALUES
-('TECH-NUM-GAP-01', 'Numeric Gapped UI Tech 01', 'NUMERIC_GAPPED_TECHNICIAN', 1, TRUE, NULL),
-('TECH-NUM-GAP-02', 'Numeric Gapped UI Tech 02', 'NUMERIC_GAPPED_TECHNICIAN', 1, TRUE, NULL);
+INSERT INTO resource (machine_id, code, name, resource_type, capacity, is_available, meta) VALUES
+((SELECT id FROM machine WHERE code = 'M-NUM-GAP-001'), 'TECH-NUM-GAP-01', 'Numeric Gapped UI Tech 01', 'NUMERIC_GAPPED_TECHNICIAN', 1, TRUE, NULL),
+((SELECT id FROM machine WHERE code = 'M-NUM-GAP-001'), 'TECH-NUM-GAP-02', 'Numeric Gapped UI Tech 02', 'NUMERIC_GAPPED_TECHNICIAN', 1, TRUE, NULL);
 
 -- ============================================================
 -- 5. Operation rules

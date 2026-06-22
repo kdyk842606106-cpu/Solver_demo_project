@@ -8,15 +8,16 @@ const http = axios.create({
   timeout: 30000,
 })
 
-// Response interceptor: map error_code → Chinese message → ElMessage.error
 http.interceptors.response.use(
   (response) => response.data,
   (error) => {
     const data = error.response?.data
     const errorCode = data?.error_code ?? data?.detail?.error_code
+    const status = error.response?.status
     const message = getErrorMessage(errorCode) ||
       data?.error_message ||
       data?.detail ||
+      (status ? `HTTP ${status}` : '') ||
       error.message ||
       '请求失败'
     ElMessage.error(message)

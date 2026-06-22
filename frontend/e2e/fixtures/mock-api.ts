@@ -60,12 +60,13 @@ export const BASE_SCHEDULE = {
   current_state_id: 1,
   target_state_id: 2,
   total_duration_min: 45,
-  makespan_min: 45,
+  makespan: 45,
   status: 'optimal',
   created_at: new Date().toISOString(),
   tasks: [
     {
       task_id: 1,
+      step_order: 1,
       op_rule_id: 1,
       op_rule_code: 'OP_WARMUP',
       op_rule_name: 'Warm Up Machine',
@@ -74,15 +75,18 @@ export const BASE_SCHEDULE = {
       duration_min: 30,
       assigned_resource_ids: [1],
       assigned_resource_codes: ['TECH-01'],
+      resources: [{ resource_code: 'TECH-01', resource_name: 'Technician Alice' }],
       state_before: { temperature_level: 'cold', clean_level: 'dirty', calibration: 'off' },
       state_after: { temperature_level: 'hot', clean_level: 'dirty', calibration: 'off' },
       predecessor_ids: [],
       is_parallel: false,
       is_blocked: false,
       is_delayed: false,
+      step_role: 'normal',
     },
     {
       task_id: 2,
+      step_order: 2,
       op_rule_id: 3,
       op_rule_code: 'OP_CALIBRATE',
       op_rule_name: 'Calibrate Machine',
@@ -91,40 +95,50 @@ export const BASE_SCHEDULE = {
       duration_min: 15,
       assigned_resource_ids: [1],
       assigned_resource_codes: ['TECH-01'],
+      resources: [{ resource_code: 'TECH-01', resource_name: 'Technician Alice' }],
       state_before: { temperature_level: 'hot', clean_level: 'dirty', calibration: 'off' },
       state_after: { temperature_level: 'hot', clean_level: 'dirty', calibration: 'on' },
       predecessor_ids: [1],
       is_parallel: false,
       is_blocked: false,
       is_delayed: false,
+      step_role: 'normal',
     },
   ],
 }
 
 export const DELAYED_SCHEDULE = {
   ...BASE_SCHEDULE,
+  makespan: 70,
   tasks: [
     {
       ...BASE_SCHEDULE.tasks[0],
+      step_order: 1,
+      step_role: 'delayed',
       start_min: 25,
       end_min: 55,
       is_delayed: true,
       delay_reason: '策略 A：延后执行',
+      resources: [{ resource_code: 'TECH-01', resource_name: 'Technician Alice' }],
     },
     {
       ...BASE_SCHEDULE.tasks[1],
+      step_order: 2,
       start_min: 55,
       end_min: 70,
       predecessor_ids: [1],
+      resources: [{ resource_code: 'TECH-01', resource_name: 'Technician Alice' }],
     },
   ],
 }
 
 export const REPAIR_SCHEDULE = {
   ...BASE_SCHEDULE,
+  makespan: 85,
   tasks: [
     {
       task_id: 1,
+      step_order: 1,
       op_rule_id: 50,
       op_rule_code: 'OP_REPAIR_WORN',
       op_rule_name: 'Repair Worn Parts',
@@ -133,12 +147,15 @@ export const REPAIR_SCHEDULE = {
       duration_min: 40,
       assigned_resource_ids: [1],
       assigned_resource_codes: ['TECH-01'],
+      resources: [{ resource_code: 'TECH-01', resource_name: 'Technician Alice' }],
       predecessor_ids: [],
       is_blocked: false,
       is_delayed: false,
+      step_role: 'repair',
     },
     {
       task_id: 2,
+      step_order: 2,
       op_rule_id: 1,
       op_rule_code: 'OP_WARMUP',
       op_rule_name: 'Warm Up Machine',
@@ -147,12 +164,15 @@ export const REPAIR_SCHEDULE = {
       duration_min: 30,
       assigned_resource_ids: [1],
       assigned_resource_codes: ['TECH-01'],
+      resources: [{ resource_code: 'TECH-01', resource_name: 'Technician Alice' }],
       predecessor_ids: [1],
       is_blocked: false,
       is_delayed: false,
+      step_role: 'normal',
     },
     {
       task_id: 3,
+      step_order: 3,
       op_rule_id: 3,
       op_rule_code: 'OP_CALIBRATE',
       op_rule_name: 'Calibrate Machine',
@@ -161,9 +181,11 @@ export const REPAIR_SCHEDULE = {
       duration_min: 15,
       assigned_resource_ids: [1],
       assigned_resource_codes: ['TECH-01'],
+      resources: [{ resource_code: 'TECH-01', resource_name: 'Technician Alice' }],
       predecessor_ids: [2],
       is_blocked: false,
       is_delayed: false,
+      step_role: 'normal',
     },
   ],
 }
@@ -175,6 +197,14 @@ export function createMockRouteHandler(schedule: typeof BASE_SCHEDULE) {
 
     if (url.endsWith('/health')) {
       await route.fulfill({ status: 200, body: JSON.stringify({ status: 'ok' }) })
+      return
+    }
+
+    // States must be checked BEFORE machines because the endpoint is
+    // /api/v1/machines/:id/states and would otherwise match the machines branch.
+    if (url.includes('/states')) {
+      // Return all mock states (single-machine test fixtures)
+      await route.fulfill({ status: 200, body: JSON.stringify({ states: MOCK_STATES }) })
       return
     }
 
@@ -193,20 +223,66 @@ export function createMockRouteHandler(schedule: typeof BASE_SCHEDULE) {
       return
     }
 
-    if (url.includes('/api/v1/states')) {
-      const machineId = new URL(url).searchParams.get('machine_id')
-      const states = MOCK_STATES.filter(s => s.state_id === Number(machineId))
-      await route.fulfill({ status: 200, body: JSON.stringify(states) })
+    if (url.includes('/features')) {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify([
+          {
+            feature_key: 'blockage_reason',
+            display_name: '阻塞原因',
+            value_type: 'enum',
+            allowed_values: ['mechanical_wear', 'electrical_fault', 'coolant_leak', 'tool_breakage'],
+          },
+        ]),
+      })
       return
     }
 
     if (url.includes('/api/v1/solve') && method === 'POST') {
-      await route.fulfill({ status: 200, body: JSON.stringify(schedule) })
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({
+          status: 'done',
+          schedule: schedule,
+          candidate_plan_id: schedule.schedule_id,
+          state_delta: [],
+          critical_path: [],
+        })
+      })
       return
     }
 
     if (url.includes('/api/v1/solve/') && method === 'PATCH') {
-      await route.fulfill({ status: 200, body: JSON.stringify(schedule) })
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({
+          status: 'done',
+          schedule: schedule,
+          candidate_plan_id: schedule.schedule_id,
+          state_delta: [],
+          critical_path: [],
+        })
+      })
+      return
+    }
+
+    // Plan versions & diff (called by applyResult after solve)
+    if (url.includes('/plans/') && url.includes('/versions')) {
+      const id = url.match(/\/plans\/(\d+)\/versions/)?.[1]
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify([
+          { id: Number(id), version: 1, created_at: new Date().toISOString() },
+        ]),
+      })
+      return
+    }
+
+    if (url.includes('/plans/') && url.includes('/diff/')) {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({ steps: [] }),
+      })
       return
     }
 

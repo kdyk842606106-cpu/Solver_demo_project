@@ -47,7 +47,16 @@ def patch_sqlite_types():
     models.SolveRequest.__table__.c.blockage_constraints.type = JSON()
     models.ScheduleResult.__table__.c.tasks.type = JSON()
     models.FeatureDefinition.__table__.c.allowed_values.type = JSON()
+    models.ActivityNode.__table__.c.metadata_json.type = JSON()
+    models.StateNode.__table__.c.metadata_json.type = JSON()
+    models.ScopeGuard.__table__.c.metadata_json.type = JSON()
+    models.ScopeGuardPrecond.__table__.c.value_list.type = JSON()
     models.OpRulePrecond.__table__.c.value_list.type = JSON()
+    models.MaintenanceIntentTemplate.__table__.c.target_state_node_ids.type = JSON()
+    models.MaintenanceIntentTemplate.__table__.c.candidate_activity_scope_ids.type = JSON()
+    models.MaintenanceIntentTemplate.__table__.c.observed_fact_templates.type = JSON()
+    models.MaintenanceIntentTemplate.__table__.c.desired_fact_templates.type = JSON()
+    models.MaintenanceIntentTemplate.__table__.c.metadata_json.type = JSON()
     # Numeric parent_plan_id for SQLite compatibility
     models.CandidatePlan.__table__.c.parent_plan_id.type = sa_Numeric()
 

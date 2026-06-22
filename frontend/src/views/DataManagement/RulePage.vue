@@ -31,6 +31,20 @@
             </el-col>
           </el-row>
 
+          <el-form-item label="三级活动">
+            <el-tree-select
+              v-model="form.activity_node_id"
+              :data="level3ActivityTreeOptions"
+              :props="treeProps"
+              node-key="id"
+              check-strictly
+              clearable
+              filterable
+              placeholder="可选：绑定到三级活动"
+              style="width:100%"
+            />
+          </el-form-item>
+
           <el-row :gutter="12">
             <el-col :span="8">
               <el-form-item label="活动编码" required>
@@ -118,17 +132,19 @@
                   <el-option value="set" label="set 设置" />
                   <el-option value="increment" label="+ 增加" />
                   <el-option value="decrement" label="- 减少" />
+                  <el-option value="sub" label="sub 减少" />
+                  <el-option value="reset" label="reset 重置" />
                 </el-select>
               </el-col>
               <el-col :span="9">
-                <!-- set: new_value string -->
+                <!-- set/reset: new_value string -->
                 <el-input
-                  v-if="eff.effect_type === 'set'"
+                  v-if="eff.effect_type === 'set' || eff.effect_type === 'reset'"
                   v-model="eff.new_value"
                   size="small"
                   placeholder="执行后值"
                 />
-                <!-- increment/decrement: delta_value number -->
+                <!-- increment/decrement/sub: delta_value number -->
                 <el-input-number
                   v-else
                   v-model="eff.delta_value"
@@ -209,6 +225,11 @@
                 <el-tag v-if="row.is_repair" size="small" type="danger">修复</el-tag>
               </template>
             </el-table-column>
+            <el-table-column label="三级活动" width="120" show-overflow-tooltip>
+              <template #default="{ row }">
+                {{ activityNodeLabel(row.activity_node_id) || '-' }}
+              </template>
+            </el-table-column>
             <el-table-column label="操作" width="120" fixed="right">
               <template #default="{ row }">
                 <el-button size="small" @click="editRule(row)">编辑</el-button>
@@ -223,24 +244,28 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getMachineTypes,
   getFeatureDefs,
+  getActivityNodes,
   getOpRules,
   createOpRule,
   updateOpRule,
   deleteOpRule,
 } from '../../api/masterData'
+import { buildHierarchyTree, treeSelectProps } from '../../utils/hierarchyTree'
 
 const machineTypes = ref([])
 const featureDefs = ref([])
+const activityNodes = ref([])
 const ruleList = ref([])
 const loading = ref(false)
 const saving = ref(false)
 const editId = ref(null)
 const listTypeId = ref(null)
+const treeProps = treeSelectProps
 
 const newPre = () => ({ feature_key: '', operator: 'eq', feature_value: '' })
 const newEff = () => ({ feature_key: '', effect_type: 'set', new_value: '', delta_value: 0 })
@@ -248,6 +273,7 @@ const newReq = () => ({ resource_type: '', quantity: 1, is_required: true })
 
 const form = ref({
   machine_type_id: null,
+  activity_node_id: null,
   code: '',
   name: '',
   duration_min: 30,
@@ -263,15 +289,46 @@ function addEff() { form.value.effects.push(newEff()) }
 function addReq() { form.value.resource_reqs.push(newReq()) }
 
 async function onTypeChange() {
-  featureDefs.value = form.value.machine_type_id
-    ? await getFeatureDefs(form.value.machine_type_id)
-    : []
+  if (!form.value.machine_type_id) {
+    featureDefs.value = []
+    activityNodes.value = []
+    return
+  }
+  try {
+    const [defs, activities] = await Promise.all([
+      getFeatureDefs(form.value.machine_type_id),
+      getActivityNodes(form.value.machine_type_id),
+    ])
+    featureDefs.value = defs
+    activityNodes.value = activities
+  } catch {
+    featureDefs.value = []
+    activityNodes.value = []
+  }
+}
+
+const level3ActivityTreeOptions = computed(() =>
+  buildHierarchyTree(activityNodes.value, { disabled: (node) => node.level !== 3 })
+)
+
+function activityNodeLabel(id) {
+  const node = activityNodes.value.find((item) => item.id === id)
+  return node ? node.code : ''
 }
 
 async function loadRules() {
   if (!listTypeId.value) { ruleList.value = []; return }
   loading.value = true
-  try { ruleList.value = await getOpRules(listTypeId.value) }
+  try {
+    const [rules, activities] = await Promise.all([
+      getOpRules(listTypeId.value),
+      getActivityNodes(listTypeId.value),
+    ])
+    ruleList.value = rules
+    activityNodes.value = activities
+  } catch {
+    ruleList.value = []
+  }
   finally { loading.value = false }
 }
 
@@ -285,8 +342,8 @@ async function save() {
   saving.value = true
   try {
     const effects = validEffects.map((e) => {
-      if (e.effect_type === 'set') {
-        return { feature_key: e.feature_key, effect_type: 'set', new_value: e.new_value || 'none' }
+      if (e.effect_type === 'set' || e.effect_type === 'reset') {
+        return { feature_key: e.feature_key, effect_type: e.effect_type ?? 'set', new_value: e.new_value || 'none' }
       }
       return {
         feature_key: e.feature_key,
@@ -307,6 +364,7 @@ async function save() {
 
     const payload = {
       machine_type_id: form.value.machine_type_id,
+      activity_node_id: form.value.activity_node_id || null,
       code: form.value.code.trim(),
       name: form.value.name.trim(),
       duration_min: form.value.duration_min,
@@ -335,6 +393,7 @@ async function save() {
 function editRule(row) {
   editId.value = row.id
   form.value.machine_type_id = row.machine_type_id
+  form.value.activity_node_id = row.activity_node_id ?? null
   form.value.code = row.code
   form.value.name = row.name
   form.value.duration_min = row.duration_min
@@ -347,7 +406,7 @@ function editRule(row) {
     ? row.effects.map((e) => ({
         feature_key: e.feature_key,
         effect_type: e.effect_type ?? 'set',
-        new_value: e.effect_type === 'set' || !e.effect_type ? (e.new_value ?? '') : '',
+        new_value: e.effect_type === 'set' || e.effect_type === 'reset' || !e.effect_type ? (e.new_value ?? '') : '',
         delta_value: e.delta_value ?? 0,
       }))
     : [newEff()]
@@ -366,6 +425,7 @@ function reset() {
   editId.value = null
   form.value = {
     machine_type_id: form.value.machine_type_id,
+    activity_node_id: null,
     code: '',
     name: '',
     duration_min: 30,
@@ -378,7 +438,11 @@ function reset() {
 }
 
 onMounted(async () => {
-  machineTypes.value = await getMachineTypes()
+  try {
+    machineTypes.value = await getMachineTypes()
+  } catch {
+    machineTypes.value = []
+  }
 })
 </script>
 

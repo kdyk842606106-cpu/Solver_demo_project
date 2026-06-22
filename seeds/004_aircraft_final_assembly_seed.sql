@@ -149,14 +149,14 @@ INSERT INTO machine_state_feature (machine_state_id, feature_key, feature_value)
 -- 4) Resource Definitions
 -- ============================================================
 
-INSERT INTO resource (code, name, resource_type, capacity, is_available, meta) VALUES
-('AF-STR-01', 'Structure Team A', 'STRUCTURE_TEAM', 1, true, '{"skill":"fuselage_wing_install"}'),
-('AF-ENG-01', 'Engine Team A', 'ENGINE_TEAM', 1, true, '{"skill":"engine_mount"}'),
-('AF-AVI-01', 'Avionics Team A', 'AVIONICS_TEAM', 1, true, '{"skill":"avionics_install_program"}'),
-('AF-HYD-01', 'Hydraulic Team A', 'HYDRAULIC_TEAM', 1, true, '{"skill":"hydraulic_landing_gear"}'),
-('AF-QA-01', 'QA Inspector A', 'QA_INSPECTOR', 1, true, '{"skill":"integration_test"}'),
-('AF-RPR-01', 'Repair Team A', 'REPAIR_TEAM', 1, true, '{"skill":"fault_recovery"}')
-ON CONFLICT (code) DO UPDATE SET
+INSERT INTO resource (machine_id, code, name, resource_type, capacity, is_available, meta) VALUES
+((SELECT id FROM machine WHERE code = 'AFA-001'), 'AF-STR-01', 'Structure Team A', 'STRUCTURE_TEAM', 1, true, '{"skill":"fuselage_wing_install"}'),
+((SELECT id FROM machine WHERE code = 'AFA-001'), 'AF-ENG-01', 'Engine Team A', 'ENGINE_TEAM', 1, true, '{"skill":"engine_mount"}'),
+((SELECT id FROM machine WHERE code = 'AFA-001'), 'AF-AVI-01', 'Avionics Team A', 'AVIONICS_TEAM', 1, true, '{"skill":"avionics_install_program"}'),
+((SELECT id FROM machine WHERE code = 'AFA-001'), 'AF-HYD-01', 'Hydraulic Team A', 'HYDRAULIC_TEAM', 1, true, '{"skill":"hydraulic_landing_gear"}'),
+((SELECT id FROM machine WHERE code = 'AFA-001'), 'AF-QA-01', 'QA Inspector A', 'QA_INSPECTOR', 1, true, '{"skill":"integration_test"}'),
+((SELECT id FROM machine WHERE code = 'AFA-001'), 'AF-RPR-01', 'Repair Team A', 'REPAIR_TEAM', 1, true, '{"skill":"fault_recovery"}')
+ON CONFLICT (machine_id, code) DO UPDATE SET
     name = EXCLUDED.name,
     resource_type = EXCLUDED.resource_type,
     capacity = EXCLUDED.capacity,

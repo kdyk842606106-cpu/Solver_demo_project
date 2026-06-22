@@ -60,6 +60,7 @@ async def test_master_data_to_solve_flow(client):
     # 4. Resources
     resources = [
         {
+            "machine_id": machine_id,
             "code": "TECH-01",
             "name": "Tech Alice",
             "resource_type": "TECHNICIAN",
@@ -68,6 +69,7 @@ async def test_master_data_to_solve_flow(client):
             "meta": None,
         },
         {
+            "machine_id": machine_id,
             "code": "TECH-02",
             "name": "Tech Bob",
             "resource_type": "TECHNICIAN",
@@ -76,6 +78,7 @@ async def test_master_data_to_solve_flow(client):
             "meta": None,
         },
         {
+            "machine_id": machine_id,
             "code": "CLEAN-01",
             "name": "Cleaner",
             "resource_type": "CLEANER",
@@ -192,3 +195,59 @@ async def test_master_data_to_solve_flow(client):
     assert solve_data["status"] == "done"
     assert solve_data["schedule"]["makespan"] == 45
     assert len(solve_data["schedule"]["tasks"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_resources_are_scoped_to_machine(client):
+    mt_resp = await client.post("/api/v1/machine-types", json={
+        "code": "RESOURCE_SCOPE",
+        "name": "Resource Scope",
+        "description": None,
+    })
+    assert mt_resp.status_code == 201
+    machine_type_id = mt_resp.json()["id"]
+
+    machine_a = await client.post("/api/v1/machines", json={
+        "machine_type_id": machine_type_id,
+        "code": "RS-A",
+        "name": "Resource Scope A",
+        "location": None,
+    })
+    machine_b = await client.post("/api/v1/machines", json={
+        "machine_type_id": machine_type_id,
+        "code": "RS-B",
+        "name": "Resource Scope B",
+        "location": None,
+    })
+    assert machine_a.status_code == 201
+    assert machine_b.status_code == 201
+    machine_a_id = machine_a.json()["id"]
+    machine_b_id = machine_b.json()["id"]
+
+    payload = {
+        "machine_id": machine_a_id,
+        "code": "TECH-01",
+        "name": "Tech A",
+        "resource_type": "TECHNICIAN",
+        "capacity": 1,
+        "is_available": True,
+        "meta": None,
+    }
+    first = await client.post("/api/v1/resources", json=payload)
+    duplicate_same_machine = await client.post("/api/v1/resources", json=payload)
+    duplicate_other_machine = await client.post(
+        "/api/v1/resources",
+        json={**payload, "machine_id": machine_b_id, "name": "Tech B"},
+    )
+
+    assert first.status_code == 201
+    assert duplicate_same_machine.status_code == 409
+    assert duplicate_other_machine.status_code == 201
+
+    missing_scope = await client.get("/api/v1/resources")
+    machine_a_resources = await client.get(f"/api/v1/resources?machine_id={machine_a_id}")
+    machine_b_resources = await client.get(f"/api/v1/resources?machine_id={machine_b_id}")
+
+    assert missing_scope.status_code == 422
+    assert [item["machine_id"] for item in machine_a_resources.json()] == [machine_a_id]
+    assert [item["machine_id"] for item in machine_b_resources.json()] == [machine_b_id]

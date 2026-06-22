@@ -16,13 +16,15 @@ import datetime
 
 # Resource type → color mapping (same as V5)
 RESOURCE_COLORS = {
-    "SPACE_R": "#e74c3c",
-    "SPACE_LIGHT": "#f1c40f",
-    "SPACE_OUT": "#2ecc71",
-    "SPACE_DOWN": "#f39c12",
-    "SPACE_FRONT": "#1abc9c",
-    "SPACE_UP": "#3498db",
-    "NONE": "#95a5a6",
+    "SPACE_R": "#1565C0",
+    "SPACE_LIGHT": "#00838F",
+    "SPACE_OUT": "#2E7D32",
+    "SPACE_DOWN": "#F57C00",
+    "SPACE_FRONT": "#6A1B9A",
+    "SPACE_UP": "#455A64",
+    "WORKER": "#37474F",
+    "CRANE": "#263238",
+    "NONE": "#78909C",
 }
 
 RESOURCE_LABELS = {
@@ -32,6 +34,8 @@ RESOURCE_LABELS = {
     "SPACE_DOWN": "主机台中部-下腔内",
     "SPACE_FRONT": "主机台前部",
     "SPACE_UP": "主机台中部-上腔内",
+    "WORKER": "工人",
+    "CRANE": "行吊",
     "NONE": "无特定空间",
 }
 
@@ -42,6 +46,8 @@ RESOURCE_TAGS = {
     "SPACE_DOWN": "tag-space_down",
     "SPACE_FRONT": "tag-space_front",
     "SPACE_UP": "tag-space_up",
+    "WORKER": "tag-worker",
+    "CRANE": "tag-crane",
     "NONE": "tag-none",
 }
 
@@ -61,30 +67,19 @@ def generate_report(input_path: str, output_path: str) -> None:
     # Sort by start time
     tasks_sorted = sorted(tasks, key=lambda t: t["start_min"])
 
-    # Resource usage stats (derive from assigned resources)
+    # Resource usage stats (derive from ALL assigned resources)
     resource_stats = {}
     for t in tasks:
-        # Get resource type from assigned resources, fallback to NONE
-        resources = t.get("resources", [])
-        if resources:
-            # Use first resource's code prefix to determine type
-            rcode = resources[0].get("resource_code", "NONE")
-            # Map resource code to resource type
-            if rcode.startswith("SPACE_"):
-                rtype = rcode  # e.g., SPACE_R, SPACE_OUT
-            else:
-                rtype = "NONE"
-        else:
-            rtype = "NONE"
-        
-        if rtype not in resource_stats:
-            resource_stats[rtype] = {"count": 0, "total_min": 0, "tasks": []}
-        resource_stats[rtype]["count"] += 1
-        resource_stats[rtype]["total_min"] += t["duration_min"]
-        resource_stats[rtype]["tasks"].append(t)
+        rtypes = _get_all_resource_types(t)
+        for rtype in rtypes:
+            if rtype not in resource_stats:
+                resource_stats[rtype] = {"count": 0, "total_min": 0, "tasks": []}
+            resource_stats[rtype]["count"] += 1
+            resource_stats[rtype]["total_min"] += t["duration_min"]
+            resource_stats[rtype]["tasks"].append(t)
 
     # Determine utilization level
-    max_resource_time = max(s["total_min"] for s in resource_stats.values())
+    max_resource_time = max(s["total_min"] for s in resource_stats.values()) if resource_stats else 1
     for rtype, stat in resource_stats.items():
         ratio = stat["total_min"] / max_resource_time if max_resource_time > 0 else 0
         if ratio >= 0.7:
@@ -182,7 +177,16 @@ def generate_report(input_path: str, output_path: str) -> None:
   .cp-arrow {{ color: #ccc; font-size: 18px; font-weight: 300; }}
 
   /* CP text marking in task labels */
-  .cp-text {{ color: #e74c3c; font-weight: 600; }}
+  .res-badge {{ display: inline-block; padding: 1px 5px; border-radius: 8px; font-size: 9px; margin-right: 2px; font-weight: 500; }}
+  .res-badge.tag-space_r {{ background: #bbdefb; color: #1565c0; }}
+  .res-badge.tag-space_light {{ background: #b2dfdb; color: #00838f; }}
+  .res-badge.tag-space_out {{ background: #c8e6c9; color: #2e7d32; }}
+  .res-badge.tag-space_down {{ background: #ffe0b2; color: #f57c00; }}
+  .res-badge.tag-space_front {{ background: #e1bee7; color: #6a1b9a; }}
+  .res-badge.tag-space_up {{ background: #cfd8dc; color: #455a64; }}
+  .res-badge.tag-worker {{ background: #eceff1; color: #37474f; }}
+  .res-badge.tag-crane {{ background: #eceff1; color: #263238; }}
+  .res-badge.tag-none {{ background: #f5f5f5; color: #757575; }}
 </style>
 </head>
 <body>
@@ -242,14 +246,17 @@ def generate_report(input_path: str, output_path: str) -> None:
     for t in tasks_sorted:
         left = t["start_min"] * scale
         width = max(t["duration_min"] * scale, 0.5)
-        rtype = t.get("resource_type", "NONE")
+        rtype = _get_primary_resource_type(t)
         color = RESOURCE_COLORS.get(rtype, "#95a5a6")
         is_cp = t["op_rule_code"] in cp
         row_class = "cp" if is_cp else ""
         cp_marker = " 🔴CP" if is_cp else ""
+        # Multi-resource badges
+        all_types = _get_all_resource_types(t)
+        badges = ' '.join(f'<span class="res-badge {RESOURCE_TAGS.get(rt, "tag-none")}">{rt}</span>' for rt in all_types[:4])
         
         html_parts.append(f"""<div class="gantt-row {row_class}">
-  <div class="gantt-label">{t["step_order"]}. {t["op_rule_name"]} ({t["duration_min"]}min){cp_marker}</div>
+  <div class="gantt-label">{t["step_order"]}. {t["op_rule_name"]} ({t["duration_min"]}min){cp_marker}<br>{badges}</div>
   <div class="gantt-bar-container">
     <div class="gantt-bar" style="left: {left:.2f}%; width: {width:.2f}%; background: {color};">{t["op_rule_code"]}</div>
   </div>
@@ -261,7 +268,10 @@ def generate_report(input_path: str, output_path: str) -> None:
     # Resource Gantt
     html_parts.append('<h2>🏭 Resource Gantt Chart</h2>\n<div class="resource-gantt-container">\n')
     
-    for rtype in sorted(resource_stats.keys(), key=lambda x: -resource_stats[x]["total_min"]):
+    # Sort resource types by total_min descending, but put space types first
+    sorted_rtypes = sorted(resource_stats.keys(), key=lambda x: (-resource_stats[x]["total_min"]))
+    
+    for rtype in sorted_rtypes:
         stat = resource_stats[rtype]
         color = RESOURCE_COLORS.get(rtype, "#95a5a6")
         tag_class = RESOURCE_TAGS.get(rtype, "tag-none")
@@ -380,7 +390,7 @@ def generate_report(input_path: str, output_path: str) -> None:
     # Build vis-network data
     nodes_js = []
     for t in tasks:
-        rtype = t.get("resource_type", "NONE")
+        rtype = get_resource_type(t)
         color = RESOURCE_COLORS.get(rtype, "#95a5a6")
         is_cp = t["op_rule_code"] in cp
         

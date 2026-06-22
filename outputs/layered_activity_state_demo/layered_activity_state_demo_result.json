@@ -1,0 +1,491 @@
+{
+  "status": "ok",
+  "xlsx_path": "E:\\Solver_demo_project\\outputs\\layered_activity_state_demo\\layered_activity_state_demo.xlsx",
+  "summary_path": "E:\\Solver_demo_project\\outputs\\layered_activity_state_demo\\layered_activity_state_demo_result.json",
+  "validation": {
+    "summary": {
+      "scenario_code": "LAYERED_ACTIVITY_STATE_DEMO",
+      "scenario_name": "Layered Activity State Maintenance Demo",
+      "feature_catalog_total": 6,
+      "machine_types_total": 1,
+      "machines_total": 1,
+      "state_feature_defs_total": 6,
+      "resources_total": 1,
+      "activity_nodes_total": 11,
+      "state_nodes_total": 10,
+      "scope_guards_total": 3,
+      "maintenance_intents_total": 2,
+      "layered_health_checks_total": 1,
+      "rules_total": 6,
+      "states_total": 2,
+      "solve_cases_total": 1,
+      "error_count": 0
+    },
+    "preview": {
+      "feature_catalog": {
+        "create": 0,
+        "update": 6
+      },
+      "machine_types": {
+        "create": 0,
+        "update": 1
+      },
+      "machines": {
+        "create": 0,
+        "update": 1
+      },
+      "resources": {
+        "create": 0,
+        "update": 1
+      },
+      "activity_nodes": {
+        "create": 0,
+        "update": 11
+      },
+      "state_nodes": {
+        "create": 0,
+        "update": 10
+      },
+      "scope_guards": {
+        "create": 0,
+        "update": 3
+      },
+      "maintenance_intents": {
+        "create": 0,
+        "update": 2
+      },
+      "layered_health_checks": {
+        "create": 1,
+        "update": 0
+      },
+      "rules": {
+        "create": 0,
+        "update": 6
+      },
+      "state_feature_defs": {
+        "create": 0,
+        "update": 6
+      },
+      "states": {
+        "create": 2,
+        "update": 0
+      }
+    },
+    "solve_cases": [
+      {
+        "case_code": "LMD_FULL_LAYERED_FLOW",
+        "machine_code": "LAYERED-MAINT-001",
+        "current_state_code": "LMD_START",
+        "target_state_code": "LMD_TARGET",
+        "objective": "minimize_makespan"
+      }
+    ],
+    "errors": []
+  },
+  "import_result": {
+    "solve_cases": [
+      {
+        "case_code": "LMD_FULL_LAYERED_FLOW",
+        "machine_code": "LAYERED-MAINT-001",
+        "machine_id": 10001,
+        "current_state_code": "LMD_START",
+        "current_state_id": 10006,
+        "target_state_code": "LMD_TARGET",
+        "target_state_id": 10007,
+        "objective": "minimize_makespan"
+      }
+    ],
+    "maintenance_intent_templates": [
+      {
+        "issue_type": "pump_fault",
+        "name": "泵维修维护",
+        "id": 1,
+        "machine_type_code": "LAYERED_MAINT_DEMO",
+        "scope_activity_node_code": "LMD_PUMP_MAINT"
+      },
+      {
+        "issue_type": "valve_fault",
+        "name": "阀维修维护",
+        "id": 2,
+        "machine_type_code": "LAYERED_MAINT_DEMO",
+        "scope_activity_node_code": "LMD_VALVE_MAINT"
+      }
+    ],
+    "post_import_health_checks": [
+      {
+        "check_code": "LMD_FULL_HEALTH",
+        "name": "Full layered Provider/Consumer health",
+        "description": "Validate root state aggregation, scope guards, and all providers.",
+        "machine_type_code": "LAYERED_MAINT_DEMO",
+        "machine_type_id": 10001,
+        "target_state_node_ids": [
+          1
+        ],
+        "activity_scope_node_ids": [
+          1
+        ],
+        "include_inactive": false,
+        "status": "ok",
+        "summary": {
+          "goal_fact_count": 6,
+          "candidate_activity_count": 6,
+          "effective_rule_count": 6,
+          "provider_fact_count": 6,
+          "consumer_fact_count": 5,
+          "diagnostic_count": 0,
+          "blocking_count": 0
+        },
+        "blocking_count": 0,
+        "warning_count": 0,
+        "diagnostics": []
+      }
+    ]
+  },
+  "ids": {
+    "machine_id": 10001,
+    "machine_type_id": 10001,
+    "current_state_id": 10006,
+    "maintenance_templates": {
+      "pump_fault": 1,
+      "valve_fault": 2
+    }
+  },
+  "assertions": {
+    "layered_solve_done": true,
+    "layered_root_expands_to_6_goal_facts": true,
+    "layered_runs_full_sequence_once": true,
+    "layered_final_state_complete": true,
+    "maintenance_solve_done": true,
+    "maintenance_merges_two_intents": true,
+    "maintenance_shared_safety_once": true,
+    "maintenance_shared_provider_explained": true,
+    "maintenance_continuity_diagnostics_present": true,
+    "already_safe_solve_done": true,
+    "already_safe_skips_safety_step": true
+  },
+  "layered": {
+    "status": "done",
+    "solve_request_id": 378,
+    "makespan": 21,
+    "task_codes": [
+      "OP_LMD_MAKE_SAFE",
+      "OP_LMD_DIAGNOSE_PUMP",
+      "OP_LMD_DIAGNOSE_VALVE",
+      "OP_LMD_FIX_PUMP",
+      "OP_LMD_FIX_VALVE",
+      "OP_LMD_FINAL_TEST"
+    ],
+    "goal_fact_count": 6,
+    "final_state": {
+      "safe": "yes",
+      "pump_diagnosed": "yes",
+      "pump_fixed": "yes",
+      "valve_diagnosed": "yes",
+      "valve_fixed": "yes",
+      "final_test": "passed"
+    },
+    "state_tree": [
+      {
+        "state_node_id": 1,
+        "state_node_code": "LMD_OPERATION_READY",
+        "state_node_name": "设备恢复可运行",
+        "level": 1,
+        "goal_leaf_count": 6,
+        "satisfied_leaf_count": 6,
+        "status": "complete",
+        "source_step_orders": [],
+        "source_op_rule_codes": [],
+        "source_activity_node_codes": [],
+        "children": [
+          {
+            "state_node_id": 4,
+            "state_node_code": "LMD_ACCEPT_DONE",
+            "state_node_name": "验收完成",
+            "level": 2,
+            "goal_leaf_count": 1,
+            "satisfied_leaf_count": 1,
+            "status": "complete",
+            "source_step_orders": [],
+            "source_op_rule_codes": [],
+            "source_activity_node_codes": [],
+            "children": [
+              {
+                "state_node_id": 10,
+                "state_node_code": "LMD_FINAL_TEST_PASSED",
+                "state_node_name": "联合测试通过",
+                "level": 3,
+                "goal_leaf_count": 1,
+                "satisfied_leaf_count": 1,
+                "status": "complete",
+                "source_step_orders": [
+                  6
+                ],
+                "source_op_rule_codes": [
+                  "OP_LMD_FINAL_TEST"
+                ],
+                "source_activity_node_codes": [
+                  "LMD_FINAL_TEST"
+                ],
+                "children": []
+              }
+            ]
+          },
+          {
+            "state_node_id": 3,
+            "state_node_code": "LMD_REPAIR_DONE",
+            "state_node_name": "维修完成",
+            "level": 2,
+            "goal_leaf_count": 4,
+            "satisfied_leaf_count": 4,
+            "status": "complete",
+            "source_step_orders": [],
+            "source_op_rule_codes": [],
+            "source_activity_node_codes": [],
+            "children": [
+              {
+                "state_node_id": 6,
+                "state_node_code": "LMD_PUMP_DIAG_YES",
+                "state_node_name": "泵已诊断",
+                "level": 3,
+                "goal_leaf_count": 1,
+                "satisfied_leaf_count": 1,
+                "status": "complete",
+                "source_step_orders": [
+                  3
+                ],
+                "source_op_rule_codes": [
+                  "OP_LMD_DIAGNOSE_PUMP"
+                ],
+                "source_activity_node_codes": [
+                  "LMD_PUMP_DIAGNOSE"
+                ],
+                "children": []
+              },
+              {
+                "state_node_id": 7,
+                "state_node_code": "LMD_PUMP_FIXED_YES",
+                "state_node_name": "泵已修复",
+                "level": 3,
+                "goal_leaf_count": 1,
+                "satisfied_leaf_count": 1,
+                "status": "complete",
+                "source_step_orders": [
+                  4
+                ],
+                "source_op_rule_codes": [
+                  "OP_LMD_FIX_PUMP"
+                ],
+                "source_activity_node_codes": [
+                  "LMD_PUMP_REPAIR"
+                ],
+                "children": []
+              },
+              {
+                "state_node_id": 8,
+                "state_node_code": "LMD_VALVE_DIAG_YES",
+                "state_node_name": "阀已诊断",
+                "level": 3,
+                "goal_leaf_count": 1,
+                "satisfied_leaf_count": 1,
+                "status": "complete",
+                "source_step_orders": [
+                  2
+                ],
+                "source_op_rule_codes": [
+                  "OP_LMD_DIAGNOSE_VALVE"
+                ],
+                "source_activity_node_codes": [
+                  "LMD_VALVE_DIAGNOSE"
+                ],
+                "children": []
+              },
+              {
+                "state_node_id": 9,
+                "state_node_code": "LMD_VALVE_FIXED_YES",
+                "state_node_name": "阀已修复",
+                "level": 3,
+                "goal_leaf_count": 1,
+                "satisfied_leaf_count": 1,
+                "status": "complete",
+                "source_step_orders": [
+                  5
+                ],
+                "source_op_rule_codes": [
+                  "OP_LMD_FIX_VALVE"
+                ],
+                "source_activity_node_codes": [
+                  "LMD_VALVE_REPAIR"
+                ],
+                "children": []
+              }
+            ]
+          },
+          {
+            "state_node_id": 2,
+            "state_node_code": "LMD_SAFETY_READY",
+            "state_node_name": "安全准备完成",
+            "level": 2,
+            "goal_leaf_count": 1,
+            "satisfied_leaf_count": 1,
+            "status": "complete",
+            "source_step_orders": [],
+            "source_op_rule_codes": [],
+            "source_activity_node_codes": [],
+            "children": [
+              {
+                "state_node_id": 5,
+                "state_node_code": "LMD_SAFE_YES",
+                "state_node_name": "已安全隔离",
+                "level": 3,
+                "goal_leaf_count": 1,
+                "satisfied_leaf_count": 1,
+                "status": "complete",
+                "source_step_orders": [
+                  1
+                ],
+                "source_op_rule_codes": [
+                  "OP_LMD_MAKE_SAFE"
+                ],
+                "source_activity_node_codes": [
+                  "LMD_ISOLATE"
+                ],
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "maintenance": {
+    "status": "done",
+    "solve_request_id": 379,
+    "makespan": 17,
+    "task_codes": [
+      "OP_LMD_MAKE_SAFE",
+      "OP_LMD_DIAGNOSE_VALVE",
+      "OP_LMD_DIAGNOSE_PUMP",
+      "OP_LMD_FIX_VALVE",
+      "OP_LMD_FIX_PUMP"
+    ],
+    "merged_intent_count": 2,
+    "shared_safety_selection": {
+      "op_rule_id": 10013,
+      "op_rule_code": "OP_LMD_MAKE_SAFE",
+      "op_rule_name": "执行安全隔离",
+      "activity_node_id": 6,
+      "activity_node_code": "LMD_ISOLATE",
+      "activity_node_name": "安全隔离",
+      "status": "selected",
+      "reason": "selected_by_planner",
+      "selected_step_order": 1,
+      "effect_facts": [
+        {
+          "feature_key": "safe",
+          "value": "yes"
+        }
+      ],
+      "consumers": [
+        {
+          "type": "scheduled_precondition",
+          "op_rule_id": 10016,
+          "op_rule_code": "OP_LMD_DIAGNOSE_VALVE",
+          "feature_key": "safe",
+          "feature_value": "yes"
+        },
+        {
+          "type": "scheduled_precondition",
+          "op_rule_id": 10014,
+          "op_rule_code": "OP_LMD_DIAGNOSE_PUMP",
+          "feature_key": "safe",
+          "feature_value": "yes"
+        },
+        {
+          "type": "scheduled_precondition",
+          "op_rule_id": 10017,
+          "op_rule_code": "OP_LMD_FIX_VALVE",
+          "feature_key": "safe",
+          "feature_value": "yes"
+        },
+        {
+          "type": "scheduled_precondition",
+          "op_rule_id": 10015,
+          "op_rule_code": "OP_LMD_FIX_PUMP",
+          "feature_key": "safe",
+          "feature_value": "yes"
+        }
+      ],
+      "consumer_count": 4,
+      "is_shared_provider": true
+    },
+    "continuity": {
+      "objective_weights": {
+        "minimize_makespan": 1.0,
+        "minimize_activity_group_span": 1.0,
+        "minimize_activity_group_gaps": 1.0,
+        "minimize_activity_group_interruptions": 1.0
+      },
+      "group_count": 2,
+      "groups": [
+        {
+          "activity_group_id": 3,
+          "activity_group_code": "LMD_PUMP_MAINT",
+          "activity_group_name": "泵维修维护",
+          "task_count": 2,
+          "task_step_orders": [
+            3,
+            4
+          ],
+          "window_start_min": 6,
+          "window_end_min": 17,
+          "span_min": 11,
+          "duration_sum_min": 11,
+          "internal_gap_min": 0,
+          "interruption_count": 1,
+          "interruption_step_orders": [
+            5
+          ],
+          "is_compact": false
+        },
+        {
+          "activity_group_id": 4,
+          "activity_group_code": "LMD_VALVE_MAINT",
+          "activity_group_name": "阀维修维护",
+          "task_count": 2,
+          "task_step_orders": [
+            2,
+            5
+          ],
+          "window_start_min": 5,
+          "window_end_min": 16,
+          "span_min": 11,
+          "duration_sum_min": 11,
+          "internal_gap_min": 0,
+          "interruption_count": 1,
+          "interruption_step_orders": [
+            3
+          ],
+          "is_compact": false
+        }
+      ]
+    }
+  },
+  "maintenance_already_safe": {
+    "status": "done",
+    "solve_request_id": 380,
+    "makespan": 11,
+    "task_codes": [
+      "OP_LMD_DIAGNOSE_VALVE",
+      "OP_LMD_DIAGNOSE_PUMP",
+      "OP_LMD_FIX_VALVE",
+      "OP_LMD_FIX_PUMP"
+    ],
+    "current_state_overrides": {
+      "pump_diagnosed": "no",
+      "pump_fixed": "no",
+      "valve_diagnosed": "no",
+      "valve_fixed": "no",
+      "safe": "yes"
+    }
+  }
+}

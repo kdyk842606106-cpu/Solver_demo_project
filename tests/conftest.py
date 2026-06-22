@@ -15,6 +15,9 @@ from sqlalchemy.pool import StaticPool
 from sqlalchemy import Numeric
 
 from app.db.models import (
+    ActivityPackageAtomicRef,
+    ActivityNode,
+    AtomicActivity,
     Base,
     CandidatePlan,
     CandidatePlanStep,
@@ -23,14 +26,18 @@ from app.db.models import (
     MachineState,
     MachineStateFeature,
     MachineType,
+    MaintenanceIntentTemplate,
     OpRule,
     OpRuleEffect,
     OpRulePrecond,
     OpRuleResourceReq,
     Resource,
+    ScopeGuard,
+    ScopeGuardPrecond,
     ScheduleResult,
     SolveRequest,
     StateFeatureDef,
+    StateNode,
 )
 from app.db.session import Base as SessionBase, get_db_session
 
@@ -48,7 +55,18 @@ SolveRequest.__table__.c.constraints.type = JSON()
 SolveRequest.__table__.c.blockage_constraints.type = JSON()
 ScheduleResult.__table__.c.tasks.type = JSON()
 FeatureDefinition.__table__.c.allowed_values.type = JSON()
+ActivityNode.__table__.c.metadata_json.type = JSON()
+AtomicActivity.__table__.c.metadata_json.type = JSON()
+ActivityPackageAtomicRef.__table__.c.metadata_json.type = JSON()
+StateNode.__table__.c.metadata_json.type = JSON()
+ScopeGuard.__table__.c.metadata_json.type = JSON()
+ScopeGuardPrecond.__table__.c.value_list.type = JSON()
 OpRulePrecond.__table__.c.value_list.type = JSON()
+MaintenanceIntentTemplate.__table__.c.target_state_node_ids.type = JSON()
+MaintenanceIntentTemplate.__table__.c.candidate_activity_scope_ids.type = JSON()
+MaintenanceIntentTemplate.__table__.c.observed_fact_templates.type = JSON()
+MaintenanceIntentTemplate.__table__.c.desired_fact_templates.type = JSON()
+MaintenanceIntentTemplate.__table__.c.metadata_json.type = JSON()
 OpRuleEffect.__table__.c.delta_value.type = Numeric(10, 2)
 CandidatePlan.__table__.c.parent_plan_id.type = Numeric()
 
@@ -149,11 +167,11 @@ async def _seed_integration_data(session: AsyncSession) -> None:
     session.add(Machine(id=1, machine_type_id=1, code="M-001",
                         name="Main CNC Lathe", location="Workshop A"))
     session.add_all([
-        Resource(id=1, code="TECH-01", name="Technician Alice",
+        Resource(id=1, machine_id=1, code="TECH-01", name="Technician Alice",
                  resource_type="TECHNICIAN", capacity=1, is_available=True),
-        Resource(id=2, code="TECH-02", name="Technician Bob",
+        Resource(id=2, machine_id=1, code="TECH-02", name="Technician Bob",
                  resource_type="TECHNICIAN", capacity=1, is_available=True),
-        Resource(id=3, code="CLEAN-01", name="Cleaning Robot",
+        Resource(id=3, machine_id=1, code="CLEAN-01", name="Cleaning Robot",
                  resource_type="CLEANER", capacity=1, is_available=True),
     ])
 

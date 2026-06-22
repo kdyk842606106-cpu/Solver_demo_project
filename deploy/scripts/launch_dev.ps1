@@ -1,7 +1,7 @@
 param(
     [ValidateSet('docker', 'local', 'intranet')]
     [string]$Mode = 'local',
-    [string]$ProjectRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+    [string]$ProjectRoot
 )
 
 $ErrorActionPreference = 'Stop'
@@ -13,42 +13,129 @@ function Write-Section([string]$Title) {
 }
 
 function Assert-Path([string]$Path, [string]$Message) {
-    if (-not (Test-Path $Path)) {
+    if (-not (Test-Path -LiteralPath $Path)) {
         throw $Message
     }
 }
 
-Set-Location $ProjectRoot
+function Find-ProjectRoot {
+    $dir = (Resolve-Path -LiteralPath $PSScriptRoot).ProviderPath
+    while (-not [string]::IsNullOrWhiteSpace($dir)) {
+        $hasBackend = Test-Path -LiteralPath (Join-Path -Path $dir -ChildPath 'requirements.txt')
+        $hasFrontend = Test-Path -LiteralPath (Join-Path -Path $dir -ChildPath 'frontend')
+        $hasApp = Test-Path -LiteralPath (Join-Path -Path $dir -ChildPath 'app')
+        if ($hasBackend -and $hasFrontend -and $hasApp) {
+            return $dir.TrimEnd('\')
+        }
+
+        $parent = Split-Path -Parent $dir
+        if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $dir) {
+            break
+        }
+        $dir = $parent
+    }
+
+    throw "Unable to locate project root from script path: $PSScriptRoot"
+}
+
+function Invoke-Native([string]$FilePath, [string[]]$Arguments) {
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $FilePath @Arguments
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    if ($exitCode -ne 0) {
+        throw ("Command failed with exit code {0}: {1} {2}" -f $exitCode, $FilePath, ($Arguments -join ' '))
+    }
+}
+
+function Test-PythonModule([string]$PythonExe, [string]$ModuleName) {
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $PythonExe -c "import $ModuleName" > $null 2>&1
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    return $exitCode -eq 0
+}
+
+if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
+    $ProjectRoot = Find-ProjectRoot
+} else {
+    $ProjectRoot = (Resolve-Path -LiteralPath $ProjectRoot).ProviderPath.TrimEnd('\')
+}
+
+$venvRoot = Join-Path -Path $ProjectRoot -ChildPath '.venv'
+$venvScripts = Join-Path -Path $venvRoot -ChildPath 'Scripts'
+$venvPython = Join-Path -Path $venvScripts -ChildPath 'python.exe'
+$envFile = Join-Path -Path $ProjectRoot -ChildPath '.env'
+$frontendRoot = Join-Path -Path $ProjectRoot -ChildPath 'frontend'
+$npmrcFile = Join-Path -Path $frontendRoot -ChildPath '.npmrc'
+$projectRootName = Split-Path -Leaf $ProjectRoot
+$projectParentName = Split-Path -Leaf (Split-Path -Parent $ProjectRoot)
+
+Set-Location -LiteralPath $ProjectRoot
 
 Write-Host "============================================"
 Write-Host ("  Dev Environment Launch ({0})" -f $Mode)
 Write-Host "============================================"
+Write-Host "PSScriptRoot: $PSScriptRoot"
+Write-Host "ProjectRoot:  $ProjectRoot"
+Write-Host "VenvPython:   $venvPython"
+if ($projectRootName -eq $projectParentName) {
+    Write-Host "[WARN] Project appears to be nested in a duplicate folder: $ProjectRoot"
+    Write-Host "[WARN] Prefer extracting the package contents directly into the target Solver_demo_project folder."
+}
 
-Assert-Path '.venv\Scripts\python.exe' 'Virtual environment not found. Run deploy/scripts/bootstrap_dev.ps1 first.'
-Assert-Path '.env' '.env not found. Run deploy/scripts/bootstrap_dev.ps1 first.'
-Assert-Path 'frontend\.npmrc' 'frontend/.npmrc not found. Configure the company npm mirror first.'
+Assert-Path $venvPython "Virtual environment not found at $venvPython. Run deploy/scripts/bootstrap_dev.ps1 first."
+Assert-Path $envFile '.env not found. Run deploy/scripts/bootstrap_dev.ps1 first.'
+Assert-Path $npmrcFile 'frontend/.npmrc not found. Configure the company npm mirror first.'
+Write-Host "Using venv python: $venvPython"
 
-$venvPython = Join-Path $ProjectRoot '.venv\Scripts\python.exe'
+Write-Section 'Checking backend Python dependencies'
+if (-not (Test-PythonModule $venvPython 'openpyxl')) {
+    Write-Host 'Missing Python dependency openpyxl; installing requirements.txt'
+    Invoke-Native $venvPython @('-m', 'pip', 'install', '-r', 'requirements.txt')
+} else {
+    Write-Host 'Backend Python dependencies look ready'
+}
 
 if ($Mode -eq 'docker') {
     Write-Section 'Checking Docker'
-    docker info > $null 2>&1
-    if ($LASTEXITCODE -ne 0) {
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & docker info > $null 2>&1
+        $dockerInfoExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($dockerInfoExitCode -ne 0) {
         throw 'Docker is not running. Please start Docker Desktop.'
     }
 
     Write-Section 'Starting PostgreSQL'
-    docker-compose up -d postgres
-    if ($LASTEXITCODE -ne 0) {
-        throw 'Failed to start PostgreSQL via docker-compose.'
-    }
+    Invoke-Native 'docker-compose' @('up', '-d', 'postgres')
 
     Write-Section 'Waiting for PostgreSQL'
     $retries = 30
     while ($retries -gt 0) {
         Start-Sleep -Seconds 2
-        docker exec solver_postgres pg_isready -U solver -d solver_db > $null 2>&1
-        if ($LASTEXITCODE -eq 0) {
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            & docker exec solver_postgres pg_isready -U solver -d solver_db > $null 2>&1
+            $pgReadyExitCode = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+        if ($pgReadyExitCode -eq 0) {
             break
         }
         $retries--
@@ -58,24 +145,50 @@ if ($Mode -eq 'docker') {
     }
 } else {
     Write-Section 'Checking database connectivity'
-    & $venvPython 'scripts/test_db_connection.py'
+    Invoke-Native $venvPython @('scripts/test_db_connection.py')
 }
 
 Write-Section 'Running migrations'
-& $venvPython -m alembic upgrade head
+Invoke-Native $venvPython @('-m', 'alembic', 'upgrade', 'head')
+
+Write-Section 'Checking schema compatibility'
+Invoke-Native $venvPython @('scripts/ensure_schema_compat.py')
 
 Write-Section 'Loading seed data'
-& $venvPython 'scripts/load_seed_data.py' --file 'seeds/001_initial_data.sql'
-& $venvPython 'scripts/load_seed_data.py' --file 'seeds/002_expanded_data.sql'
-& $venvPython 'scripts/load_seed_data.py' --file 'seeds/003_v0.2_seed_data.sql'
+Invoke-Native $venvPython @('scripts/load_seed_data.py', '--file', 'seeds/001_initial_data.sql', '--skip-conflicts')
+Invoke-Native $venvPython @('scripts/load_seed_data.py', '--file', 'seeds/002_expanded_data.sql', '--skip-conflicts')
+Invoke-Native $venvPython @('scripts/load_seed_data.py', '--file', 'seeds/003_v0.2_seed_data.sql', '--skip-conflicts')
+Invoke-Native $venvPython @('scripts/load_seed_data.py', '--file', 'seeds/008_aircraft_final_assembly_10000_seed.sql', '--skip-conflicts')
 
 Write-Section 'Starting backend'
-$backendCommand = "Set-Location '$ProjectRoot'; & '.venv\Scripts\python.exe' -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
+$escapedProjectRoot = $ProjectRoot.Replace("'", "''")
+$escapedVenvPython = $venvPython.Replace("'", "''")
+$backendCommand = "Set-Location -LiteralPath '$escapedProjectRoot'; & '$escapedVenvPython' -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
 Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-Command', $backendCommand | Out-Null
 
+Write-Section 'Waiting for backend health'
+$backendHealthUrl = 'http://127.0.0.1:8000/health'
+$backendReady = $false
+for ($attempt = 1; $attempt -le 40; $attempt++) {
+    Start-Sleep -Seconds 2
+    try {
+        $response = Invoke-WebRequest -Uri $backendHealthUrl -UseBasicParsing -TimeoutSec 3
+        if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
+            $backendReady = $true
+            Write-Host ("Backend health check passed: {0}" -f $backendHealthUrl)
+            break
+        }
+    } catch {
+        Write-Host ("Waiting for backend on 127.0.0.1:8000... attempt {0}/40" -f $attempt)
+    }
+}
+if (-not $backendReady) {
+    throw "Backend did not become healthy at $backendHealthUrl. Check the backend PowerShell window for the uvicorn error."
+}
+
 Write-Section 'Starting frontend'
-$frontendRoot = Join-Path $ProjectRoot 'frontend'
-$frontendCommand = "Set-Location '$frontendRoot'; npm run dev -- --host 0.0.0.0"
+$escapedFrontendRoot = $frontendRoot.Replace("'", "''")
+$frontendCommand = "Set-Location -LiteralPath '$escapedFrontendRoot'; npm run dev -- --host 0.0.0.0"
 Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-Command', $frontendCommand | Out-Null
 
 Write-Section 'Launch complete'

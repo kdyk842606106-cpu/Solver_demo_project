@@ -33,6 +33,9 @@ const props = defineProps({
   criticalPath: { type: Array, default: () => [] },
   diffMode: { type: Boolean, default: false },
   diffSteps: { type: Array, default: () => [] },
+  timeMode: { type: String, default: 'minute' },
+  dayMinutes: { type: Number, default: 480 },
+  labelMode: { type: String, default: 'full' },
 })
 
 const ROLE_COLORS = {
@@ -68,6 +71,14 @@ function buildOption() {
 }
 
 function formatNormalLabel(task, isCriticalPath) {
+  if (props.labelMode === 'order-name') {
+    const stepNo = task.step_order != null ? `${task.step_order}. ` : ''
+    const name = task.display_name ?? task.displayName ?? task.op_rule_name ?? task.op_name ?? task.op_rule_code ?? task.op_code ?? 'UNKNOWN'
+    return isCriticalPath ? `★ ${stepNo}${name}` : `${stepNo}${name}`
+  }
+  if (props.labelMode === 'name') {
+    return task.display_name ?? task.displayName ?? task.op_rule_name ?? task.op_name ?? task.op_rule_code ?? task.op_code ?? 'UNKNOWN'
+  }
   const stepNo = task.step_order != null ? `${task.step_order}. ` : ''
   const code = task.op_rule_code ?? task.op_code ?? 'UNKNOWN'
   const name = (task.op_rule_name ?? task.op_name ?? '').trim()
@@ -76,6 +87,14 @@ function formatNormalLabel(task, isCriticalPath) {
 }
 
 function formatDiffLabel(step) {
+  if (props.labelMode === 'order-name') {
+    const stepNo = step.step_order != null ? `${step.step_order}. ` : ''
+    const name = step.display_name ?? step.displayName ?? step.op_name ?? step.op_rule_name ?? step.op_code ?? step.op_rule_code ?? 'UNKNOWN'
+    return `${stepNo}${name}`
+  }
+  if (props.labelMode === 'name') {
+    return step.display_name ?? step.displayName ?? step.op_name ?? step.op_rule_name ?? step.op_code ?? step.op_rule_code ?? 'UNKNOWN'
+  }
   const prefix = step.base_start == null ? '[新增] ' : ''
   const stepNo = step.step_order != null ? `${step.step_order}. ` : ''
   const code = step.op_code ?? step.op_rule_code ?? 'UNKNOWN'
@@ -155,6 +174,21 @@ function makeSeries(data, name) {
   }
 }
 
+function formatTimePoint(value) {
+  if (props.timeMode !== 'day') return `${value}m`
+  return `D${Math.floor(value / props.dayMinutes) + 1}`
+}
+
+function formatTimeRange(start, end) {
+  if (props.timeMode !== 'day') {
+    return `开始: ${start} min → 结束: ${end} min<br>时长: ${end - start} min`
+  }
+  const startDay = Math.floor(start / props.dayMinutes) + 1
+  const endDay = Math.max(startDay, Math.ceil(end / props.dayMinutes))
+  const durationDays = Math.round((end - start) / props.dayMinutes)
+  return `开始: D${startDay}<br>结束: D${endDay}<br>工期: ${durationDays} 天`
+}
+
 function renderItem(params, api) {
   const categoryIndex = api.value(0)
   const start = api.coord([api.value(1), categoryIndex])
@@ -182,7 +216,7 @@ function makeOption(categories, data, maxTime) {
     tooltip: {
       formatter: (p) => {
         const [idx, s, e] = p.value
-        return `${categories[idx]}<br>开始: ${s} min → 结束: ${e} min<br>时长: ${e - s} min`
+        return `${categories[idx]}<br>${formatTimeRange(s, e)}`
       },
     },
     grid: { left: 160, right: 20, top: 10, bottom: 30 },
@@ -190,7 +224,7 @@ function makeOption(categories, data, maxTime) {
       min: 0,
       max: maxTime,
       scale: true,
-      axisLabel: { formatter: (v) => `${v}m` },
+      axisLabel: { formatter: formatTimePoint },
     },
     yAxis: {
       data: categories,
@@ -216,7 +250,7 @@ onBeforeUnmount(() => {
 })
 
 watch(
-  () => [props.tasks, props.diffMode, props.diffSteps, props.criticalPath, props.makespan],
+  () => [props.tasks, props.diffMode, props.diffSteps, props.criticalPath, props.makespan, props.timeMode, props.labelMode],
   () => nextTick(updateChart),
 )
 

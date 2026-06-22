@@ -90,15 +90,15 @@ def find_ops_for_delta(
     Effect matching: given a feature key and target value,
     find all operations whose effects include that transformation.
     
-    For set effects: checks if effect.new_value == target_value
-    For increment/decrement effects: simulates applying the effect to
+    For set/reset effects: checks if effect.new_value == target_value
+    For increment/decrement/sub effects: simulates applying the effect to
     current_state and checks if result matches target_value.
     
     Args:
         feature_key: Feature key to change
         target_value: Target value for the feature
         rules: List of OpRule objects to search
-        current_state: Current state dict for simulating increment/decrement
+        current_state: Current state dict for simulating increment/decrement/sub
         
     Returns:
         List of OpRule objects that can produce the target effect
@@ -113,7 +113,7 @@ def find_ops_for_delta(
             
             effect_type = getattr(effect, 'effect_type', 'set')
             
-            if effect_type == 'set':
+            if effect_type in {'set', 'reset'}:
                 if effect.new_value == target_value:
                     matching_ops.append(rule)
                     break
@@ -149,7 +149,7 @@ def find_provider(
         required_value: Value required by precondition
         candidates: List of candidate OpRule objects
         exclude: Optional OpRule to exclude from consideration
-        current_state: Current state dict for simulating increment/decrement
+        current_state: Current state dict for simulating increment/decrement/sub
         
     Returns:
         Best OpRule that can satisfy the precondition, or None if not found
@@ -167,7 +167,7 @@ def find_provider(
             
             effect_type = getattr(effect, 'effect_type', 'set')
             
-            if effect_type == 'set':
+            if effect_type in {'set', 'reset'}:
                 if effect.new_value == required_value:
                     providers.append(rule)
                     break

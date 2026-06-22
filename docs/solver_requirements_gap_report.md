@@ -1,9 +1,13 @@
 # Solver Requirements Gap Report
 
+> Update 2026-06-02: The previous gap around `sub` / `reset` and effect-driven repeated activity re-provider has been closed for the current POP path. Current status is documented in `docs/STATE_V0.3.md` and `docs/protocols/planner.md`; older paragraphs in this report remain historical gap-analysis context unless explicitly marked otherwise.
+
 > 创建时间：2026-04-25
 > 评估基线：`docs/solver_requirements_summary.md`
 > 对照版本：`docs/STATE_V0.3.md`
 > 评估范围：Planner / Scheduler / API / Frontend / Tests
+
+> 复核更新：2026-05-29。本文保留 2026-04-25 的差距分析语境，但其中关于“Planner 不是 BFS”“Scheduler 只支持单资源”的判断已经被后续 TICKET-021 / TICKET-022 改造修正。当前权威状态以 `docs/STATE_V0.3.md` 为准；本次复核在相关章节标注新的现状。
 
 ---
 
@@ -23,21 +27,36 @@
 
 ## 2. 执行摘要
 
-总体判断：当前系统已经具备一个可运行的 `Planner -> Scheduler -> API -> UI` 闭环，并且已经完成 V0.2 阻塞处理、V0.3 Numeric Phase 1 等工程化扩展；但它与 `solver_requirements_summary.md` 中定义的“面向泵体机械集成场景的系统化 Planner 架构”仍存在明显差距。
+总体判断：当前系统已经具备一个可运行的 `Planner -> Scheduler -> API -> UI` 闭环，并且已经完成 V0.2 阻塞处理、V0.3 Numeric Phase 1、Planner 正向 BFS 主策略、多资源 Scheduler 等工程化扩展；但它与 `solver_requirements_summary.md` 中定义的“面向泵体机械集成场景的系统化 Planner 架构”仍存在差距。
 
 当前系统更准确的定位是：
 
-- 一个以 `delta 匹配 + precondition/provider 递归补齐` 为核心的工程型求解器
-- 已具备基础排程、阻塞重排、重复 numeric step 实例化等能力
+- 一个以 `forward_bfs` 为主策略、以规则库 precondition/effect 为状态转移基础的工程型求解器
+- 已具备基础排程、阻塞重排、重复 numeric step 实例化、多资源资源约束与分配等能力
 - 尚未达到需求文档中定义的“最小代价路径搜索 + 条件集合目标 + 数值事件触发 + 双层并行判定 + What-if + 规则健康检查”的完整能力面
 
-最关键的差距集中在以下五个方面：
+最关键的差距集中在以下方面：
 
-- Planner 求解范式仍不是完整的最小代价路径搜索
+- Planner 已是正向 BFS，但仍不是带业务代价函数的完整最小代价路径搜索
 - 顶层目标模型仍基于 `target_state_id`，不是条件集合 `G`
-- 数值规则仍是 `increment/decrement` 风格，不是需求中的 `sub/reset` 触发式语义
+- POP 路径已支持 `sub/reset` re-provider；剩余核心差距不再是 effect 语义，而是条件集合目标、业务代价函数、effect commutativity、What-if 与规则健康检查。
 - 并行判定缺少“效果可交换性”这一层业务规则过滤
 - What-if 与规则库健康检查两类系统化能力基本未落地
+
+## 2.1 2026-05-29 复核摘要
+
+后续实现已经消除了两项原报告中的 P0/P2 级旧差距：
+
+- Planner 主流程已切换为正向 BFS：`app/core/planner/bfs.py`、`app/core/planner/search.py`、`docs/TICKET_021.md`。
+- Scheduler 已支持多资源需求：`StepData.resource_reqs` 是 canonical 输入，CP-SAT 对每类资源建 cumulative，资源回填支持多资源与实例 capacity；见 `docs/TICKET_022.md`、`tests/unit/test_scheduler_multi_resource.py`。
+
+仍然成立的关键差距：
+
+- 顶层 solve 输入仍是 `current_state_id + target_state_id`，还不是条件集合目标 `G`。
+- BFS 当前以步数/可达性为主，尚未引入需求文档中的统一业务代价函数。
+- POP 路径已补齐 `sub/reset` re-provider；剩余差距集中在条件集合目标、业务代价函数、effect commutativity、Explainability、What-if 与规则健康检查。
+- 并行展示来自依赖/排程结果，尚未做共享 key 的 effect commutativity 校验。
+- Explainability、What-if、规则健康检查仍属于后续主线。
 
 ---
 
@@ -80,7 +99,7 @@
 
 当前系统已具备较清晰的分层：
 
-- Planner 负责从状态差异推导候选步骤与依赖
+- Planner 负责从当前状态出发做正向 BFS，并将可达路径转换为 RAG
 - Scheduler 负责基于 precedence 与资源约束做 CP-SAT 排程
 - API 负责拼装结果并返回前端
 - 前端可展示 Gantt、任务明细、并行组、版本差异等信息
@@ -125,20 +144,20 @@
 
 这意味着当前系统在 precondition 表达能力上，并不弱于需求文档中描述的“基于 key 的逻辑表达式，纯 AND 逻辑”。
 
-### 4.4 Numeric Phase 1 已具备多步数值推进与重复步骤实例化
+### 4.4 Numeric 能力已收敛进统一正向 BFS
 
 这是当前系统相对成熟的一块能力。已经实现：
 
 - exact numeric target 的多步推进
 - 重复 op rule 实例化为多个 planner step
-- numeric precondition 驱动的隐式子目标规划
+- numeric precondition 通过正向状态推进自然满足
 - 循环检测与结构化错误
 
 相关文件：
 
-- `app/core/planner/numeric.py:56`
-- `app/core/planner/search.py:176`
-- `tests/unit/test_numeric_planner.py`
+- `app/core/planner/bfs.py`
+- `app/core/planner/search.py`
+- `tests/unit/test_forward_bfs.py`
 - `tests/e2e/test_numeric_planning.py:13`
 
 这部分能力已经覆盖需求文档中“多步数值推进”“重复执行实例化”的一部分技术前提。
@@ -191,34 +210,38 @@
 
 以下差距按“是否影响核心需求定义”排序。
 
-### 5.1 Planner 不是完整的最小代价路径搜索
+### 5.1 Planner 已是正向 BFS，但还不是完整的最小代价路径搜索
 
 需求文档第 2 节将问题定义为：
 
 - 从初始状态 `s0` 到目标条件集合 `G`
 - 搜索最小代价可达路径
 
-而当前 Planner 的核心实现仍是：
+2026-04-25 原报告认为 Planner 核心实现仍是：
 
 - 先计算 `current_state` 与 `target_state` 的 delta
 - 为每个 delta 选一个可产生目标 effect 的 rule
 - 再递归补齐 preconditions 所需 provider
 
+这一判断在 TICKET-021 后已经过期。当前实现为：
+
+- 从 `current_state` 出发执行 forward BFS。
+- 通过 `RuleEvaluator.evaluate_preconditions()` 判断当前状态下可执行规则。
+- 通过 `RuleEvaluator.apply_effects()` 生成新状态。
+- 使用 visited / max_depth / max_nodes 做搜索边界。
+- 将成功 path 转成 RAG，并做 feature-level dependency compaction。
+
 相关证据：
 
-- `app/core/planner/search.py:131`
-- `docs/protocols/planner.md:46`
-- `docs/protocols/planner.md:93`
-
-`docs/protocols/planner.md:93` 已明确写出：
-
-- 当前实现不是 BFS 状态空间搜索
-- 而是“delta 匹配 + 依赖补齐”
+- `app/core/planner/bfs.py`
+- `app/core/planner/search.py`
+- `docs/protocols/planner.md`
+- `docs/TICKET_021.md`
 
 影响：
 
-- 当前系统不能严格保证“全局最小代价路径”
-- 更接近启发式拼装计划，而不是需求文档定义的标准路径搜索器
+- 当前系统已经具备“状态空间可达路径搜索”的主干。
+- 但 BFS 当前主要优化步数/可达性，还没有引入需求文档中的业务代价函数，因此不能声称满足“全局最小代价路径”。
 
 ### 5.2 顶层目标模型仍是 `target_state_id`，不是条件集合 `G`
 
@@ -267,20 +290,21 @@
 
 其中最关键的缺口是：
 
-- 当前没有 `reset`
-- 当前 numeric 语义也不是面向“归零后触发某活动并恢复阈值”的事件驱动模型
+- `reset` 已在 2026-06-02 补齐，并作为 set-like provider 参与 POP re-provider 闭包。
+- 当前 numeric 语义也不是面向“前序 effect 破坏后续数值前置条件后，自动插入 provider 恢复条件”的事件驱动再提供模型
 
 影响：
 
-- 需求文档中“安装缺口归零自动触发清洁，再 reset 回阈值”的核心机制尚未被原生建模
+- 需求文档中“安装缺口/洁净度被前序活动消耗，后续活动阈值前置条件因此失效，Planner 自动插入清洁并 reset 回阈值”的核心机制已在当前 POP 路径中原生建模；旧 BFS/numeric 辅助路径仅保留兼容语义。
 
-### 5.4 数值触发规则尚未形成需求中的事件驱动闭环
+### 5.4 数值再提供规则尚未形成需求中的事件驱动闭环
 
 需求文档对 numeric 的关键要求并不是“仅能多步到达 exact target”，而是：
 
 - `sub` 使数值逐步下降
-- 某数值归零时自动触发关联活动
-- 该活动执行 `reset`
+- 后续活动显式声明数值阈值前置条件
+- 当前序 effect 使该前置条件不满足时，Planner 自动插入可恢复该条件的 provider
+- 该 provider 可执行 `reset`
 - 形成可重复出现的维护/清洁循环
 
 当前系统虽然已经支持：
@@ -291,18 +315,18 @@
 
 但尚未看到以下通用机制：
 
-- “数值归零事件 -> 自动触发某条 reset rule”
-- “由触发规则自涌现出的重复维护活动插入点”
+- “前序 effect -> 后续 numeric precondition 失效 -> 自动插入 reset provider”
+- “由 re-provider 机制自涌现出的重复维护活动插入点”
 
 相关文件：
 
-- `app/core/planner/numeric.py:56`
-- `app/core/planner/search.py:176`
+- `app/core/planner/bfs.py`
+- `app/core/planner/search.py`
 
 影响：
 
 - 当前 numeric 功能更像“数值步进规划”
-- 与需求文档中的“触发式重复活动”不是同一层能力
+- 当前 POP 路径已覆盖需求文档中的“effect-driven re-provider 重复活动”；旧 numeric 辅助路径仍只是兼容工具。
 
 ### 5.5 并行判定逻辑与需求文档明显不一致
 
@@ -345,13 +369,14 @@
 
 当前系统的实际选择逻辑主要是：
 
-- 优先 precondition 已满足的 candidate
-- 否则选 `duration_min` 最短的 rule
+- 正向 BFS 按可执行规则展开状态空间，优先找到较短步数路径。
+- Scheduler 侧完整目标仍是 `minimize_makespan`。
+- `objectives[].weight` 已有数据结构入口，但尚未形成真实加权多目标求解。
 
 相关文件：
 
-- `app/core/planner/search.py:210`
-- `app/core/planner/matcher.py:185`
+- `app/core/planner/bfs.py`
+- `app/core/scheduler/model.py`
 
 同时，`STATE` 中也明确记录：
 
@@ -447,17 +472,30 @@
 - 当前系统可以说“不是完全黑盒”
 - 但还达不到需求文档中的“工程师可完整追溯决策原因”的深度
 
-### 5.10 Scheduler 资源建模仍是 MVP 级别
+### 5.10 Scheduler 多资源已补齐，但仍需更强业务级资源治理
 
-当前 Scheduler 只取每个 rule 的“首个 required resource”参与建模：
+2026-04-25 原报告认为 Scheduler 只取每个 rule 的“首个 required resource”参与建模：
 
 - `resource_type = first required req`
 
+这一判断在 TICKET-022 后已经过期。当前实现为：
+
+- `loader.load_rag()` 收集全部 `is_required=True` 的 `resource_reqs`。
+- `model.build_model()` 对每个资源类型建立 cumulative 约束。
+- `_assign_resources()` 为每个资源需求类型回填具体资源实例，并尊重实例 `capacity`。
+- `schedule_result.tasks` 持久化完整 `resource_reqs` 与 `resources`。
+
 相关文件：
 
-- `app/core/scheduler/loader.py:105`
+- `app/core/scheduler/loader.py`
+- `app/core/scheduler/model.py`
+- `app/core/scheduler/solver.py`
+- `tests/unit/test_scheduler_multi_resource.py`
 
-这与旧版上下文中提到的已知限制一致。虽然不直接违反 `solver_requirements_summary.md` 的当前文字，但说明资源建模仍偏 MVP，不适合直接承接更复杂的资源组合场景。
+剩余风险：
+
+- 找不到可用资源时仍有容量回退到 `1` 的开发期容错，不代表真实业务语义。
+- 资源技能匹配、人员班次、场地窗口、跨机台资源池仍不在当前版本范围。
 
 ---
 
@@ -542,7 +580,7 @@
 以下需求方向，当前未见明确测试闭环：
 
 - 条件集合目标 `G`
-- `set/sub/reset` 触发式 numeric 规则
+- `set/sub/reset` re-provider numeric 规则
 - 效果可交换性并行验证
 - What-if 参数对比
 - 模板库健康检查 / 规则校验工具
@@ -561,9 +599,9 @@
 
 以下差距若不补，系统不能声称满足该需求文档的核心定义：
 
-1. Planner 不是完整的最小代价路径搜索
+1. Planner 已有正向 BFS 主干，但还不是带业务代价函数的完整最小代价路径搜索
 2. 顶层目标仍基于 `target_state_id`，不是条件集合 `G`
-3. 效果模型缺少 `reset`，numeric 仍不是触发式语义
+3. 条件集合目标、业务代价函数与 effect commutativity 仍未形成完整需求基线；`reset` / re-provider 缺口已关闭
 4. 并行判定缺少“效果可交换性”过滤层
 
 ### 8.2 P1 级差距：影响系统化可用性，但不阻断现有闭环
@@ -575,7 +613,7 @@
 ### 8.3 P2 级差距：影响平台化治理与长期可维护性
 
 1. 模板库健康检查能力缺失
-2. 资源建模仍是 MVP 级别
+2. 资源治理仍偏基础：尚未覆盖技能、班次、场地窗口、跨机台资源池
 3. tie-break / 确定性规则未制度化
 
 ---
@@ -589,7 +627,7 @@
 优先解决：
 
 1. 顶层目标表达升级为条件集合 `G`
-2. 效果系统补齐 `set/sub/reset`
+2. 将已补齐的 `set/sub/reset` 与 POP re-provider 语义继续纳入条件集合目标、解释输出和规则健康检查
 3. 将 numeric 规则升级为事件驱动语义，而不只是 exact target chaining
 4. 并行判定补上效果可交换性层
 
@@ -602,7 +640,7 @@
 
 优先解决：
 
-1. 从现有 delta/provider 范式演进到可控的最小代价搜索策略
+1. 在现有 forward BFS 主干上引入可控的业务代价函数与 tie-break 规则
 2. 建立 rule candidate comparison / reject reason / precondition trace 等解释结构
 3. 将 explainability 暴露到 API 与前端
 
@@ -622,7 +660,8 @@
 
 - Planner / Scheduler 分层
 - 阻塞重排
-- Numeric Phase 1
+- Numeric repeated step / forward BFS
+- Scheduler 多资源约束与分配
 - API 结构化错误
 - 基础结果展示
 
@@ -634,11 +673,11 @@
 
 最关键的三条结论如下：
 
-1. 当前 Planner 仍是“工程化规则拼装器”，不是“完整最小代价路径搜索器”
-2. 当前 numeric 能力已解决“重复步骤实例化”，但尚未解决“触发式维护循环”
+1. 当前 Planner 已从“工程化规则拼装器”升级为 forward BFS 状态搜索器，但还不是“完整最小代价路径搜索器”
+2. 当前 POP 能力已解决“由后续前置条件失效驱动的维护/清洁 re-provider 循环”，但顶层条件集合目标与业务代价函数仍需后续扩展
 3. 当前并行组输出更偏结果展示，尚不是需求文档定义的严格业务并行判定
 
-因此，后续如果要正式切换到该需求基线，不建议直接在现有行为上继续局部打补丁，而应先冻结：
+因此，后续如果要正式切换到该需求基线，不建议只在现有行为上继续局部打补丁，而应先冻结：
 
 - 目标表达语义
 - 效果操作符语义

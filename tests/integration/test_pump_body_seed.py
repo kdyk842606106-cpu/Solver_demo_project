@@ -102,6 +102,7 @@ async def _seed_pump_body_data(client):
          "meta": {"skill": "fault_recovery"}},
     ]
     for res in resources:
+        res = {"machine_id": machine_id, **res}
         r = await client.post("/api/v1/resources", json=res)
         assert r.status_code == 201, r.text
 
@@ -382,6 +383,29 @@ class TestPumpBodyIntegrationSeed:
         ]
         for code in branch:
             assert code in codes, f"Branch operation {code} missing from plan"
+
+    @pytest.mark.asyncio
+    async def test_multi_resource_operation_assigns_all_required_resources(self, client):
+        """Final integration test requires QA and precision teams together."""
+        seed = await _seed_pump_body_data(client)
+
+        r = await client.post("/api/v1/solve", json={
+            "machine_id": seed["machine_id"],
+            "current_state_id": seed["current_state_id"],
+            "target_state_id": seed["target_state_id"],
+        })
+        body = r.json()
+        assert body["status"] == "done"
+
+        tasks = {t["op_rule_code"]: t for t in body["schedule"]["tasks"]}
+        final_test = tasks["OP_PMP_890_INTEGRATION_TEST"]
+        assigned_types = {
+            resource.get("resource_type")
+            for resource in final_test["resources"]
+        }
+
+        assert "PUMP_QA_INSPECTOR" in assigned_types
+        assert "PUMP_PRECISION_TEAM" in assigned_types
 
     @pytest.mark.asyncio
     async def test_cleanliness_steps_count(self, client):

@@ -190,15 +190,15 @@ INSERT INTO machine_state_feature (machine_state_id, feature_key, feature_value)
 -- 4) Resource Definitions
 -- ============================================================
 
-INSERT INTO resource (code, name, resource_type, capacity, is_available, meta) VALUES
-('PMP-MEA-01', 'Pump Mechanical Team A', 'PUMP_MECH_TEAM_A', 1, true, '{"skill":"casing_impeller_bearing"}'),
-('PMP-MEB-01', 'Pump Mechanical Team B', 'PUMP_MECH_TEAM_B', 1, true, '{"skill":"shaft_seal_coupling"}'),
-('PMP-PRS-01', 'Pump Precision Instrument Team', 'PUMP_PRECISION_TEAM', 1, true, '{"skill":"sensor_integration_test"}'),
-('PMP-COL-01', 'Pump Cooling System Tech', 'PUMP_COOLING_TECH', 1, true, '{"skill":"cooling_lubrication"}'),
-('PMP-CLN-01', 'Pump Chamber Cleaning Crew', 'PUMP_CLEANING_CREW', 1, true, '{"skill":"chamber_cleaning"}'),
-('PMP-QA-01', 'Pump QA Inspector', 'PUMP_QA_INSPECTOR', 1, true, '{"skill":"final_test"}'),
-('PMP-RPR-01', 'Pump Repair Team', 'PUMP_REPAIR_TEAM', 1, true, '{"skill":"fault_recovery"}')
-ON CONFLICT (code) DO UPDATE SET
+INSERT INTO resource (machine_id, code, name, resource_type, capacity, is_available, meta) VALUES
+((SELECT id FROM machine WHERE code = 'PMP-BDY-001'), 'PMP-MEA-01', 'Pump Mechanical Team A', 'PUMP_MECH_TEAM_A', 1, true, '{"skill":"casing_impeller_bearing"}'),
+((SELECT id FROM machine WHERE code = 'PMP-BDY-001'), 'PMP-MEB-01', 'Pump Mechanical Team B', 'PUMP_MECH_TEAM_B', 1, true, '{"skill":"shaft_seal_coupling"}'),
+((SELECT id FROM machine WHERE code = 'PMP-BDY-001'), 'PMP-PRS-01', 'Pump Precision Instrument Team', 'PUMP_PRECISION_TEAM', 1, true, '{"skill":"sensor_integration_test"}'),
+((SELECT id FROM machine WHERE code = 'PMP-BDY-001'), 'PMP-COL-01', 'Pump Cooling System Tech', 'PUMP_COOLING_TECH', 1, true, '{"skill":"cooling_lubrication"}'),
+((SELECT id FROM machine WHERE code = 'PMP-BDY-001'), 'PMP-CLN-01', 'Pump Chamber Cleaning Crew', 'PUMP_CLEANING_CREW', 1, true, '{"skill":"chamber_cleaning"}'),
+((SELECT id FROM machine WHERE code = 'PMP-BDY-001'), 'PMP-QA-01', 'Pump QA Inspector', 'PUMP_QA_INSPECTOR', 1, true, '{"skill":"final_test"}'),
+((SELECT id FROM machine WHERE code = 'PMP-BDY-001'), 'PMP-RPR-01', 'Pump Repair Team', 'PUMP_REPAIR_TEAM', 1, true, '{"skill":"fault_recovery"}')
+ON CONFLICT (machine_id, code) DO UPDATE SET
     name = EXCLUDED.name,
     resource_type = EXCLUDED.resource_type,
     capacity = EXCLUDED.capacity,

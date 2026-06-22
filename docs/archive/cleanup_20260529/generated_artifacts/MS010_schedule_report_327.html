@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Schedule Report — Resource-Aware Critical Path</title>
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; background: #f5f6fa; }
+  h1 { color: #2c3e50; text-align: center; font-size: 28px; margin-bottom: 8px; }
+  h2 { color: #34495e; margin-top: 30px; border-bottom: 2px solid #3498db; padding-bottom: 10px; font-size: 18px; }
+  .subtitle { text-align: center; color: #666; margin-bottom: 30px; font-size: 14px; }
+
+  .summary { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+  .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
+  .summary-item { text-align: center; }
+  .summary-value { font-size: 24px; font-weight: bold; color: #2c3e50; }
+  .summary-label { font-size: 12px; color: #7f8c8d; margin-top: 5px; }
+
+  .warning-box { padding: 16px 20px; border-radius: 8px; margin-bottom: 12px; border-left: 4px solid; }
+  .warning-box.critical { background: #ffebee; border-left-color: #d32f2f; }
+  .warning-box.info { background: #e3f2fd; border-left-color: #1976d2; }
+  .warning-box h4 { font-size: 14px; margin-bottom: 6px; font-weight: 600; }
+  .warning-box.critical h4 { color: #c62828; }
+  .warning-box.info h4 { color: #1565c0; }
+  .warning-box p { font-size: 13px; color: #555; margin: 0; }
+
+  #network { width: 100%; height: 600px; border: 1px solid #ddd; border-radius: 8px; background: white; margin-bottom: 20px; }
+
+  .gantt-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow-x: auto; margin-bottom: 20px; }
+  .gantt-row { display: flex; align-items: center; height: 30px; margin-bottom: 2px; position: relative; }
+  .gantt-row:hover { background: #f8f9fa; }
+  /* CP marking: red left border, NOT red background */
+  .gantt-row.cp::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #e74c3c; border-radius: 0 2px 2px 0; z-index: 2; }
+  .gantt-label { width: 280px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; text-align: right; flex-shrink: 0; padding-left: 8px; }
+  .gantt-bar-container { flex: 1; position: relative; height: 24px; background: #ecf0f1; border-radius: 4px; }
+  .gantt-bar { position: absolute; height: 20px; top: 2px; border-radius: 3px; font-size: 9px; color: white; display: flex; align-items: center; padding-left: 5px; overflow: hidden; white-space: nowrap; font-weight: 500; }
+  .gantt-timeline { display: flex; margin-left: 290px; margin-bottom: 10px; border-bottom: 1px solid #bdc3c7; padding-bottom: 5px; }
+  .timeline-mark { flex: 1; text-align: right; font-size: 10px; color: #7f8c8d; }
+
+  .resource-gantt-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow-x: auto; margin-top: 20px; }
+  .resource-group { margin-bottom: 15px; }
+  .resource-header { display: flex; align-items: center; padding: 8px 12px; background: #f8f9fa; border-radius: 6px; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #2c3e50; }
+  .resource-tag { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; margin-left: 8px; font-weight: normal; }
+  .tag-space_r { background: #e3f2fd; color: #1976d2; }
+  .tag-space_light { background: #fff3e0; color: #f57c00; }
+  .tag-space_out { background: #e8f5e9; color: #388e3c; }
+  .tag-space_down { background: #fce4ec; color: #c2185b; }
+  .tag-space_up { background: #f3e5f5; color: #7b1fa2; }
+  .tag-space_front { background: #e0f2f1; color: #00796b; }
+  .tag-none { background: #f5f5f5; color: #757575; }
+
+  .stats-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+  .stats-table th, .stats-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #eee; font-size: 14px; }
+  .stats-table th { background: #f8f9fa; font-weight: 600; color: #555; }
+  .progress-bar { height: 20px; background: #e0e0e0; border-radius: 10px; overflow: hidden; width: 200px; }
+  .progress-fill { height: 100%; border-radius: 10px; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; color: white; font-size: 11px; font-weight: 600; }
+  .progress-fill.high { background: linear-gradient(90deg, #ef5350, #c62828); }
+  .progress-fill.medium { background: linear-gradient(90deg, #ffa726, #ef6c00); }
+  .progress-fill.low { background: linear-gradient(90deg, #66bb6a, #2e7d32); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+  .legend-color { width: 16px; height: 16px; border-radius: 3px; }
+  .legend-border { width: 16px; height: 16px; border-radius: 3px; border: 3px solid #e74c3c; background: transparent; }
+
+  .cp-chain { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 0; }
+  .cp-node { background: linear-gradient(135deg, #ff6b6b, #ee5a5a); color: white; padding: 10px 16px; border-radius: 8px; font-weight: 600; font-size: 13px; box-shadow: 0 2px 4px rgba(231,76,60,0.3); }
+  .cp-arrow { color: #ccc; font-size: 18px; font-weight: 300; }
+
+  /* CP text marking in task labels */
+  .cp-text { color: #e74c3c; font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>🔧 Schedule Report</h1>
+<p class="subtitle">Resource-Aware Critical Path Analysis • Generated 2026-05-19 12:02</p>
+
+<div class="summary">
+  <div class="summary-grid">
+    <div class="summary-item">
+      <div class="summary-value">27</div>
+      <div class="summary-label">总活动数</div>
+    </div>
+    <div class="summary-item">
+      <div class="summary-value">472.9h</div>
+      <div class="summary-label">总工期 (Makespan)</div>
+    </div>
+    <div class="summary-item">
+      <div class="summary-value" style="color:#e74c3c;">24</div>
+      <div class="summary-label">关键路径活动数</div>
+    </div>
+    <div class="summary-item">
+      <div class="summary-value">8</div>
+      <div class="summary-label">空间资源</div>
+    </div>
+  </div>
+</div>
+
+<div class="gantt-container">
+  <h2 style="margin-top:0;border:none;padding:0;">🔗 Critical Path Chain</h2>
+  <div class="cp-chain">
+    <div class="cp-node">MS010-OPS001</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS002</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS003</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS004</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS005</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS008</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS009</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS012</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS013</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS014</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS025</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS006</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS015</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS007</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS016</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS026</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS010</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS020</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS027</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS011</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS021</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS022</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS023</div>
+    <span class="cp-arrow">→</span>
+    <div class="cp-node">MS010-OPS024</div>
+  </div>
+</div>
+<h2>🔗 Activity Network</h2>
+<div id="network"></div>
+<h2>📅 Gantt Chart</h2>
+<div class="gantt-container">
+<div class="gantt-timeline">
+<div class="timeline-mark">0h</div>
+<div class="timeline-mark">94h</div>
+<div class="timeline-mark">189h</div>
+<div class="timeline-mark">283h</div>
+<div class="timeline-mark">378h</div>
+<div class="timeline-mark">472h</div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">1. 集成入口条件检查 (450min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 0.00%; width: 1.59%; background: #78909C;">MS010-OPS001</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">2. 机台安装前准备 (2430min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 1.59%; width: 8.56%; background: #78909C;">MS010-OPS002</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">3. 主机中部模块安装前准备 (1980min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 10.15%; width: 6.98%; background: #95a5a6;">MS010-OPS003</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">4. 主机中部模块安装 (3360min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 17.13%; width: 11.84%; background: #95a5a6;">MS010-OPS004</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">5. 顶部拖链模块主体安装 (900min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 28.97%; width: 3.17%; background: #95a5a6;">MS010-OPS005</div>
+  </div>
+</div>
+<div class="gantt-row ">
+  <div class="gantt-label">17. 顶部计量框架安装 (1140min)</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 28.97%; width: 4.02%; background: #95a5a6;">MS010-OPS017</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">8. 光源导轨精调节 (1032min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 32.14%; width: 3.64%; background: #95a5a6;">MS010-OPS008</div>
+  </div>
+</div>
+<div class="gantt-row ">
+  <div class="gantt-label">18. 中框公共线缆布线 (5520min)</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 32.99%; width: 19.45%; background: #95a5a6;">MS010-OPS018</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">9. 光源连接模块安装与调节 (3120min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 35.78%; width: 11.00%; background: #95a5a6;">MS010-OPS009</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">12. 动态气体开关安装 (2100min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 46.78%; width: 7.40%; background: #95a5a6;">MS010-OPS012</div>
+  </div>
+</div>
+<div class="gantt-row ">
+  <div class="gantt-label">22. 大气机械臂2安装与调节 (1968min)</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 52.44%; width: 6.94%; background: #95a5a6;">MS010-OPS019</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">13. 光学传感器组件安装 (960min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 54.18%; width: 3.38%; background: #95a5a6;">MS010-OPS013</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">14. 热屏蔽板安装 (1380min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 57.56%; width: 4.86%; background: #95a5a6;">MS010-OPS014</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">19. 底部运动台安装 (3222min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 62.42%; width: 11.36%; background: #95a5a6;">MS010-OPS025</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">6. 供气盒模块安装 (1740min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 67.01%; width: 6.13%; background: #95a5a6;">MS010-OPS006</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">15. 中框气体分析模块安装 (810min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 70.29%; width: 2.85%; background: #95a5a6;">MS010-OPS015</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">7. 中框真空系统前级管路安装 (420min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 73.14%; width: 1.48%; background: #95a5a6;">MS010-OPS007</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">16. 机械臂1推入恢复 (180min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 73.14%; width: 0.63%; background: #95a5a6;">MS010-OPS016</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">20. 整机管路安装 (1680min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 73.78%; width: 5.92%; background: #95a5a6;">MS010-OPS026</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">10. 光源主体对准 (2520min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 74.62%; width: 8.88%; background: #95a5a6;">MS010-OPS010</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">23. 真空机械臂2安装与调节 (3258min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 75.09%; width: 11.48%; background: #95a5a6;">MS010-OPS020</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">21. 外防护安装 (5760min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 79.70%; width: 20.30%; background: #95a5a6;">MS010-OPS027</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">11. 光源组件对准 (4680min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 83.51%; width: 16.49%; background: #78909C;">MS010-OPS011</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">24. 机械支柱安装 (1080min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 86.57%; width: 3.81%; background: #95a5a6;">MS010-OPS021</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">25. 顶部运动台安装与调节 (720min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 90.38%; width: 2.54%; background: #95a5a6;">MS010-OPS022</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">26. 顶部拖链模块及机械支柱功能调试安装 (1800min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 92.92%; width: 6.34%; background: #95a5a6;">MS010-OPS023</div>
+  </div>
+</div>
+<div class="gantt-row cp">
+  <div class="gantt-label">27. 顶部区域真空抽排管路安装 (210min) 🔴CP</div>
+  <div class="gantt-bar-container">
+    <div class="gantt-bar" style="left: 99.26%; width: 0.74%; background: #95a5a6;">MS010-OPS024</div>
+  </div>
+</div>
+</div>
+<h2>🏭 Resource Gantt Chart</h2>
+<div class="resource-gantt-container">
+<div class="resource-group">
+  <div class="resource-header">
+    SPACE_OUT_001 <span class="resource-tag tag-none">SPACE_OUT_001</span>
+    <span style="margin-left:auto; font-size:12px; color:#666;">9个活动 | 总占用290.0h | 🔴 高利用率</span>
+  </div>
+  <div class="gantt-row">
+    <div class="gantt-label" style="width:180px;">MS010-OPS018, MS010-OPS006, MS010-OPS015, MS010-OPS007, MS010-OPS016, MS010-OPS026, MS010-OPS027, MS010-OPS021...</div>
+    <div class="gantt-bar-container">
+      <div class="gantt-bar" style="left: 32.99%; width: 19.45%; background: #95a5a6;">MS010-OPS018</div>
+      <div class="gantt-bar" style="left: 67.01%; width: 6.13%; background: #95a5a6;">MS010-OPS006🔴</div>
+      <div class="gantt-bar" style="left: 70.29%; width: 2.85%; background: #95a5a6;">MS010-OPS015🔴</div>
+      <div class="gantt-bar" style="left: 73.14%; width: 1.48%; background: #95a5a6;">MS010-OPS007🔴</div>
+      <div class="gantt-bar" style="left: 73.14%; width: 0.63%; background: #95a5a6;">MS010-OPS016🔴</div>
+      <div class="gantt-bar" style="left: 73.78%; width: 5.92%; background: #95a5a6;">MS010-OPS026🔴</div>
+      <div class="gantt-bar" style="left: 79.70%; width: 20.30%; background: #95a5a6;">MS010-OPS027🔴</div>
+      <div class="gantt-bar" style="left: 86.57%; width: 3.81%; background: #95a5a6;">MS010-OPS021🔴</div>
+      <div class="gantt-bar" style="left: 99.26%; width: 0.74%; background: #95a5a6;">MS010-OPS024🔴</div>
+    </div>
+  </div>
+</div>
+<div class="resource-group">
+  <div class="resource-header">
+    SPACE_LIGHT_001 <span class="resource-tag tag-none">SPACE_LIGHT_001</span>
+    <span style="margin-left:auto; font-size:12px; color:#666;">5个活动 | 总占用156.2h | 🟠 中利用率</span>
+  </div>
+  <div class="gantt-row">
+    <div class="gantt-label" style="width:180px;">MS010-OPS005, MS010-OPS008, MS010-OPS009, MS010-OPS010, MS010-OPS023</div>
+    <div class="gantt-bar-container">
+      <div class="gantt-bar" style="left: 28.97%; width: 3.17%; background: #95a5a6;">MS010-OPS005🔴</div>
+      <div class="gantt-bar" style="left: 32.14%; width: 3.64%; background: #95a5a6;">MS010-OPS008🔴</div>
+      <div class="gantt-bar" style="left: 35.78%; width: 11.00%; background: #95a5a6;">MS010-OPS009🔴</div>
+      <div class="gantt-bar" style="left: 74.62%; width: 8.88%; background: #95a5a6;">MS010-OPS010🔴</div>
+      <div class="gantt-bar" style="left: 92.92%; width: 6.34%; background: #95a5a6;">MS010-OPS023🔴</div>
+    </div>
+  </div>
+</div>
+<div class="resource-group">
+  <div class="resource-header">
+    SPACE_DOWN_001 <span class="resource-tag tag-none">SPACE_DOWN_001</span>
+    <span style="margin-left:auto; font-size:12px; color:#666;">4个活动 | 总占用127.7h | 🟠 中利用率</span>
+  </div>
+  <div class="gantt-row">
+    <div class="gantt-label" style="width:180px;">MS010-OPS012, MS010-OPS013, MS010-OPS014, MS010-OPS025</div>
+    <div class="gantt-bar-container">
+      <div class="gantt-bar" style="left: 46.78%; width: 7.40%; background: #95a5a6;">MS010-OPS012🔴</div>
+      <div class="gantt-bar" style="left: 54.18%; width: 3.38%; background: #95a5a6;">MS010-OPS013🔴</div>
+      <div class="gantt-bar" style="left: 57.56%; width: 4.86%; background: #95a5a6;">MS010-OPS014🔴</div>
+      <div class="gantt-bar" style="left: 62.42%; width: 11.36%; background: #95a5a6;">MS010-OPS025🔴</div>
+    </div>
+  </div>
+</div>
+<div class="resource-group">
+  <div class="resource-header">
+    SPACE_R_001 <span class="resource-tag tag-none">SPACE_R_001</span>
+    <span style="margin-left:auto; font-size:12px; color:#666;">2个活动 | 总占用89.0h | 🟢 低利用率</span>
+  </div>
+  <div class="gantt-row">
+    <div class="gantt-label" style="width:180px;">MS010-OPS003, MS010-OPS004</div>
+    <div class="gantt-bar-container">
+      <div class="gantt-bar" style="left: 10.15%; width: 6.98%; background: #95a5a6;">MS010-OPS003🔴</div>
+      <div class="gantt-bar" style="left: 17.13%; width: 11.84%; background: #95a5a6;">MS010-OPS004🔴</div>
+    </div>
+  </div>
+</div>
+<div class="resource-group">
+  <div class="resource-header">
+    SPACE_FRONT_001 <span class="resource-tag tag-none">SPACE_FRONT_001</span>
+    <span style="margin-left:auto; font-size:12px; color:#666;">2个活动 | 总占用87.1h | 🟢 低利用率</span>
+  </div>
+  <div class="gantt-row">
+    <div class="gantt-label" style="width:180px;">MS010-OPS019, MS010-OPS020</div>
+    <div class="gantt-bar-container">
+      <div class="gantt-bar" style="left: 52.44%; width: 6.94%; background: #95a5a6;">MS010-OPS019</div>
+      <div class="gantt-bar" style="left: 75.09%; width: 11.48%; background: #95a5a6;">MS010-OPS020🔴</div>
+    </div>
+  </div>
+</div>
+<div class="resource-group">
+  <div class="resource-header">
+    WORKER <span class="resource-tag tag-worker">工人</span>
+    <span style="margin-left:auto; font-size:12px; color:#666;">2个活动 | 总占用85.5h | 🟢 低利用率</span>
+  </div>
+  <div class="gantt-row">
+    <div class="gantt-label" style="width:180px;">MS010-OPS001, MS010-OPS011</div>
+    <div class="gantt-bar-container">
+      <div class="gantt-bar" style="left: 0.00%; width: 1.59%; background: #37474F;">MS010-OPS001🔴</div>
+      <div class="gantt-bar" style="left: 83.51%; width: 16.49%; background: #37474F;">MS010-OPS011🔴</div>
+    </div>
+  </div>
+</div>
+<div class="resource-group">
+  <div class="resource-header">
+    CRANE <span class="resource-tag tag-crane">行吊</span>
+    <span style="margin-left:auto; font-size:12px; color:#666;">1个活动 | 总占用40.5h | 🟢 低利用率</span>
+  </div>
+  <div class="gantt-row">
+    <div class="gantt-label" style="width:180px;">MS010-OPS002</div>
+    <div class="gantt-bar-container">
+      <div class="gantt-bar" style="left: 1.59%; width: 8.56%; background: #263238;">MS010-OPS002🔴</div>
+    </div>
+  </div>
+</div>
+<div class="resource-group">
+  <div class="resource-header">
+    SPACE_UP_001 <span class="resource-tag tag-none">SPACE_UP_001</span>
+    <span style="margin-left:auto; font-size:12px; color:#666;">2个活动 | 总占用31.0h | 🟢 低利用率</span>
+  </div>
+  <div class="gantt-row">
+    <div class="gantt-label" style="width:180px;">MS010-OPS017, MS010-OPS022</div>
+    <div class="gantt-bar-container">
+      <div class="gantt-bar" style="left: 28.97%; width: 4.02%; background: #95a5a6;">MS010-OPS017</div>
+      <div class="gantt-bar" style="left: 90.38%; width: 2.54%; background: #95a5a6;">MS010-OPS022🔴</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<h2>📊 Resource Utilization</h2>
+<div class="gantt-container">
+<table class="stats-table">
+  <thead>
+    <tr>
+      <th>Resource Type</th>
+      <th>Activities</th>
+      <th>Total Time</th>
+      <th>Utilization</th>
+      <th>Visualization</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="resource-tag tag-none">SPACE_OUT_001 SPACE_OUT_001</span></td>
+      <td>9</td>
+      <td>290.0h</td>
+      <td style="color:#c62828; font-weight:600;">🔴 高</td>
+      <td><div class="progress-bar"><div class="progress-fill high" style="width: 100%">100%</div></div></td>
+    </tr>
+    <tr>
+      <td><span class="resource-tag tag-none">SPACE_LIGHT_001 SPACE_LIGHT_001</span></td>
+      <td>5</td>
+      <td>156.2h</td>
+      <td style="color:#ef6c00; font-weight:600;">🟠 中</td>
+      <td><div class="progress-bar"><div class="progress-fill medium" style="width: 53%">53%</div></div></td>
+    </tr>
+    <tr>
+      <td><span class="resource-tag tag-none">SPACE_DOWN_001 SPACE_DOWN_001</span></td>
+      <td>4</td>
+      <td>127.7h</td>
+      <td style="color:#ef6c00; font-weight:600;">🟠 中</td>
+      <td><div class="progress-bar"><div class="progress-fill medium" style="width: 44%">44%</div></div></td>
+    </tr>
+    <tr>
+      <td><span class="resource-tag tag-none">SPACE_R_001 SPACE_R_001</span></td>
+      <td>2</td>
+      <td>89.0h</td>
+      <td style="color:#2e7d32; font-weight:600;">🟢 低</td>
+      <td><div class="progress-bar"><div class="progress-fill low" style="width: 30%">30%</div></div></td>
+    </tr>
+    <tr>
+      <td><span class="resource-tag tag-none">SPACE_FRONT_001 SPACE_FRONT_001</span></td>
+      <td>2</td>
+      <td>87.1h</td>
+      <td style="color:#2e7d32; font-weight:600;">🟢 低</td>
+      <td><div class="progress-bar"><div class="progress-fill low" style="width: 30%">30%</div></div></td>
+    </tr>
+    <tr>
+      <td><span class="resource-tag tag-worker">WORKER 工人</span></td>
+      <td>2</td>
+      <td>85.5h</td>
+      <td style="color:#2e7d32; font-weight:600;">🟢 低</td>
+      <td><div class="progress-bar"><div class="progress-fill low" style="width: 29%">29%</div></div></td>
+    </tr>
+    <tr>
+      <td><span class="resource-tag tag-crane">CRANE 行吊</span></td>
+      <td>1</td>
+      <td>40.5h</td>
+      <td style="color:#2e7d32; font-weight:600;">🟢 低</td>
+      <td><div class="progress-bar"><div class="progress-fill low" style="width: 13%">13%</div></div></td>
+    </tr>
+    <tr>
+      <td><span class="resource-tag tag-none">SPACE_UP_001 SPACE_UP_001</span></td>
+      <td>2</td>
+      <td>31.0h</td>
+      <td style="color:#2e7d32; font-weight:600;">🟢 低</td>
+      <td><div class="progress-bar"><div class="progress-fill low" style="width: 10%">10%</div></div></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2>⚠️ Risk Alerts</h2>
+<div class="gantt-container">
+
+<div class="warning-box critical">
+  <h4>🔴 SPACE_OUT_001 Resource Bottleneck</h4>
+  <p>9 activities share "SPACE_OUT_001" space, utilization 100%. Critical path activities on this resource directly impact total makespan.</p>
+</div>
+
+<div class="warning-box critical">
+  <h4>🔴 Long Duration Activities</h4>
+  <p>MS010-OPS027 (96.0h) and MS010-OPS018 (92.0h) are the longest activities. Any delay on these directly extends the total makespan.</p>
+</div>
+
+<div class="warning-box info">
+  <h4>ℹ️ Critical Path Note</h4>
+  <p>Critical path is computed using the new <strong>ScheduleGraph</strong> architecture, combining logical edges (from Planner) and resource edges (from Scheduler). This gives a resource-aware critical path that correctly identifies bottlenecks caused by resource contention.</p>
+</div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-border"></div> Critical Path (red border)</div>
+  <div class="legend-item"><div class="legend-color" style="background: #1565C0;"></div> SPACE_R (主机台右侧维护位)</div>
+  <div class="legend-item"><div class="legend-color" style="background: #00838F;"></div> SPACE_LIGHT (光源工作位)</div>
+  <div class="legend-item"><div class="legend-color" style="background: #2E7D32;"></div> SPACE_OUT (主机台中部-腔外)</div>
+  <div class="legend-item"><div class="legend-color" style="background: #F57C00;"></div> SPACE_DOWN (主机台中部-下腔内)</div>
+  <div class="legend-item"><div class="legend-color" style="background: #6A1B9A;"></div> SPACE_FRONT (主机台前部)</div>
+  <div class="legend-item"><div class="legend-color" style="background: #455A64;"></div> SPACE_UP (主机台中部-上腔内)</div>
+  <div class="legend-item"><div class="legend-color" style="background: #37474F;"></div> WORKER (工人)</div>
+  <div class="legend-item"><div class="legend-color" style="background: #263238;"></div> CRANE (行吊)</div>
+  <div class="legend-item"><div class="legend-color" style="background: #78909C;"></div> No Space Constraint</div>
+</div>
+
+<div style="text-align: center; padding: 30px; color: #999; font-size: 12px;">
+  Generated by ScheduleGraph Report Generator | OpenClaw Agent | 2026-05-19 12:02
+</div>
+
+<script>
+const nodes = new vis.DataSet([{"id": 1, "label": "MS010-OPS001\n集成入口条件检查 🔴", "title": "集成入口条件检查\nDuration: 450min\nResource: NONE\n🔴 Critical Path", "color": {"background": "#78909C", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 2, "label": "MS010-OPS002\n机台安装前准备 🔴", "title": "机台安装前准备\nDuration: 2430min\nResource: NONE\n🔴 Critical Path", "color": {"background": "#78909C", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 3, "label": "MS010-OPS003\n主机中部模块安装前准备 🔴", "title": "主机中部模块安装前准备\nDuration: 1980min\nResource: SPACE_R_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 4, "label": "MS010-OPS004\n主机中部模块安装 🔴", "title": "主机中部模块安装\nDuration: 3360min\nResource: SPACE_R_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 5, "label": "MS010-OPS005\n顶部拖链模块主体安装 🔴", "title": "顶部拖链模块主体安装\nDuration: 900min\nResource: SPACE_LIGHT_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 17, "label": "MS010-OPS017\n顶部计量框架安装", "title": "顶部计量框架安装\nDuration: 1140min\nResource: SPACE_UP_001", "color": {"background": "#95a5a6", "border": "#2c3e50"}, "borderWidth": 2, "shape": "box", "font": {"size": 10, "color": "#333"}},{"id": 8, "label": "MS010-OPS008\n光源导轨精调节 🔴", "title": "光源导轨精调节\nDuration: 1032min\nResource: SPACE_LIGHT_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 18, "label": "MS010-OPS018\n中框公共线缆布线", "title": "中框公共线缆布线\nDuration: 5520min\nResource: SPACE_OUT_001", "color": {"background": "#95a5a6", "border": "#2c3e50"}, "borderWidth": 2, "shape": "box", "font": {"size": 10, "color": "#333"}},{"id": 9, "label": "MS010-OPS009\n光源连接模块安装与调节 🔴", "title": "光源连接模块安装与调节\nDuration: 3120min\nResource: SPACE_LIGHT_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 12, "label": "MS010-OPS012\n动态气体开关安装 🔴", "title": "动态气体开关安装\nDuration: 2100min\nResource: SPACE_DOWN_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 22, "label": "MS010-OPS019\n大气机械臂2安装与调节", "title": "大气机械臂2安装与调节\nDuration: 1968min\nResource: SPACE_FRONT_001", "color": {"background": "#95a5a6", "border": "#2c3e50"}, "borderWidth": 2, "shape": "box", "font": {"size": 10, "color": "#333"}},{"id": 13, "label": "MS010-OPS013\n光学传感器组件安装 🔴", "title": "光学传感器组件安装\nDuration: 960min\nResource: SPACE_DOWN_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 14, "label": "MS010-OPS014\n热屏蔽板安装 🔴", "title": "热屏蔽板安装\nDuration: 1380min\nResource: SPACE_DOWN_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 19, "label": "MS010-OPS025\n底部运动台安装 🔴", "title": "底部运动台安装\nDuration: 3222min\nResource: SPACE_DOWN_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 6, "label": "MS010-OPS006\n供气盒模块安装 🔴", "title": "供气盒模块安装\nDuration: 1740min\nResource: SPACE_OUT_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 15, "label": "MS010-OPS015\n中框气体分析模块安装 🔴", "title": "中框气体分析模块安装\nDuration: 810min\nResource: SPACE_OUT_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 7, "label": "MS010-OPS007\n中框真空系统前级管路安装 🔴", "title": "中框真空系统前级管路安装\nDuration: 420min\nResource: SPACE_OUT_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 16, "label": "MS010-OPS016\n机械臂1推入恢复 🔴", "title": "机械臂1推入恢复\nDuration: 180min\nResource: SPACE_OUT_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 20, "label": "MS010-OPS026\n整机管路安装 🔴", "title": "整机管路安装\nDuration: 1680min\nResource: SPACE_OUT_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 10, "label": "MS010-OPS010\n光源主体对准 🔴", "title": "光源主体对准\nDuration: 2520min\nResource: SPACE_LIGHT_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 23, "label": "MS010-OPS020\n真空机械臂2安装与调节 🔴", "title": "真空机械臂2安装与调节\nDuration: 3258min\nResource: SPACE_FRONT_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 21, "label": "MS010-OPS027\n外防护安装 🔴", "title": "外防护安装\nDuration: 5760min\nResource: SPACE_OUT_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 11, "label": "MS010-OPS011\n光源组件对准 🔴", "title": "光源组件对准\nDuration: 4680min\nResource: NONE\n🔴 Critical Path", "color": {"background": "#78909C", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 24, "label": "MS010-OPS021\n机械支柱安装 🔴", "title": "机械支柱安装\nDuration: 1080min\nResource: SPACE_OUT_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 25, "label": "MS010-OPS022\n顶部运动台安装与调节 🔴", "title": "顶部运动台安装与调节\nDuration: 720min\nResource: SPACE_UP_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 26, "label": "MS010-OPS023\n顶部拖链模块及机械支柱功 🔴", "title": "顶部拖链模块及机械支柱功能调试安装\nDuration: 1800min\nResource: SPACE_LIGHT_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}},{"id": 27, "label": "MS010-OPS024\n顶部区域真空抽排管路安装 🔴", "title": "顶部区域真空抽排管路安装\nDuration: 210min\nResource: SPACE_OUT_001\n🔴 Critical Path", "color": {"background": "#95a5a6", "border": "#e74c3c"}, "borderWidth": 4, "shape": "box", "font": {"size": 10, "color": "white"}}]);
+const edges = new vis.DataSet([{"from": 1, "to": 2, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 2, "to": 3, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 3, "to": 4, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 4, "to": 5, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 4, "to": 17, "arrows": "to", "color": {"color": "#7f8c8d"}, "width": 1},{"from": 4, "to": 8, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 5, "to": 8, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 17, "to": 18, "arrows": "to", "color": {"color": "#7f8c8d"}, "width": 1},{"from": 8, "to": 9, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 9, "to": 12, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 4, "to": 12, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 18, "to": 22, "arrows": "to", "color": {"color": "#7f8c8d"}, "width": 1},{"from": 12, "to": 13, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 13, "to": 14, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 14, "to": 19, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 5, "to": 6, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 4, "to": 15, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 6, "to": 7, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 15, "to": 16, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 4, "to": 16, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 19, "to": 20, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 16, "to": 20, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 9, "to": 10, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 7, "to": 10, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 22, "to": 23, "arrows": "to", "color": {"color": "#7f8c8d"}, "width": 1},{"from": 20, "to": 21, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 10, "to": 11, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 23, "to": 24, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 24, "to": 25, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 25, "to": 26, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3},{"from": 26, "to": 27, "arrows": "to", "color": {"color": "#e74c3c"}, "width": 3}]);
+const container = document.getElementById('network');
+const data = { nodes: nodes, edges: edges };
+const options = {
+  layout: {
+    hierarchical: {
+      direction: 'LR',
+      sortMethod: 'directed',
+      levelSeparation: 150,
+      nodeSpacing: 120
+    }
+  },
+  physics: { enabled: false },
+  nodes: {
+    shadow: true,
+    margin: 8
+  },
+  edges: {
+    smooth: {
+      type: 'cubicBezier',
+      forceDirection: 'horizontal'
+    }
+  }
+};
+new vis.Network(container, data, options);
+</script>
+</body>
+</html>

@@ -2,14 +2,14 @@
 
 > 描述当前代码实现的模块职责、输入输出契约和模块间数据流。以仓库现状为准。
 >
-> **上层文档**：[`../ANCHOR.md`](../ANCHOR.md)（系统宪法） · [`../STATE_V0.2.md`](../STATE_V0.2.md)（当前版本快照） · [`../v0.2-spec.md`](../v0.2-spec.md)（v0.2 规格书）
+> **上层文档**：[`../ANCHOR.md`](../ANCHOR.md)（系统宪法） · [`../STATE_V0.3.md`](../STATE_V0.3.md)（当前版本快照） · 最新 `../TICKET_*.md`（任务工单）
 
 ## 模块列表
 
 | 模块 | 目录 | 文档 | 说明 |
 |------|------|------|------|
-| Planner | `app/core/planner/` | [planner.md](./planner.md) | 基于状态差异和 precondition/effect 链构建 RAG |
-| Scheduler | `app/core/scheduler/` | [scheduler.md](./scheduler.md) | 基于 RAG 和资源容量做 CP-SAT 排程 |
+| Planner | `app/core/planner/` | [planner.md](./planner.md) | 基于正向 BFS 状态搜索和 precondition/effect 链构建 RAG |
+| Scheduler | `app/core/scheduler/` | [scheduler.md](./scheduler.md) | 基于 RAG、多资源需求和资源容量做 CP-SAT 排程 |
 | API | `app/api/v1/` | [api.md](./api.md) | 对外 HTTP 接口（求解 + 主数据维护） |
 | DB | `app/db/` | [db.md](./db.md) | ORM 模型、Schema 与共享数据契约 |
 

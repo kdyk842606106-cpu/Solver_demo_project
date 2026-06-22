@@ -14,6 +14,8 @@ metadata:
 - Archive the current STATE and completed TICKETs
 - Bootstrap the next version's STATE document
 - Propose the first TICKET for the new version
+- Preserve references to any relevant global superpowers specs and plans across
+  the version boundary
 
 ## When to use me
 
@@ -70,6 +72,10 @@ Create `docs/STATE_VX+1.md` with the standard structure:
 6. **当前已知问题**: Empty, ready for new entries
 7. **深入参考**: Updated links
 
+If there are still relevant approved specs or unfinished plans under
+`docs/superpowers/`, carry forward references to them in the new STATE file's
+reference or notes sections instead of losing that execution context.
+
 ### Step 6: Check ANCHOR.md
 
 Ask the user: "ANCHOR.md 是否需要更新？（99% 情况下不需要）"
@@ -82,6 +88,22 @@ If modified, add a dated change note at the top.
 Propose and create `docs/TICKET_XXX.md` for the first task of the new version,
 derived from the new STATE document's STEP 1 items.
 
+If a valid approved spec or unfinished plan already exists for the new version,
+prefer deriving the first TICKET from that artifact rather than inventing a new
+scope from scratch.
+
+### Step 8: Reconcile project context with global workflows
+
+Before finishing cutover, verify these alignment rules:
+
+- Archived version documents still point to the superpowers artifacts they used
+  when those references matter for traceability
+- The new STATE references any carried-forward spec or plan that remains active
+- No outdated plan is presented as current if the version boundary invalidated
+  it; mark it superseded instead
+- The first TICKET for the new version clearly states whether the next session
+  should start with `brainstorming`, `writing-plans`, or `executing-plans`
+
 ## Output summary
 
 After all steps complete, output:
@@ -92,9 +114,13 @@ After all steps complete, output:
   归档：TICKET_XXX~YYY → archive/
   新建：STATE_VX+1.md
   新建：TICKET_ZZZ.md (首个任务)
+  superpowers：已校准相关 spec/plan 引用
 
 下一步：运行 /session-start 开始新版本开发
 ```
+
+If no superpowers artifact needs carrying forward, state that explicitly in the
+summary rather than omitting the check.
 
 ## File paths reference
 
@@ -103,4 +129,6 @@ docs/STATE_V*.md         — current state (to be archived)
 docs/TICKET_*.md         — active tickets (to be archived)
 docs/archive/            — destination for archives
 docs/ANCHOR.md           — check if update needed (rare)
+docs/superpowers/specs/   — specs that may remain relevant across versions
+docs/superpowers/plans/   — plans that may need carry-forward or superseding
 ```

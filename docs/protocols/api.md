@@ -30,7 +30,15 @@
   "current_state_id": 1,
   "target_state_id": 2,
   "objective": "minimize_makespan",
-  "overrides": null
+  "objectives": [
+    {
+      "type": "minimize_makespan",
+      "weight": 1.0
+    }
+  ],
+  "parent_plan_id": null,
+  "overrides": null,
+  "blockage_constraints": null
 }
 ```
 
@@ -42,7 +50,10 @@
 | `current_state_id` | `int` | 必须存在于 `machine_state` 表，且属于该机台 |
 | `target_state_id` | `int` | 必须存在于 `machine_state` 表，且属于该机台 |
 | `objective` | `string` | 当前仅支持 `minimize_makespan` |
+| `objectives` | `array \| null` | 目标数组；当前仍以 `minimize_makespan` 为完整实现，`weight` 尚未形成真实多目标加权 |
+| `parent_plan_id` | `int \| null` | 阻塞重排/版本链的父计划 ID |
 | `overrides` | `object \| null` | 透传保存到 `solve_request.overrides`，当前求解逻辑未消费 |
+| `blockage_constraints` | `object \| null` | 阻塞策略输入，支持 `strategy=A/B/AB`、实例级 `blocked_step_id`、兼容用 `blocked_op_rule_id`、`strategy_a.not_before_offset`、`strategy_b.blockage_reason` |
 
 ### 成功响应
 
@@ -51,24 +62,72 @@
   "solve_request_id": 42,
   "status": "done",
   "candidate_plan_id": 7,
+  "state_delta": [
+    {
+      "feature_key": "calibration",
+      "from_value": "off",
+      "to_value": "on"
+    }
+  ],
+  "critical_path": ["OP_WARMUP", "OP_CALIBRATE"],
   "schedule": {
     "makespan": 45,
     "tasks": [
       {
-        "step": 1,
-        "op_code": "OP_WARMUP",
-        "start": 0,
-        "end": 30,
-        "resource": "TECH-01",
-        "predecessors": []
+        "step_order": 1,
+        "step_id": 100,
+        "op_rule_id": 3,
+        "op_rule_code": "OP_WARMUP",
+        "op_rule_name": "Warm up",
+        "start_min": 0,
+        "end_min": 30,
+        "duration_min": 30,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "TECH-01",
+            "resource_type": "TECHNICIAN",
+            "quantity": 1
+          }
+        ],
+        "resource_type": "TECHNICIAN",
+        "resource_reqs": [
+          {
+            "resource_type": "TECHNICIAN",
+            "quantity": 1
+          }
+        ],
+        "predecessors": [],
+        "not_before": null,
+        "step_role": "normal"
       },
       {
-        "step": 2,
-        "op_code": "OP_CALIBRATE",
-        "start": 30,
-        "end": 45,
-        "resource": "TECH-02",
-        "predecessors": [1]
+        "step_order": 2,
+        "step_id": 101,
+        "op_rule_id": 4,
+        "op_rule_code": "OP_CALIBRATE",
+        "op_rule_name": "Calibrate",
+        "start_min": 30,
+        "end_min": 45,
+        "duration_min": 15,
+        "resources": [
+          {
+            "resource_id": 2,
+            "resource_code": "TECH-02",
+            "resource_type": "TECHNICIAN",
+            "quantity": 1
+          }
+        ],
+        "resource_type": "TECHNICIAN",
+        "resource_reqs": [
+          {
+            "resource_type": "TECHNICIAN",
+            "quantity": 1
+          }
+        ],
+        "predecessors": [1],
+        "not_before": null,
+        "step_role": "normal"
       }
     ],
     "parallel_groups": []
@@ -98,6 +157,7 @@
 | `CIRCULAR_DEPENDENCY` | Planner | 构建出的依赖图存在环 |
 | `INFEASIBLE` | Scheduler | 资源约束无法满足 |
 | `SOLVER_TIMEOUT` | Scheduler | 当前实现里仅在 Scheduler 返回非 `infeasible` 且非 `optimal/feasible` 时由 API 映射 |
+| `AMBIGUOUS_BLOCKED_STEP` | API 阻塞定位 | 旧调用只传 `blocked_op_rule_id` 且命中多个重复步骤，必须改传实例级 `blocked_step_id` |
 | `INTERNAL_ERROR` | Planner / 全局异常 | 未预期错误 |
 
 ### 参数错误响应
@@ -119,17 +179,20 @@
 3. 调用 Planner.build_rag(...)
 4. 失败则更新 solve_request.status=failed 并返回业务失败
 5. 成功后调用 Planner.save_candidate_plan(...)
-6. 调用 Scheduler.solve_schedule(...)
-7. 成功则调用 Scheduler.save_schedule_result(...)
-8. 更新 solve_request.status=done，写入 solved_at
-9. 组装精简 schedule 响应
+6. 如有 Strategy A/AB，优先按 `blocked_step_id` 精确定位新计划中的实例并写入 `not_before`
+7. 如有阻塞策略，记录 `blockage_event`
+8. 调用 Scheduler.solve_schedule(...)
+9. 成功则调用 Scheduler.save_schedule_result(...)
+10. 调用 `compute_step_role_diff(...)` 标记 normal/repair/pulled_forward/delayed
+11. 更新 solve_request.status=done，写入 solved_at
+12. 组装包含 `state_delta`、`critical_path`、完整 task 资源信息的响应
 ```
 
 注意：
 
 - 当前代码不会先创建 `pending` 再改为 `running`
-- 返回给客户端的 `schedule.tasks` 是精简结构
-- 持久化到 `schedule_result.tasks` 的结构比 API 返回更完整
+- 返回给客户端的 `schedule.tasks` 已包含 `step_id`、`resource_reqs`、完整 `resources`、`not_before`、`step_role`
+- 持久化到 `schedule_result.tasks` 的结构与 API 返回的排程字段基本一致，但不包含后置查询得到的 `step_id/step_role`
 
 ## `GET /api/v1/solve-requests/{request_id}`
 
@@ -242,3 +305,69 @@
 覆盖端点：`/api/v1/machine-types`、`/machines`、`/states`、`/op-rules`、`/resources` 及其子资源。
 
 详细接口格式请查阅 Swagger UI (`/docs`) 或直接阅读 `master_data.py` 源码。
+---
+
+## 计划中：业务场景导入 API（TICKET-012）
+
+TICKET-012 已重新设计为“业务场景导入包”，用于支撑真实端到端测试数据装载。该能力尚未实现，API 契约先冻结如下：
+
+### `POST /api/v1/imports/scenario`
+
+请求类型：`multipart/form-data`
+
+字段：
+
+- `file`：`.xlsx` 场景文件
+- `mode`：固定为 `scenario_upsert`
+- `dry_run`：`true | false`
+
+语义：
+
+- `dry_run=true` 只解析和校验，不写数据库。
+- `dry_run=false` 使用 strict upsert 单事务导入，任意错误整批回滚。
+- 导入范围覆盖 feature catalog、machine type、machine、state feature defs、resources、rules、states、solve cases。
+
+响应结构：
+
+```json
+{
+  "status": "validated",
+  "summary": {
+    "scenario_code": "AFA_E2E_001",
+    "dry_run": true,
+    "error_count": 0,
+    "rules_total": 120,
+    "resources_total": 18,
+    "states_total": 2,
+    "solve_cases_total": 1
+  },
+  "preview": {
+    "rules": {"create": 100, "update": 20},
+    "resources": {"create": 18, "update": 0}
+  },
+  "solve_cases": [
+    {
+      "case_code": "AFA_FULL_FLOW",
+      "machine_code": "AFA-001",
+      "current_state_code": "START",
+      "target_state_code": "TARGET"
+    }
+  ],
+  "errors": []
+}
+```
+
+错误项：
+
+```json
+{
+  "sheet": "rules",
+  "row": 12,
+  "field": "effects",
+  "message": "Unknown feature_key: wing_joined"
+}
+```
+
+### `GET /api/v1/imports/scenario-template`
+
+返回带中文 `instructions` sheet 的 `.xlsx` 模板。

@@ -11,12 +11,14 @@ from typing import Optional
 from sqlalchemy import (
     ARRAY,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -57,6 +59,18 @@ class MachineType(Base):
     op_rules: Mapped[list["OpRule"]] = relationship(
         "OpRule", back_populates="machine_type", cascade="all, delete-orphan"
     )
+    activity_nodes: Mapped[list["ActivityNode"]] = relationship(
+        "ActivityNode", back_populates="machine_type", cascade="all, delete-orphan"
+    )
+    atomic_activities: Mapped[list["AtomicActivity"]] = relationship(
+        "AtomicActivity", back_populates="machine_type", cascade="all, delete-orphan"
+    )
+    state_nodes: Mapped[list["StateNode"]] = relationship(
+        "StateNode", back_populates="machine_type", cascade="all, delete-orphan"
+    )
+    maintenance_intent_templates: Mapped[list["MaintenanceIntentTemplate"]] = relationship(
+        "MaintenanceIntentTemplate", back_populates="machine_type", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<MachineType(id={self.id}, code='{self.code}', name='{self.name}')>"
@@ -91,6 +105,9 @@ class Machine(Base):
     )
     solve_requests: Mapped[list["SolveRequest"]] = relationship(
         "SolveRequest", back_populates="machine", cascade="all, delete-orphan"
+    )
+    resources: Mapped[list["Resource"]] = relationship(
+        "Resource", back_populates="machine", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:
@@ -197,6 +214,12 @@ class OpRule(Base):
     machine_type_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("machine_type.id", ondelete="CASCADE"), nullable=False
     )
+    activity_node_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("activity_node.id", ondelete="SET NULL"), nullable=True
+    )
+    atomic_activity_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("atomic_activity.id", ondelete="SET NULL"), nullable=True
+    )
     code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     duration_min: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
@@ -221,6 +244,12 @@ class OpRule(Base):
     )
     resource_reqs: Mapped[list["OpRuleResourceReq"]] = relationship(
         "OpRuleResourceReq", back_populates="op_rule", cascade="all, delete-orphan"
+    )
+    activity_node: Mapped[Optional["ActivityNode"]] = relationship(
+        "ActivityNode", back_populates="op_rules"
+    )
+    atomic_activity: Mapped[Optional["AtomicActivity"]] = relationship(
+        "AtomicActivity", back_populates="op_rules"
     )
 
     def __repr__(self) -> str:
@@ -314,14 +343,22 @@ class Resource(Base):
     """
 
     __tablename__ = "resource"
+    __table_args__ = (
+        UniqueConstraint("machine_id", "code", name="uq_resource_machine_code"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    machine_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("machine.id", ondelete="CASCADE"), nullable=False
+    )
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     resource_type: Mapped[str] = mapped_column(String(64), nullable=False)
     capacity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     is_available: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     meta: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+
+    machine: Mapped["Machine"] = relationship("Machine", back_populates="resources")
 
     def __repr__(self) -> str:
         return f"<Resource(id={self.id}, code='{self.code}', name='{self.name}', resource_type='{self.resource_type}')>"
@@ -344,6 +381,291 @@ class FeatureDefinition(Base):
 
     def __repr__(self) -> str:
         return f"<FeatureDefinition(feature_key='{self.feature_key}', value_type='{self.value_type}')>"
+
+
+# ============================================================
+# 分层活动 / 分层状态（Phase 1 数据底座）
+# ============================================================
+
+
+class ActivityNode(Base):
+    """
+    活动层级节点表.
+
+    一级 / 二级节点用于业务组织、Scope Guard 和展示；三级节点可关联
+    OpRule，作为最终可执行活动的业务归属。
+    """
+
+    __tablename__ = "activity_node"
+    __table_args__ = (
+        CheckConstraint("level IN (1, 2, 3)", name="ck_activity_node_level"),
+        UniqueConstraint("machine_type_id", "code", name="uq_activity_node_machine_type_code"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    machine_type_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("machine_type.id", ondelete="CASCADE"), nullable=False
+    )
+    parent_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("activity_node.id", ondelete="CASCADE"), nullable=True
+    )
+    level: Mapped[int] = mapped_column(Integer, nullable=False)
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    activity_category: Mapped[str] = mapped_column(String(32), nullable=False, default="normal")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    metadata_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    machine_type: Mapped["MachineType"] = relationship(
+        "MachineType", back_populates="activity_nodes"
+    )
+    parent: Mapped[Optional["ActivityNode"]] = relationship(
+        "ActivityNode", remote_side=[id], back_populates="children"
+    )
+    children: Mapped[list["ActivityNode"]] = relationship(
+        "ActivityNode", back_populates="parent", cascade="all, delete-orphan"
+    )
+    op_rules: Mapped[list["OpRule"]] = relationship(
+        "OpRule", back_populates="activity_node"
+    )
+    scope_guards: Mapped[list["ScopeGuard"]] = relationship(
+        "ScopeGuard", back_populates="activity_node", cascade="all, delete-orphan"
+    )
+    atomic_refs: Mapped[list["ActivityPackageAtomicRef"]] = relationship(
+        "ActivityPackageAtomicRef", back_populates="activity_node", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self) -> str:
+        return f"<ActivityNode(id={self.id}, level={self.level}, code='{self.code}')>"
+
+
+class AtomicActivity(Base):
+    """
+    可复用原子活动定义.
+
+    原子活动是真正可执行的能力；二级活动包通过引用表复用它。
+    """
+
+    __tablename__ = "atomic_activity"
+    __table_args__ = (
+        UniqueConstraint("machine_type_id", "code", name="uq_atomic_activity_machine_type_code"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    machine_type_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("machine_type.id", ondelete="CASCADE"), nullable=False
+    )
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    activity_category: Mapped[str] = mapped_column(String(32), nullable=False, default="normal")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    metadata_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    machine_type: Mapped["MachineType"] = relationship(
+        "MachineType", back_populates="atomic_activities"
+    )
+    package_refs: Mapped[list["ActivityPackageAtomicRef"]] = relationship(
+        "ActivityPackageAtomicRef", back_populates="atomic_activity", cascade="all, delete-orphan"
+    )
+    op_rules: Mapped[list["OpRule"]] = relationship(
+        "OpRule", back_populates="atomic_activity"
+    )
+
+    def __repr__(self) -> str:
+        return f"<AtomicActivity(id={self.id}, code='{self.code}')>"
+
+
+class ActivityPackageAtomicRef(Base):
+    """二级活动包到原子活动的复用引用."""
+
+    __tablename__ = "activity_package_atomic_ref"
+    __table_args__ = (
+        UniqueConstraint("activity_node_id", "atomic_activity_id", name="uq_activity_package_atomic_ref"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    activity_node_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("activity_node.id", ondelete="CASCADE"), nullable=False
+    )
+    atomic_activity_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("atomic_activity.id", ondelete="RESTRICT"), nullable=False
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    metadata_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    activity_node: Mapped["ActivityNode"] = relationship(
+        "ActivityNode", back_populates="atomic_refs"
+    )
+    atomic_activity: Mapped["AtomicActivity"] = relationship(
+        "AtomicActivity", back_populates="package_refs"
+    )
+
+    def __repr__(self) -> str:
+        return f"<ActivityPackageAtomicRef(activity_node_id={self.activity_node_id}, atomic_activity_id={self.atomic_activity_id})>"
+
+
+class StateNode(Base):
+    """
+    状态层级节点表.
+
+    一级 / 二级状态为聚合状态；三级状态为可判定叶子状态。
+    """
+
+    __tablename__ = "state_node"
+    __table_args__ = (
+        CheckConstraint("level >= 1", name="ck_state_node_level_positive"),
+        UniqueConstraint("machine_type_id", "code", name="uq_state_node_machine_type_code"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    machine_type_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("machine_type.id", ondelete="CASCADE"), nullable=False
+    )
+    parent_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("state_node.id", ondelete="CASCADE"), nullable=True
+    )
+    level: Mapped[int] = mapped_column(Integer, nullable=False)
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    feature_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    operator: Mapped[str] = mapped_column(String(16), nullable=False, default="eq")
+    target_value: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    state_kind: Mapped[str] = mapped_column(String(32), nullable=False, default="aggregate")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    metadata_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    machine_type: Mapped["MachineType"] = relationship(
+        "MachineType", back_populates="state_nodes"
+    )
+    parent: Mapped[Optional["StateNode"]] = relationship(
+        "StateNode", remote_side=[id], back_populates="children"
+    )
+    children: Mapped[list["StateNode"]] = relationship(
+        "StateNode", back_populates="parent", cascade="all, delete-orphan"
+    )
+    scope_guard_preconditions: Mapped[list["ScopeGuardPrecond"]] = relationship(
+        "ScopeGuardPrecond", back_populates="state_node"
+    )
+
+    def __repr__(self) -> str:
+        return f"<StateNode(id={self.id}, level={self.level}, code='{self.code}')>"
+
+
+class ScopeGuard(Base):
+    """
+    作用域公共前置约束.
+
+    Scope Guard 只能挂在一级或二级活动上，只表达 precondition，不表达
+    effect / duration / resource requirement。
+    """
+
+    __tablename__ = "scope_guard"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    activity_node_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("activity_node.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    metadata_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    activity_node: Mapped["ActivityNode"] = relationship(
+        "ActivityNode", back_populates="scope_guards"
+    )
+    preconditions: Mapped[list["ScopeGuardPrecond"]] = relationship(
+        "ScopeGuardPrecond", back_populates="scope_guard", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self) -> str:
+        return f"<ScopeGuard(id={self.id}, activity_node_id={self.activity_node_id}, name='{self.name}')>"
+
+
+class ScopeGuardPrecond(Base):
+    """A single state-node precondition inside a Scope Guard."""
+
+    __tablename__ = "scope_guard_precond"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    scope_guard_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("scope_guard.id", ondelete="CASCADE"), nullable=False
+    )
+    state_node_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("state_node.id", ondelete="RESTRICT"), nullable=False
+    )
+    operator: Mapped[str] = mapped_column(String(16), nullable=False, default="completed")
+    expected_value: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    value_list: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+
+    scope_guard: Mapped["ScopeGuard"] = relationship(
+        "ScopeGuard", back_populates="preconditions"
+    )
+    state_node: Mapped["StateNode"] = relationship(
+        "StateNode", back_populates="scope_guard_preconditions"
+    )
+
+    def __repr__(self) -> str:
+        return f"<ScopeGuardPrecond(id={self.id}, state_node_id={self.state_node_id}, operator='{self.operator}')>"
+
+
+class MaintenanceIntentTemplate(Base):
+    """
+    维修维护意图模板表.
+
+    模板表达维修维护意图对应的目标事实和候选活动范围，不表达固定执行序列。
+    """
+
+    __tablename__ = "maintenance_intent_template"
+    __table_args__ = (
+        UniqueConstraint("machine_type_id", "issue_type", name="uq_maintenance_intent_machine_type_issue"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    machine_type_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("machine_type.id", ondelete="CASCADE"), nullable=False
+    )
+    scope_activity_node_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("activity_node.id", ondelete="RESTRICT"), nullable=False
+    )
+    issue_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    target_state_node_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    candidate_activity_scope_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    observed_fact_templates: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    desired_fact_templates: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    metadata_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    machine_type: Mapped["MachineType"] = relationship(
+        "MachineType", back_populates="maintenance_intent_templates"
+    )
+    scope_activity_node: Mapped["ActivityNode"] = relationship("ActivityNode")
+
+    def __repr__(self) -> str:
+        return f"<MaintenanceIntentTemplate(id={self.id}, issue_type='{self.issue_type}')>"
 
 
 # ============================================================
@@ -432,7 +754,7 @@ class CandidatePlan(Base):
     )
     total_steps: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     search_method: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="state_inference"
+        String(32), nullable=False, default="partial_order"
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     parent_plan_id: Mapped[Optional[int]] = mapped_column(

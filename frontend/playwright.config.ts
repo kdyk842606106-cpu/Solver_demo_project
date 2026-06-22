@@ -20,6 +20,9 @@ const isWSL = process.platform === 'linux' && (() => {
 const backendCommand = isWSL
   ? '/mnt/c/Windows/System32/cmd.exe /c "E:\\Solver_demo_project\\frontend\\e2e\\start-backend.bat"'
   : 'E:\\Solver_demo_project\\frontend\\e2e\\start-backend.bat'
+const backendHealthUrl = isWSL
+  ? 'http://172.26.16.1:8000/health'
+  : 'http://127.0.0.1:8000/health'
 
 export default defineConfig({
   testDir: './e2e/tests',
@@ -31,14 +34,16 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',
+    video: 'off',
+    viewport: { width: 1280, height: 900 },
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'chromium', use: { ...devices['Desktop Chrome'], channel: 'msedge' } },
   ],
-  webServer: [
+  webServer: process.env.PW_SKIP_WEBSERVER ? [] : [
     {
       command: backendCommand,
-      url: 'http://172.26.16.1:8000/health',
+      url: backendHealthUrl,
       timeout: 120 * 1000,
       reuseExistingServer: !process.env.CI,
     },

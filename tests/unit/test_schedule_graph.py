@@ -70,16 +70,21 @@ def test_resource_edge_detection():
     assert cp == ["A", "B"]
 
 
-def test_no_loose_resource_edge():
-    """Tasks sharing a resource with gap do NOT create resource edge."""
+def test_loose_resource_edge_created():
+    """Tasks sharing a resource with gap DO create resource edge.
+
+    The edge records the *ordering* constraint (A must finish before B
+    can start because they share R1).  The gap is captured as slack by
+    the longest-path critical-path algorithm, not by omitting the edge.
+    """
     tasks = [
         MockTaskResult(1, 0, 10, 10, "A", [{"resource_id": 1, "resource_code": "R1"}], []),
         MockTaskResult(2, 15, 25, 10, "B", [{"resource_id": 1, "resource_code": "R1"}], []),
     ]
     graph = build_schedule_graph(tasks, [], 25)
 
-    # B starts at 15 != A ends at 10 -> no resource edge
-    assert graph.resource_edges == []
+    # Ordering edge exists even though there is a gap
+    assert graph.resource_edges == [(1, 2)]
 
 
 def test_critical_path_with_resource_edges():
@@ -155,6 +160,52 @@ def test_ms010_scenario_simplified():
     assert "OPS004" in cp
     assert "OPS005" not in cp
     assert len(cp) == 4
+
+
+def test_critical_path_with_gap_logic_edge():
+    """Tasks linked by logic edge with a gap (e.g. not_before) are still critical.
+
+    A -> B -> C is a tight chain ending at makespan.
+    A -> D is a logic edge but D starts 5 min after A ends (not_before=15).
+    D still has zero slack because any delay would push makespan.
+    The old tight-edge-backtrace algorithm would miss D.
+    """
+    tasks = [
+        MockTaskResult(1, 0, 10, 10, "A", [], []),
+        MockTaskResult(2, 10, 20, 10, "B", [], [1]),
+        MockTaskResult(3, 20, 25, 5, "C", [], [2]),
+        MockTaskResult(4, 15, 25, 10, "D", [], [1]),  # not_before=15
+    ]
+    graph = build_schedule_graph(tasks, [(1, 2), (2, 3), (1, 4)], 25)
+    cp = compute_critical_path(graph)
+
+    assert "A" in cp
+    assert "B" in cp
+    assert "C" in cp
+    assert "D" in cp  # old algorithm would miss D
+    assert len(cp) == 4
+
+
+def test_critical_path_with_loose_resource_edge():
+    """Non-tight resource edge still contributes to critical path correctly.
+
+    A and C share R1.  C cannot start until B finishes (logic edge B->C),
+    so A->C has a 5-min gap.  B is critical (drives C start); C is critical.
+    A has slack (can slide to [5,10] without affecting C) and is NOT critical.
+    The old algorithm would miss the resource edge entirely.
+    """
+    tasks = [
+        MockTaskResult(1, 0, 5, 5, "A", [{"resource_id": 1, "resource_code": "R1"}], []),
+        MockTaskResult(2, 5, 10, 5, "B", [{"resource_id": 2, "resource_code": "R2"}], []),
+        MockTaskResult(3, 10, 15, 5, "C", [{"resource_id": 1, "resource_code": "R1"}], [2]),
+    ]
+    graph = build_schedule_graph(tasks, [(2, 3)], 15)
+    cp = compute_critical_path(graph)
+
+    assert "B" in cp
+    assert "C" in cp
+    assert "A" not in cp  # A has 5 min slack
+    assert graph.resource_edges == [(1, 3)]
 
 
 def test_schedule_graph_edge_classification():

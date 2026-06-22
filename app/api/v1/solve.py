@@ -19,7 +19,7 @@ from app.db.models import (
     MachineState,
     SolveRequest,
 )
-from app.db.schemas import SolveRequestCreate
+from app.db.schemas import LayeredSolveRequest, MaintenanceSolveRequest, SolveRequestCreate
 from app.db.session import get_db_session
 from app.core.planner.search import build_rag, save_candidate_plan
 from app.core.planner.state import load_state, compute_state_delta
@@ -28,8 +28,28 @@ from app.core.scheduler.solver import (
     save_schedule_result,
 )
 from app.core.solver.step_role import compute_step_role_diff
+from app.services.layered_solve import solve_layered
+from app.services.maintenance_solve import solve_maintenance
 
 router = APIRouter(tags=["solve"])
+
+
+@router.post("/solve/layered")
+async def solve_layered_endpoint(
+    request: LayeredSolveRequest,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Run a solve from layered target states and activity scopes."""
+    return await solve_layered(request, db)
+
+
+@router.post("/solve/maintenance")
+async def solve_maintenance_endpoint(
+    request: MaintenanceSolveRequest,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Run one joint solve from selected maintenance intent templates."""
+    return await solve_maintenance(request, db)
 
 
 class AmbiguousBlockedStepError(Exception):
@@ -206,6 +226,7 @@ async def solve(
                 "status": "failed",
                 "error_code": error_code,
                 "error_message": plan_result.error_message,
+                "diagnostics": plan_result.diagnostics,
             }
 
         parent_plan_id = request.parent_plan_id
@@ -278,6 +299,10 @@ async def solve(
 
         if sched_result.status not in ("optimal", "feasible"):
             error_code = "INFEASIBLE" if sched_result.status == "infeasible" else "SOLVER_TIMEOUT"
+            diagnostics = {
+                "planner": plan_result.diagnostics,
+                "schedule": sched_result.diagnostics,
+            }
 
             req_id = solve_req.id
             solve_req.status = "failed"
@@ -289,6 +314,7 @@ async def solve(
                 "candidate_plan_id": plan_id,
                 "error_code": error_code,
                 "error_message": sched_result.error_message,
+                "diagnostics": diagnostics,
             }
 
         result_id = await save_schedule_result(sched_result, solve_req.id, plan_id, db)
@@ -334,6 +360,14 @@ async def solve(
                 "end_min": t.end_min,
                 "duration_min": t.duration_min,
                 "resources": t.resources,
+                "resource_type": t.resource_type,
+                "resource_reqs": t.resource_reqs,
+                "activity_node_id": t.activity_node_id,
+                "activity_node_code": t.activity_node_code,
+                "activity_node_level": t.activity_node_level,
+                "activity_group_id": t.activity_group_id,
+                "activity_group_code": t.activity_group_code,
+                "activity_group_name": t.activity_group_name,
                 "predecessors": t.predecessors,
                 "not_before": step_meta["not_before"] if step_meta else None,
                 "step_role": step_meta["step_role"] if step_meta else "normal",
@@ -350,6 +384,10 @@ async def solve(
             "solve_request_id": req_id,
             "status": "done",
             "candidate_plan_id": plan_id,
+            "diagnostics": {
+                **(plan_result.diagnostics or {}),
+                "schedule": sched_result.diagnostics,
+            },
             "state_delta": state_delta,
             "critical_path": critical_path,
             "schedule": {

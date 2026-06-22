@@ -124,7 +124,11 @@ async function onTypeChange() {
   editId.value = null
   if (!form.value.machine_type_id) { list.value = []; return }
   loading.value = true
-  try { list.value = await getFeatureDefs(form.value.machine_type_id) }
+  try {
+    list.value = await getFeatureDefs(form.value.machine_type_id)
+  } catch {
+    list.value = []
+  }
   finally { loading.value = false }
 }
 
@@ -191,6 +195,10 @@ function reset() {
 }
 
 onMounted(async () => {
-  machineTypes.value = await getMachineTypes()
+  try {
+    machineTypes.value = await getMachineTypes()
+  } catch {
+    machineTypes.value = []
+  }
 })
 </script>

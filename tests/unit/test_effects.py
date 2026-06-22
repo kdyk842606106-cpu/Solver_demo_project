@@ -1,7 +1,7 @@
 """
-Unit tests for EffectRegistry and all 3 Effect implementations.
+Unit tests for EffectRegistry and Effect implementations.
 
-Covers: set, increment, decrement
+Covers: set, increment, decrement, sub, reset
 """
 
 import pytest
@@ -10,6 +10,8 @@ from app.core.solver.effects import (
     SetEffect,
     IncrementEffect,
     DecrementEffect,
+    SubEffect,
+    ResetEffect,
 )
 
 
@@ -112,6 +114,30 @@ class TestDecrementEffect:
         assert EffectRegistry.apply("10", None, "decrement", 3) == "7"
         assert EffectRegistry.apply(None, None, "decrement", 3) == "-3"
         assert EffectRegistry.apply("abc", None, "decrement", 3) == "-3"
+
+
+class TestSubEffect:
+    def test_sub_aliases_decrement_behavior(self):
+        op = SubEffect()
+        assert op.apply("10", None, 3) == "7"
+        assert op.apply(None, None, 3) == "-3"
+        assert op.apply("abc", None, 3) == "-3"
+
+    def test_sub_registry(self):
+        assert EffectRegistry.apply("10", None, "sub", 3) == "7"
+
+
+class TestResetEffect:
+    def test_reset_with_new_value(self):
+        op = ResetEffect()
+        assert op.apply("25", "100", None) == "100"
+
+    def test_reset_with_none_new_value(self):
+        op = ResetEffect()
+        assert op.apply("25", None, None) == ""
+
+    def test_reset_registry(self):
+        assert EffectRegistry.apply("25", "100", "reset", None) == "100"
 
 
 class TestEffectRegistryUnknown:

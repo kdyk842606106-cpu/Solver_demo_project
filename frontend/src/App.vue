@@ -3,7 +3,7 @@
     <el-header class="header">
       <div class="header-left">
         <span class="title">工艺规划与资源优化系统</span>
-        <span class="subtitle">集成计划求解引擎 V0.2</span>
+        <span class="subtitle">集成计划求解引擎 V0.3</span>
       </div>
       <div class="header-right">
         <el-tag :type="healthOk ? 'success' : 'danger'" effect="light">
@@ -12,10 +12,13 @@
       </div>
     </el-header>
 
-    <el-container>
-      <el-aside width="160px" class="aside">
+    <el-container direction="vertical" class="content-shell">
+      <nav class="top-nav">
         <el-menu
           :default-active="currentView"
+          mode="horizontal"
+          :ellipsis="false"
+          class="top-menu"
           @select="currentView = $event"
         >
           <el-menu-item index="data">
@@ -27,7 +30,7 @@
             <span>求解</span>
           </el-menu-item>
         </el-menu>
-      </el-aside>
+      </nav>
 
       <el-main class="main">
         <DataManagement v-if="currentView === 'data'" />
@@ -83,11 +86,49 @@ body { margin: 0; font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', san
 .title { font-size: 18px; font-weight: 700; }
 .subtitle { font-size: 12px; color: #94a3b8; }
 
-.aside {
-  background: #fff;
-  border-right: 1px solid #e2e8f0;
+.content-shell {
+  min-width: 0;
+  background: #f4f7fb;
 }
-.aside .el-menu { border-right: none; }
 
-.main { background: #f4f7fb; padding: 24px; }
+.top-nav {
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  overflow-x: auto;
+}
+
+.top-menu {
+  min-width: max-content;
+  padding: 0 24px;
+  border-bottom: none;
+}
+
+.main {
+  min-width: 0;
+  background: #f4f7fb;
+  padding: 24px;
+}
+
+@media (max-width: 760px) {
+  .header {
+    height: auto;
+    min-height: 56px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 16px;
+  }
+
+  .header-left {
+    flex-wrap: wrap;
+  }
+
+  .top-menu {
+    padding: 0 12px;
+  }
+
+  .main {
+    padding: 16px;
+  }
+}
 </style>

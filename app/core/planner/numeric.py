@@ -243,6 +243,7 @@ def _find_candidate_rules(
             if effect.feature_key == feature_key and getattr(effect, "effect_type", "set") in {
                 "increment",
                 "decrement",
+                "sub",
             }:
                 target_effect = effect
                 break
@@ -260,7 +261,9 @@ def _find_candidate_rules(
 
         direction = Decimal("1") if target_value > current_value else Decimal("-1")
         effect_type = getattr(target_effect, "effect_type", "set")
-        if (direction > 0 and effect_type != "increment") or (direction < 0 and effect_type != "decrement"):
+        if (direction > 0 and effect_type != "increment") or (
+            direction < 0 and effect_type not in {"decrement", "sub"}
+        ):
             continue
 
         next_state = evaluator.apply_effects(current_state, rule.effects)

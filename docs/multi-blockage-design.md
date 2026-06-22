@@ -2,7 +2,7 @@
 
 > 文档类型：正式设计文档
 > 适用版本：V0.2 现状分析 / V0.3 候选设计
-> 相关文档：`docs/ANCHOR.md`、`docs/STATE_V0.2.md`、`docs/v0.2-spec.md`
+> 相关文档：`docs/ANCHOR.md`、`docs/STATE_V0.3.md`、`docs/v0.2-spec.md`
 
 ---
 

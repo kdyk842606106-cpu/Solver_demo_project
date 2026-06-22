@@ -71,8 +71,13 @@ def build_schedule_graph(
         for i in range(len(usages_sorted) - 1):
             _, end_i, order_i = usages_sorted[i]
             start_j, _, order_j = usages_sorted[i + 1]
-            if start_j == end_i:  # Tight resource edge
-                resource_edges.append((order_i, order_j))
+            if end_i > start_j:
+                continue
+            # All adjacent resource usages form an ordering edge,
+            # not just tight ones.  The critical-path algorithm uses
+            # the actual scheduled times (start/end) to compute slack,
+            # so a gap here simply means the predecessor has slack.
+            resource_edges.append((order_i, order_j))
 
     # Flatten tasks for serialization
     task_dicts: list[dict[str, Any]] = []
@@ -88,6 +93,7 @@ def build_schedule_graph(
                 "predecessors": t.predecessors,
                 "resources": t.resources,
                 "resource_type": t.resource_type,
+                "resource_reqs": getattr(t, "resource_reqs", []),
             }
         )
 
@@ -100,10 +106,15 @@ def build_schedule_graph(
 
 
 def compute_critical_path(graph: ScheduleGraph) -> list[str]:
-    """Compute critical path from ScheduleGraph.
+    """Compute critical path from ScheduleGraph using standard CPM.
 
-    Backward-trace from tasks ending at makespan through all tight edges
-    (logical + resource) where predecessor.end == successor.start.
+    Performs a backward pass over the full dependency graph (logical +
+    resource edges) to compute Latest Start (LS) / Latest Finish (LF).
+    A task is critical when its Total Float (LF - EF or LS - ES) is
+    zero — i.e. any delay would increase the makespan.
+
+    This correctly handles gaps caused by not_before constraints or
+    resource waits, unlike the previous tight-edge backtrace.
     """
     if not graph.tasks:
         return []
@@ -111,31 +122,32 @@ def compute_critical_path(graph: ScheduleGraph) -> list[str]:
     by_order: dict[int, dict[str, Any]] = {t["step_order"]: t for t in graph.tasks}
     makespan = graph.makespan
 
-    # Build adjacency: child -> list of parents
-    parents: dict[int, list[int]] = {t["step_order"]: [] for t in graph.tasks}
+    # Build adjacency tables
+    children: dict[int, list[int]] = {t["step_order"]: [] for t in graph.tasks}
     for from_step, to_step in graph.all_edges():
-        parents.setdefault(to_step, []).append(from_step)
+        children[from_step].append(to_step)
 
-    # Backward trace from makespan tasks
-    on_path: set[int] = set()
-    stack = [t["step_order"] for t in graph.tasks if t["end_min"] == makespan]
+    # Backward pass: LS / LF in reverse end_min order (topological for backward)
+    ls: dict[int, int] = {}
+    lf: dict[int, int] = {}
+    for t in sorted(graph.tasks, key=lambda x: -x["end_min"]):
+        so = t["step_order"]
+        dur = t["duration_min"]
+        if not children[so]:
+            lf[so] = makespan
+        else:
+            lf[so] = min(ls[c] for c in children[so])
+        ls[so] = lf[so] - dur
 
-    while stack:
-        order = stack.pop()
-        if order in on_path:
-            continue
-        task = by_order.get(order)
-        if task is None:
-            continue
-        on_path.add(order)
-
-        for pred_order in parents.get(order, []):
-            pred = by_order.get(pred_order)
-            if pred is not None and pred["end_min"] == task["start_min"]:
-                stack.append(pred_order)
+    # Critical if ES == LS (equivalently EF == LF or slack == 0)
+    critical_orders = [
+        t["step_order"]
+        for t in graph.tasks
+        if t["start_min"] == ls[t["step_order"]]
+    ]
 
     path_tasks = sorted(
-        [by_order[o] for o in on_path],
+        [by_order[o] for o in critical_orders],
         key=lambda t: t["start_min"],
     )
     return [t["op_rule_code"] for t in path_tasks]

@@ -168,6 +168,8 @@ async function submit() {
       blockage_constraints: blockageConstraints,
     })
     if (result.status !== 'done') {
+      console.error('[replan failed]', result)
+      window.__lastSolveDiagnostics = result.diagnostics ?? result
       ElMessage.error(`${result.error_code}: ${result.error_message}`)
       return
     }

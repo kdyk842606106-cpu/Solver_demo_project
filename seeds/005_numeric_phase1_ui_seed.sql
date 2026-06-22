@@ -136,9 +136,9 @@ CROSS JOIN (
 -- 4. Resources
 -- ============================================================
 
-INSERT INTO resource (code, name, resource_type, capacity, is_available, meta) VALUES
-('TECH-NUM-UI-01', 'Numeric UI Tech 01', 'NUMERIC_TECHNICIAN', 1, TRUE, NULL),
-('TECH-NUM-UI-02', 'Numeric UI Tech 02', 'NUMERIC_TECHNICIAN', 1, TRUE, NULL);
+INSERT INTO resource (machine_id, code, name, resource_type, capacity, is_available, meta) VALUES
+((SELECT id FROM machine WHERE code = 'M-NUM-UI-001'), 'TECH-NUM-UI-01', 'Numeric UI Tech 01', 'NUMERIC_TECHNICIAN', 1, TRUE, NULL),
+((SELECT id FROM machine WHERE code = 'M-NUM-UI-001'), 'TECH-NUM-UI-02', 'Numeric UI Tech 02', 'NUMERIC_TECHNICIAN', 1, TRUE, NULL);
 
 -- ============================================================
 -- 5. Operation rules

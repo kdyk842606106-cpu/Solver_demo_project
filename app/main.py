@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.db.session import async_engine
-from app.api.v1 import master_data, plans, solve, state
+from app.api.v1 import imports, master_data, plans, solve, state
 
 FRONTEND_INDEX = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
 
@@ -88,6 +88,7 @@ app.include_router(solve.router, prefix="/api/v1")
 app.include_router(state.router, prefix="/api/v1")
 app.include_router(master_data.router, prefix="/api/v1")
 app.include_router(plans.router, prefix="/api/v1")
+app.include_router(imports.router, prefix="/api/v1")
 
 
 @app.get("/health")

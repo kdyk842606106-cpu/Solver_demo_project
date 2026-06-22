@@ -184,8 +184,8 @@ class OpRuleEffectCreate(BaseModel):
 
     feature_key: str = Field(..., min_length=1, max_length=64, description="Feature key")
     new_value: str = Field(..., min_length=1, max_length=256, description="New value after effect")
-    effect_type: str = Field(default="set", description="Effect type: set, increment, decrement")
-    delta_value: Optional[float] = Field(None, description="Delta value for increment/decrement")
+    effect_type: str = Field(default="set", description="Effect type: set, increment, decrement, sub, reset")
+    delta_value: Optional[float] = Field(None, description="Delta value for increment/decrement/sub")
 
 
 class OpRuleEffectResponse(BaseSchema):
@@ -219,7 +219,9 @@ class OpRuleCreate(BaseModel):
     """Schema for creating an operation rule."""
 
     machine_type_id: int = Field(..., gt=0, description="Machine type ID")
-    code: str = Field(..., min_length=1, max_length=64, description="Operation code")
+    activity_node_id: Optional[int] = Field(None, gt=0, description="Optional level-3 activity node ID")
+    atomic_activity_id: Optional[int] = Field(None, gt=0, description="Optional atomic activity ID")
+    code: Optional[str] = Field(None, max_length=64, description="Operation code")
     name: str = Field(..., min_length=1, max_length=128, description="Operation name")
     duration_min: int = Field(default=30, ge=1, description="Duration in minutes")
     description: Optional[str] = Field(None, description="Operation description")
@@ -236,7 +238,9 @@ class OpRuleUpdate(BaseModel):
     """Schema for updating an operation rule."""
 
     machine_type_id: int = Field(..., gt=0, description="Machine type ID")
-    code: str = Field(..., min_length=1, max_length=64, description="Operation code")
+    activity_node_id: Optional[int] = Field(None, gt=0, description="Optional level-3 activity node ID")
+    atomic_activity_id: Optional[int] = Field(None, gt=0, description="Optional atomic activity ID")
+    code: Optional[str] = Field(None, max_length=64, description="Operation code")
     name: str = Field(..., min_length=1, max_length=128, description="Operation name")
     duration_min: int = Field(default=30, ge=1, description="Duration in minutes")
     description: Optional[str] = Field(None, description="Operation description")
@@ -254,6 +258,8 @@ class OpRuleResponse(BaseSchema):
 
     id: int
     machine_type_id: int
+    activity_node_id: Optional[int] = None
+    atomic_activity_id: Optional[int] = None
     code: str
     name: str
     duration_min: int
@@ -276,6 +282,7 @@ class OpRuleResponse(BaseSchema):
 class ResourceCreate(BaseModel):
     """Schema for creating a resource."""
 
+    machine_id: int = Field(..., gt=0, description="Machine ID")
     code: str = Field(..., min_length=1, max_length=64, description="Resource code")
     name: str = Field(..., min_length=1, max_length=128, description="Resource name")
     resource_type: str = Field(..., min_length=1, max_length=64, description="Resource type")
@@ -287,6 +294,7 @@ class ResourceCreate(BaseModel):
 class ResourceUpdate(BaseModel):
     """Schema for updating a resource."""
 
+    machine_id: int = Field(..., gt=0, description="Machine ID")
     code: str = Field(..., min_length=1, max_length=64, description="Resource code")
     name: str = Field(..., min_length=1, max_length=128, description="Resource name")
     resource_type: str = Field(..., min_length=1, max_length=64, description="Resource type")
@@ -299,6 +307,7 @@ class ResourceResponse(BaseSchema):
     """Schema for resource response."""
 
     id: int
+    machine_id: int
     code: str
     name: str
     resource_type: str
@@ -333,6 +342,487 @@ class FeatureDefinitionResponse(BaseSchema):
 
 
 # ============================================================
+# 分层活动 / 分层状态 Schemas
+# ============================================================
+
+
+class ActivityNodeCreate(BaseModel):
+    """Schema for creating a layered activity node."""
+
+    machine_type_id: int = Field(..., gt=0, description="Machine type ID")
+    parent_id: Optional[int] = Field(None, gt=0, description="Parent activity node ID")
+    level: int = Field(..., ge=1, le=3, description="Hierarchy level: 1, 2, or legacy 3")
+    code: Optional[str] = Field(None, max_length=64, description="Activity node code")
+    name: str = Field(..., min_length=1, max_length=128, description="Activity node name")
+    activity_category: str = Field(default="normal", max_length=32, description="normal/repair/maintenance")
+    sort_order: int = Field(default=0, description="Display order under the same parent")
+    is_active: bool = Field(default=True, description="Whether this node is active")
+    metadata_json: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class ActivityNodeUpdate(BaseModel):
+    """Schema for updating a layered activity node."""
+
+    parent_id: Optional[int] = Field(None, gt=0, description="Parent activity node ID")
+    level: int = Field(..., ge=1, le=3, description="Hierarchy level: 1, 2, or legacy 3")
+    code: Optional[str] = Field(None, max_length=64, description="Activity node code")
+    name: str = Field(..., min_length=1, max_length=128, description="Activity node name")
+    activity_category: str = Field(default="normal", max_length=32, description="normal/repair/maintenance")
+    sort_order: int = Field(default=0, description="Display order under the same parent")
+    is_active: bool = Field(default=True, description="Whether this node is active")
+    metadata_json: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class ActivityNodeResponse(BaseSchema):
+    """Schema for a layered activity node response."""
+
+    id: int
+    machine_type_id: int
+    parent_id: Optional[int] = None
+    level: int
+    code: str
+    name: str
+    activity_category: str = "normal"
+    sort_order: int = 0
+    is_active: bool
+    metadata_json: Optional[dict[str, Any]] = None
+    created_at: datetime
+
+
+class AtomicActivityCreate(BaseModel):
+    """Schema for creating a reusable atomic activity."""
+
+    machine_type_id: int = Field(..., gt=0, description="Machine type ID")
+    code: Optional[str] = Field(None, max_length=64, description="Atomic activity code")
+    name: str = Field(..., min_length=1, max_length=128, description="Atomic activity name")
+    activity_category: str = Field(default="normal", max_length=32, description="normal/repair/maintenance")
+    sort_order: int = Field(default=0, description="Display order")
+    is_active: bool = Field(default=True, description="Whether this atomic activity is active")
+    metadata_json: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class AtomicActivityUpdate(BaseModel):
+    """Schema for updating a reusable atomic activity."""
+
+    code: Optional[str] = Field(None, max_length=64, description="Atomic activity code")
+    name: str = Field(..., min_length=1, max_length=128, description="Atomic activity name")
+    activity_category: str = Field(default="normal", max_length=32, description="normal/repair/maintenance")
+    sort_order: int = Field(default=0, description="Display order")
+    is_active: bool = Field(default=True, description="Whether this atomic activity is active")
+    metadata_json: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class AtomicActivityResponse(BaseSchema):
+    """Schema for a reusable atomic activity response."""
+
+    id: int
+    machine_type_id: int
+    code: str
+    name: str
+    activity_category: str = "normal"
+    sort_order: int = 0
+    is_active: bool
+    metadata_json: Optional[dict[str, Any]] = None
+    created_at: datetime
+
+
+class ActivityPackageAtomicRefCreate(BaseModel):
+    """Schema for attaching an atomic activity to a level-2 activity package."""
+
+    atomic_activity_id: int = Field(..., gt=0, description="Atomic activity ID")
+    sort_order: int = Field(default=0, description="Display order inside package")
+    is_active: bool = Field(default=True, description="Whether this package reference is active")
+    metadata_json: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class ActivityPackageAtomicRefResponse(BaseSchema):
+    """Schema for an activity-package atomic activity reference."""
+
+    id: int
+    activity_node_id: int
+    atomic_activity_id: int
+    atomic_activity_code: Optional[str] = None
+    atomic_activity_name: Optional[str] = None
+    activity_category: Optional[str] = None
+    sort_order: int = 0
+    is_active: bool
+    metadata_json: Optional[dict[str, Any]] = None
+    created_at: datetime
+
+
+class StateNodeCreate(BaseModel):
+    """Schema for creating a layered state node."""
+
+    machine_type_id: int = Field(..., gt=0, description="Machine type ID")
+    parent_id: Optional[int] = Field(None, gt=0, description="Parent state node ID")
+    level: int = Field(..., ge=1, description="Hierarchy level")
+    code: Optional[str] = Field(None, max_length=64, description="State node code")
+    name: str = Field(..., min_length=1, max_length=128, description="State node name")
+    feature_key: Optional[str] = Field(None, max_length=64, description="Leaf feature key")
+    operator: str = Field(default="eq", max_length=16, description="Leaf completion operator")
+    target_value: Optional[str] = Field(None, max_length=256, description="Leaf target value")
+    state_kind: str = Field(default="aggregate", max_length=32, description="aggregate/atomic/external/manual")
+    sort_order: int = Field(default=0, description="Display order under the same parent")
+    is_active: bool = Field(default=True, description="Whether this node is active")
+    metadata_json: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class StateNodeUpdate(BaseModel):
+    """Schema for updating a layered state node."""
+
+    parent_id: Optional[int] = Field(None, gt=0, description="Parent state node ID")
+    level: int = Field(..., ge=1, description="Hierarchy level")
+    code: Optional[str] = Field(None, max_length=64, description="State node code")
+    name: str = Field(..., min_length=1, max_length=128, description="State node name")
+    feature_key: Optional[str] = Field(None, max_length=64, description="Leaf feature key")
+    operator: str = Field(default="eq", max_length=16, description="Leaf completion operator")
+    target_value: Optional[str] = Field(None, max_length=256, description="Leaf target value")
+    state_kind: str = Field(default="aggregate", max_length=32, description="aggregate/atomic/external/manual")
+    sort_order: int = Field(default=0, description="Display order under the same parent")
+    is_active: bool = Field(default=True, description="Whether this node is active")
+    metadata_json: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class StateNodeResponse(BaseSchema):
+    """Schema for a layered state node response."""
+
+    id: int
+    machine_type_id: int
+    parent_id: Optional[int] = None
+    level: int
+    code: str
+    name: str
+    feature_key: Optional[str] = None
+    operator: str = "eq"
+    target_value: Optional[str] = None
+    state_kind: str = "aggregate"
+    sort_order: int = 0
+    is_active: bool
+    metadata_json: Optional[dict[str, Any]] = None
+    created_at: datetime
+
+
+class ScopeGuardPrecondCreate(BaseModel):
+    """Schema for creating a Scope Guard precondition."""
+
+    state_node_id: int = Field(..., gt=0, description="Referenced state node ID")
+    operator: str = Field(default="completed", max_length=16, description="completed/eq/gt/gte/lt/lte/in")
+    expected_value: Optional[str] = Field(None, max_length=256, description="Expected value for non-completed operators")
+    value_list: Optional[list[Any]] = Field(None, description="Value list for in operator")
+
+
+class ScopeGuardPrecondResponse(BaseSchema):
+    """Schema for a Scope Guard precondition response."""
+
+    id: int
+    state_node_id: int
+    state_node_code: Optional[str] = None
+    state_node_name: Optional[str] = None
+    state_node_level: Optional[int] = None
+    operator: str
+    expected_value: Optional[str] = None
+    value_list: Optional[list[Any]] = None
+
+
+class ScopeGuardCreate(BaseModel):
+    """Schema for creating a Scope Guard."""
+
+    activity_node_id: int = Field(..., gt=0, description="Level-1 or level-2 activity node ID")
+    name: str = Field(..., min_length=1, max_length=128, description="Scope Guard name")
+    description: Optional[str] = Field(None, description="Scope Guard description")
+    is_active: bool = Field(default=True, description="Whether this Scope Guard is active")
+    metadata_json: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
+    preconditions: list[ScopeGuardPrecondCreate] = Field(default_factory=list, description="State preconditions")
+
+
+class ScopeGuardUpdate(BaseModel):
+    """Schema for updating a Scope Guard."""
+
+    name: str = Field(..., min_length=1, max_length=128, description="Scope Guard name")
+    description: Optional[str] = Field(None, description="Scope Guard description")
+    is_active: bool = Field(default=True, description="Whether this Scope Guard is active")
+    metadata_json: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
+    preconditions: list[ScopeGuardPrecondCreate] = Field(default_factory=list, description="State preconditions")
+
+
+class ScopeGuardResponse(BaseSchema):
+    """Schema for a Scope Guard response."""
+
+    id: int
+    activity_node_id: int
+    name: str
+    description: Optional[str] = None
+    is_active: bool
+    metadata_json: Optional[dict[str, Any]] = None
+    created_at: datetime
+    preconditions: list[ScopeGuardPrecondResponse] = Field(default_factory=list)
+
+
+class LayeredExpansionRequest(BaseModel):
+    """Request for expanding layered targets and activity scopes."""
+
+    target_state_node_ids: list[int] = Field(default_factory=list, description="Selected state node IDs")
+    activity_scope_node_ids: list[int] = Field(default_factory=list, description="Selected activity node IDs")
+    include_inactive: bool = Field(default=False, description="Include inactive nodes and guards")
+
+
+class LayeredPathItem(BaseModel):
+    """One node in an activity/state path."""
+
+    id: int
+    code: str
+    name: str
+    level: int
+
+
+class LayeredGoalFact(BaseModel):
+    """Expanded leaf goal fact from a selected state target."""
+
+    source_state_node_id: int
+    state_node_id: int
+    state_node_code: str
+    state_node_name: str
+    feature_key: str
+    operator: str
+    target_value: Optional[str] = None
+    source_path: list[LayeredPathItem] = Field(default_factory=list)
+
+
+class LayeredCandidateActivity(BaseModel):
+    """Expanded level-3 candidate activity from a selected activity scope."""
+
+    source_activity_node_id: int
+    activity_node_id: int
+    activity_node_code: str
+    activity_node_name: str
+    activity_category: str
+    node_type: str = "legacy_activity_node"
+    atomic_activity_id: Optional[int] = None
+    activity_package_atomic_ref_id: Optional[int] = None
+    op_rule_ids: list[int] = Field(default_factory=list)
+    source_path: list[LayeredPathItem] = Field(default_factory=list)
+
+
+class EffectiveRulePrecondition(BaseModel):
+    """Effective precondition with explicit source metadata."""
+
+    source_type: str
+    feature_key: Optional[str] = None
+    operator: str
+    feature_value: Optional[str] = None
+    value_list: Optional[list[Any]] = None
+    state_node_id: Optional[int] = None
+    state_node_code: Optional[str] = None
+    state_node_name: Optional[str] = None
+    scope_guard_id: Optional[int] = None
+    scope_guard_name: Optional[str] = None
+    source_activity_node_id: Optional[int] = None
+    source_activity_node_code: Optional[str] = None
+
+
+class EffectiveRuleEffect(BaseModel):
+    """Effect owned by the executable op rule."""
+
+    feature_key: str
+    new_value: str
+    effect_type: str = "set"
+    delta_value: Optional[float] = None
+
+
+class EffectiveRuleResourceReq(BaseModel):
+    """Resource requirement owned by the executable op rule."""
+
+    resource_type: str
+    quantity: int
+    is_required: bool = True
+
+
+class EffectiveRulePreview(BaseModel):
+    """Preview of an op rule after Scope Guard expansion."""
+
+    op_rule_id: int
+    op_rule_code: str
+    op_rule_name: str
+    activity_node_id: int
+    activity_node_code: str
+    activity_node_name: str
+    atomic_activity_id: Optional[int] = None
+    duration_min: int
+    preconditions: list[EffectiveRulePrecondition] = Field(default_factory=list)
+    effects: list[EffectiveRuleEffect] = Field(default_factory=list)
+    resource_reqs: list[EffectiveRuleResourceReq] = Field(default_factory=list)
+
+
+class LayeredExpansionDiagnostic(BaseModel):
+    """Non-fatal diagnostic returned by layered expansion preview."""
+
+    code: str
+    message: str
+    node_id: Optional[int] = None
+    node_type: Optional[str] = None
+    severity: str = "warning"
+
+
+class LayeredExpansionResponse(BaseModel):
+    """Response for layered target/activity expansion preview."""
+
+    machine_type_id: int
+    goal_facts: list[LayeredGoalFact] = Field(default_factory=list)
+    candidate_activities: list[LayeredCandidateActivity] = Field(default_factory=list)
+    effective_rules: list[EffectiveRulePreview] = Field(default_factory=list)
+    diagnostics: list[LayeredExpansionDiagnostic] = Field(default_factory=list)
+
+
+class LayeredHealthProvider(BaseModel):
+    """One candidate op rule that can provide a fact."""
+
+    op_rule_id: int
+    op_rule_code: str
+    activity_node_id: int
+    activity_node_code: str
+    atomic_activity_id: Optional[int] = None
+    source_activity_node_id: Optional[int] = None
+
+
+class LayeredHealthConsumer(BaseModel):
+    """One effective precondition that consumes a fact."""
+
+    op_rule_id: int
+    op_rule_code: str
+    activity_node_id: int
+    activity_node_code: str
+    atomic_activity_id: Optional[int] = None
+    source_type: str
+    scope_guard_id: Optional[int] = None
+    scope_guard_name: Optional[str] = None
+    source_activity_node_id: Optional[int] = None
+
+
+class LayeredHealthFactNode(BaseModel):
+    """Provider/consumer graph node keyed by a concrete fact value."""
+
+    feature_key: str
+    target_value: str
+    goal_state_node_ids: list[int] = Field(default_factory=list)
+    providers: list[LayeredHealthProvider] = Field(default_factory=list)
+    consumers: list[LayeredHealthConsumer] = Field(default_factory=list)
+
+
+class LayeredHealthDiagnostic(BaseModel):
+    """Reachability or rule-health diagnostic for layered planning data."""
+
+    code: str
+    severity: str = "error"
+    message: str
+    feature_key: Optional[str] = None
+    operator: Optional[str] = None
+    target_value: Optional[str] = None
+    op_rule_id: Optional[int] = None
+    activity_node_id: Optional[int] = None
+    state_node_id: Optional[int] = None
+    source_type: Optional[str] = None
+    provider_count: Optional[int] = None
+    details: Optional[dict[str, Any]] = None
+
+
+class LayeredHealthSummary(BaseModel):
+    """High-level counts for a layered health-check response."""
+
+    goal_fact_count: int
+    candidate_activity_count: int
+    effective_rule_count: int
+    provider_fact_count: int
+    consumer_fact_count: int
+    diagnostic_count: int
+    blocking_count: int
+
+
+class LayeredHealthCheckResponse(BaseModel):
+    """Response for layered Provider/Consumer health checks."""
+
+    machine_type_id: int
+    status: str
+    summary: LayeredHealthSummary
+    goal_facts: list[LayeredGoalFact] = Field(default_factory=list)
+    candidate_activities: list[LayeredCandidateActivity] = Field(default_factory=list)
+    effective_rules: list[EffectiveRulePreview] = Field(default_factory=list)
+    provider_graph: list[LayeredHealthFactNode] = Field(default_factory=list)
+    diagnostics: list[LayeredHealthDiagnostic] = Field(default_factory=list)
+
+
+class MaintenanceFactTemplate(BaseModel):
+    """Exact or predicate fact used by maintenance intent templates."""
+
+    feature_key: str = Field(..., min_length=1, max_length=64)
+    operator: str = Field(default="eq", max_length=16)
+    value: Optional[str] = Field(None, max_length=256)
+    value_list: Optional[list[Any]] = None
+
+
+class MaintenanceIntentTemplateCreate(BaseModel):
+    """Schema for creating a maintenance intent template."""
+
+    machine_type_id: int = Field(..., gt=0)
+    scope_activity_node_id: int = Field(..., gt=0)
+    issue_type: str = Field(..., min_length=1, max_length=64)
+    name: str = Field(..., min_length=1, max_length=128)
+    description: Optional[str] = None
+    target_state_node_ids: list[int] = Field(default_factory=list)
+    candidate_activity_scope_ids: list[int] = Field(default_factory=list)
+    observed_fact_templates: list[MaintenanceFactTemplate] = Field(default_factory=list)
+    desired_fact_templates: list[MaintenanceFactTemplate] = Field(default_factory=list)
+    is_active: bool = True
+    metadata_json: Optional[dict[str, Any]] = None
+
+
+class MaintenanceIntentTemplateUpdate(BaseModel):
+    """Schema for updating a maintenance intent template."""
+
+    scope_activity_node_id: int = Field(..., gt=0)
+    issue_type: str = Field(..., min_length=1, max_length=64)
+    name: str = Field(..., min_length=1, max_length=128)
+    description: Optional[str] = None
+    target_state_node_ids: list[int] = Field(default_factory=list)
+    candidate_activity_scope_ids: list[int] = Field(default_factory=list)
+    observed_fact_templates: list[MaintenanceFactTemplate] = Field(default_factory=list)
+    desired_fact_templates: list[MaintenanceFactTemplate] = Field(default_factory=list)
+    is_active: bool = True
+    metadata_json: Optional[dict[str, Any]] = None
+
+
+class MaintenanceIntentTemplateResponse(BaseSchema):
+    """Response schema for a maintenance intent template."""
+
+    id: int
+    machine_type_id: int
+    scope_activity_node_id: int
+    issue_type: str
+    name: str
+    description: Optional[str] = None
+    target_state_node_ids: list[int] = Field(default_factory=list)
+    candidate_activity_scope_ids: list[int] = Field(default_factory=list)
+    observed_fact_templates: list[MaintenanceFactTemplate] = Field(default_factory=list)
+    desired_fact_templates: list[MaintenanceFactTemplate] = Field(default_factory=list)
+    is_active: bool
+    metadata_json: Optional[dict[str, Any]] = None
+    created_at: datetime
+
+
+class MaintenanceSolveRequest(BaseModel):
+    """Request for solving one or more maintenance intents jointly."""
+
+    machine_id: int = Field(..., gt=0)
+    current_state_id: int = Field(..., gt=0)
+    intent_template_ids: list[int] = Field(default_factory=list)
+    extra_observed_facts: list[MaintenanceFactTemplate] = Field(default_factory=list)
+    extra_desired_facts: list[MaintenanceFactTemplate] = Field(default_factory=list)
+    include_inactive: bool = False
+    objective: str = Field(default="minimize_makespan")
+    objectives: Optional[list[dict[str, Any]]] = None
+    constraints: Optional[dict[str, Any]] = None
+
+
+# ============================================================
 # 求解请求相关 Schemas
 # ============================================================
 
@@ -351,6 +841,31 @@ class SolveRequestCreate(BaseModel):
     blockage_constraints: Optional[dict[str, Any]] = Field(
         None,
         description="Blockage constraints: {strategy: A|B|AB, blocked_step_id, strategy_a: {not_before_offset}, strategy_b: {blockage_reason}, ...}",
+    )
+
+
+class LayeredSolveRequest(BaseModel):
+    """Request for solving from layered target states and activity scopes."""
+
+    machine_id: int = Field(..., gt=0, description="Machine ID")
+    current_state_id: int = Field(..., gt=0, description="Current state ID")
+    target_state_node_ids: list[int] = Field(default_factory=list, description="Selected layered target state nodes")
+    activity_scope_node_ids: list[int] = Field(default_factory=list, description="Selected activity scope nodes")
+    include_inactive: bool = Field(default=False, description="Include inactive layered data")
+    objective: str = Field(default="minimize_makespan", description="Optimization objective")
+    objectives: Optional[list[dict[str, Any]]] = Field(None, description="Objectives array")
+    constraints: Optional[dict[str, Any]] = Field(None, description="Constraints")
+    current_state_overrides: dict[str, str] = Field(
+        default_factory=dict,
+        description="Solve-only observed facts layered over the selected current state",
+    )
+    direct_goal_facts: list[MaintenanceFactTemplate] = Field(
+        default_factory=list,
+        description="Additional exact goal facts not backed by state nodes",
+    )
+    context: Optional[dict[str, Any]] = Field(
+        None,
+        description="Opaque caller context to persist and echo in layered explanations",
     )
 
 
@@ -388,6 +903,8 @@ class ScheduleTaskItem(BaseSchema):
     duration_min: int = Field(..., ge=1, description="Duration in minutes")
     predecessors: list[int] = Field(default_factory=list, description="Predecessor step orders")
     resources: list[dict[str, Any]] = Field(default_factory=list, description="Assigned resources")
+    resource_type: str = Field(default="NONE", description="Legacy primary resource type")
+    resource_reqs: list[dict[str, Any]] = Field(default_factory=list, description="Required resources")
     not_before: Optional[int] = Field(None, description="Not before constraint in minutes")
     step_role: str = Field(default="normal", description="Step role: normal/repair/pulled_forward/delayed")
 
@@ -445,6 +962,7 @@ class SolveResponse(BaseSchema):
     schedule: Optional[ScheduleResultResponse] = None
     error_code: Optional[str] = None
     error_message: Optional[str] = None
+    diagnostics: Optional[dict[str, Any]] = None
 
 
 class PlanVersionItem(BaseSchema):
@@ -530,6 +1048,8 @@ class OpRuleDetailResponse(BaseSchema):
 
     id: int
     machine_type_id: int
+    activity_node_id: Optional[int] = None
+    atomic_activity_id: Optional[int] = None
     code: str
     name: str
     duration_min: int
@@ -637,4 +1157,3 @@ class BlockageEventResponse(BaseSchema):
     note: Optional[str] = None
     created_at: datetime
     created_by: Optional[str] = None
-

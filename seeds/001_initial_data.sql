@@ -108,10 +108,10 @@ INSERT INTO machine_state_feature (machine_state_id, feature_key, feature_value)
 -- 5. Resources (3 types)
 -- ============================================================
 
-INSERT INTO resource (id, code, name, resource_type, capacity, is_available, meta) VALUES
-(1, 'TECH-01', 'Technician Alice', 'TECHNICIAN', 1, true, '{"skills": ["lathe", "mill", "calibration"]}'),
-(2, 'TECH-02', 'Technician Bob', 'TECHNICIAN', 1, true, '{"skills": ["lathe", "cleaning"]}'),
-(3, 'CLEAN-01', 'Cleaning Robot', 'CLEANER', 1, true, '{"type": "automated"}');
+INSERT INTO resource (id, machine_id, code, name, resource_type, capacity, is_available, meta) VALUES
+(1, 1, 'TECH-01', 'Technician Alice', 'TECHNICIAN', 1, true, '{"skills": ["lathe", "mill", "calibration"]}'),
+(2, 1, 'TECH-02', 'Technician Bob', 'TECHNICIAN', 1, true, '{"skills": ["lathe", "cleaning"]}'),
+(3, 1, 'CLEAN-01', 'Cleaning Robot', 'CLEANER', 1, true, '{"type": "automated"}');
 
 -- ============================================================
 -- 6. Operation Rules (5 rules with preconditions, effects, and resource requirements)

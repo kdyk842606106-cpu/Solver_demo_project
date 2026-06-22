@@ -53,11 +53,11 @@ async def _seed_base_data(client):
 
     # Resources
     for res in [
-        {"code": "TECH-01", "name": "Tech Alice", "resource_type": "TECHNICIAN",
+        {"machine_id": machine_id, "code": "TECH-01", "name": "Tech Alice", "resource_type": "TECHNICIAN",
          "capacity": 1, "is_available": True, "meta": None},
-        {"code": "TECH-02", "name": "Tech Bob", "resource_type": "TECHNICIAN",
+        {"machine_id": machine_id, "code": "TECH-02", "name": "Tech Bob", "resource_type": "TECHNICIAN",
          "capacity": 1, "is_available": True, "meta": None},
-        {"code": "CLEAN-01", "name": "Cleaner", "resource_type": "CLEANER",
+        {"machine_id": machine_id, "code": "CLEAN-01", "name": "Cleaner", "resource_type": "CLEANER",
          "capacity": 1, "is_available": True, "meta": None},
     ]:
         r = await client.post("/api/v1/resources", json=res)
@@ -153,8 +153,8 @@ async def _seed_numeric_api_data(client):
     machine_id = r.json()["id"]
 
     for res in [
-        {"code": "TECH-N1", "name": "Tech One", "resource_type": "TECHNICIAN", "capacity": 1, "is_available": True, "meta": None},
-        {"code": "TECH-N2", "name": "Tech Two", "resource_type": "TECHNICIAN", "capacity": 1, "is_available": True, "meta": None},
+        {"machine_id": machine_id, "code": "TECH-N1", "name": "Tech One", "resource_type": "TECHNICIAN", "capacity": 1, "is_available": True, "meta": None},
+        {"machine_id": machine_id, "code": "TECH-N2", "name": "Tech Two", "resource_type": "TECHNICIAN", "capacity": 1, "is_available": True, "meta": None},
     ]:
         r = await client.post("/api/v1/resources", json=res)
         assert r.status_code == 201
@@ -809,7 +809,7 @@ class TestPlanNotScheduled:
 
         plan = CandidatePlan(
             solve_request_id=sr.id,
-            search_method="state_inference",
+            search_method="forward_bfs",
             version=1,
             status="draft",
         )

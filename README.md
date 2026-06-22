@@ -2,7 +2,7 @@
 
 基于 FastAPI + PostgreSQL + OR-Tools 的两阶段求解系统：Planner 构建 RAG（状态推导有向无环图），Scheduler 基于 RAG + 资源约束做 CP-SAT 最优排程。
 
-> **AI 开发上下文**：请先阅读 [`docs/CONTEXT.md`](./docs/CONTEXT.md)，包含完整的项目背景、代码地图和 v0.2 开发导读。
+> **AI 开发上下文**：请先阅读 [`docs/ANCHOR.md`](./docs/ANCHOR.md)、当前 [`docs/STATE_V0.3.md`](./docs/STATE_V0.3.md)，再阅读最新 `docs/TICKET_*.md`。旧 `CONTEXT` 入口已归档到 `docs/archive/cleanup_20260529/outdated_notes/`。
 
 ## 环境准备
 
@@ -181,23 +181,69 @@ Content-Type: application/json
   "solve_request_id": 1,
   "status": "done",
   "candidate_plan_id": 1,
+  "state_delta": [
+    {
+      "feature_key": "calibration",
+      "from_value": "off",
+      "to_value": "on"
+    }
+  ],
+  "critical_path": ["OP_WARMUP", "OP_CALIBRATE"],
   "schedule": {
     "makespan": 45,
     "tasks": [
       {
-        "step": 1,
-        "op_code": "OP_WARMUP",
-        "start": 0,
-        "end": 30,
-        "resource": "TECH-01",
-        "predecessors": []
+        "step_order": 1,
+        "step_id": 10,
+        "op_rule_id": 1,
+        "op_rule_code": "OP_WARMUP",
+        "op_rule_name": "Warm up",
+        "start_min": 0,
+        "end_min": 30,
+        "duration_min": 30,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "TECH-01",
+            "resource_type": "TECHNICIAN",
+            "quantity": 1
+          }
+        ],
+        "resource_type": "TECHNICIAN",
+        "resource_reqs": [
+          {
+            "resource_type": "TECHNICIAN",
+            "quantity": 1
+          }
+        ],
+        "predecessors": [],
+        "not_before": null,
+        "step_role": "normal"
       },
       {
-        "step": 2,
-        "op_code": "OP_CALIBRATE",
-        "start": 30,
-        "end": 45,
-        "resource": "TECH-02",
+        "step_order": 2,
+        "step_id": 11,
+        "op_rule_id": 2,
+        "op_rule_code": "OP_CALIBRATE",
+        "op_rule_name": "Calibrate",
+        "start_min": 30,
+        "end_min": 45,
+        "duration_min": 15,
+        "resources": [
+          {
+            "resource_id": 2,
+            "resource_code": "TECH-02",
+            "resource_type": "TECHNICIAN",
+            "quantity": 1
+          }
+        ],
+        "resource_type": "TECHNICIAN",
+        "resource_reqs": [
+          {
+            "resource_type": "TECHNICIAN",
+            "quantity": 1
+          }
+        ],
         "predecessors": [1]
       }
     ],
@@ -219,7 +265,7 @@ Content-Type: application/json
 
 ## 已知实现特征
 
-详见 [`docs/CONTEXT.md`](./docs/CONTEXT.md) 第七节。
+详见 [`docs/STATE_V0.3.md`](./docs/STATE_V0.3.md) 和 [`docs/protocols/`](./docs/protocols/README.md)。
 
 ## 测试
 
@@ -237,6 +283,9 @@ pytest tests/e2e -v
 
 ## 相关文档
 
-- [`docs/CONTEXT.md`](./docs/CONTEXT.md) — AI 开发上下文入口
+- [`docs/ANCHOR.md`](./docs/ANCHOR.md) — 系统永久约束与架构原则
+- [`docs/STATE_V0.3.md`](./docs/STATE_V0.3.md) — 当前版本状态账本
+- `docs/TICKET_*.md` — 当前/历史任务工单
+- `docs/archive/cleanup_20260529/outdated_notes/` — 已归档的旧上下文入口与过期临时说明
 - [`docs/v0.2-spec.md`](./docs/v0.2-spec.md) — v0.2 开发规格书
 - [`docs/protocols/`](./docs/protocols/README.md) — 模块协议文档（API / DB / Planner / Scheduler）
