@@ -324,11 +324,22 @@ class TestResource:
 
     async def test_create_resource(self, async_session: AsyncSession):
         """Test creating a resource."""
-        async_session.add(MachineType(id=1, code="CNC_LATHE", name="CNC Lathe"))
-        async_session.add(Machine(id=1, machine_type_id=1, code="M-001", name="Main CNC"))
-        await async_session.flush()
+        machine_type = MachineType(code="CNC_RESOURCE", name="CNC Resource")
+        async_session.add(machine_type)
+        await async_session.commit()
+        await async_session.refresh(machine_type)
+
+        machine = Machine(
+            machine_type_id=machine_type.id,
+            code="M-RESOURCE",
+            name="Resource Machine",
+        )
+        async_session.add(machine)
+        await async_session.commit()
+        await async_session.refresh(machine)
+
         resource = Resource(
-            machine_id=1,
+            machine_id=machine.id,
             code="TECH-01",
             name="Technician John",
             resource_type="TECHNICIAN",

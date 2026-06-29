@@ -18,7 +18,7 @@ from sqlalchemy import create_engine
 from app.db.config import db_settings
 
 
-def patch_sqlite_types():
+def patch_sqlite_types(force: bool = False):
     """Patch PostgreSQL-specific column types for SQLite compatibility.
 
     SQLAlchemy's ARRAY and JSONB types don't work with SQLite.
@@ -26,7 +26,7 @@ def patch_sqlite_types():
     to JSON (which SQLite supports via TEXT with JSON serialization).
     """
     url = str(db_settings.async_url)
-    if 'sqlite' not in url.lower():
+    if 'sqlite' not in url.lower() and not force:
         return
 
     import logging
@@ -36,27 +36,34 @@ def patch_sqlite_types():
     from sqlalchemy import JSON, Numeric as sa_Numeric
     from app.db import models
 
-    # Patch ARRAY(Integer) -> JSON
-    models.CandidatePlanStep.__table__.c.predecessor_ids.type = JSON()
-    # Patch JSONB -> JSON
-    models.StateFeatureDef.__table__.c.allowed_values.type = JSON()
-    models.Resource.__table__.c.meta.type = JSON()
-    models.SolveRequest.__table__.c.overrides.type = JSON()
-    models.SolveRequest.__table__.c.objectives.type = JSON()
-    models.SolveRequest.__table__.c.constraints.type = JSON()
-    models.SolveRequest.__table__.c.blockage_constraints.type = JSON()
-    models.ScheduleResult.__table__.c.tasks.type = JSON()
-    models.FeatureDefinition.__table__.c.allowed_values.type = JSON()
-    models.ActivityNode.__table__.c.metadata_json.type = JSON()
-    models.StateNode.__table__.c.metadata_json.type = JSON()
-    models.ScopeGuard.__table__.c.metadata_json.type = JSON()
-    models.ScopeGuardPrecond.__table__.c.value_list.type = JSON()
-    models.OpRulePrecond.__table__.c.value_list.type = JSON()
-    models.MaintenanceIntentTemplate.__table__.c.target_state_node_ids.type = JSON()
-    models.MaintenanceIntentTemplate.__table__.c.candidate_activity_scope_ids.type = JSON()
-    models.MaintenanceIntentTemplate.__table__.c.observed_fact_templates.type = JSON()
-    models.MaintenanceIntentTemplate.__table__.c.desired_fact_templates.type = JSON()
-    models.MaintenanceIntentTemplate.__table__.c.metadata_json.type = JSON()
+    json_columns = [
+        models.CandidatePlanStep.__table__.c.predecessor_ids,
+        models.StateFeatureDef.__table__.c.allowed_values,
+        models.OpRulePrecond.__table__.c.value_list,
+        models.Resource.__table__.c.meta,
+        models.FeatureDefinition.__table__.c.allowed_values,
+        models.ActivityNode.__table__.c.metadata_json,
+        models.AtomicActivity.__table__.c.metadata_json,
+        models.ActivityPackageAtomicRef.__table__.c.metadata_json,
+        models.StateNode.__table__.c.metadata_json,
+        models.StateNodeReference.__table__.c.metadata_json,
+        models.ActivityStateBinding.__table__.c.covered_leaf_state_ids,
+        models.ActivityStateBinding.__table__.c.metadata_json,
+        models.ScopeGuard.__table__.c.metadata_json,
+        models.ScopeGuardPrecond.__table__.c.value_list,
+        models.MaintenanceIntentTemplate.__table__.c.target_state_node_ids,
+        models.MaintenanceIntentTemplate.__table__.c.candidate_activity_scope_ids,
+        models.MaintenanceIntentTemplate.__table__.c.observed_fact_templates,
+        models.MaintenanceIntentTemplate.__table__.c.desired_fact_templates,
+        models.MaintenanceIntentTemplate.__table__.c.metadata_json,
+        models.SolveRequest.__table__.c.overrides,
+        models.SolveRequest.__table__.c.objectives,
+        models.SolveRequest.__table__.c.constraints,
+        models.SolveRequest.__table__.c.blockage_constraints,
+        models.ScheduleResult.__table__.c.tasks,
+    ]
+    for column in json_columns:
+        column.type = JSON()
     # Numeric parent_plan_id for SQLite compatibility
     models.CandidatePlan.__table__.c.parent_plan_id.type = sa_Numeric()
 

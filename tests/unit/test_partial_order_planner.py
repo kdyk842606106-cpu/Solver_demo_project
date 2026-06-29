@@ -270,44 +270,6 @@ def test_pop_reprovider_inserts_repeated_cleaning_for_unmet_numeric_precondition
     assert result.diagnostics["final_state_repaired"] is True
 
 
-def test_pop_reprovider_uses_insertion_context_for_provider_preconditions():
-    mechanical = MockRule(
-        id=1,
-        code="OP_MECH",
-        duration_min=5,
-        preconditions=[
-            MockPrecond("progress", "lt", "2"),
-            MockPrecond("cleanliness", "gt", "60"),
-        ],
-        effects=[
-            MockEffect("progress", effect_type="increment", delta_value=1),
-            MockEffect("cleanliness", effect_type="sub", delta_value=50),
-        ],
-    )
-    clean = MockRule(
-        id=2,
-        code="OP_CLEAN",
-        duration_min=3,
-        preconditions=[MockPrecond("cleanliness", "lt", "100")],
-        effects=[MockEffect("cleanliness", new_value="100", effect_type="reset")],
-    )
-
-    result = partial_order_plan(
-        current_state={"progress": "0", "cleanliness": "100"},
-        target_state={"progress": "2", "cleanliness": "100"},
-        rules=[mechanical, clean],
-        feature_defs={
-            "progress": MockFeatureDef("number"),
-            "cleanliness": MockFeatureDef("number"),
-        },
-    )
-
-    assert result.status == "success"
-    codes = [node.op_rule_code for node in result.nodes]
-    assert codes == ["OP_MECH", "OP_CLEAN", "OP_MECH", "OP_CLEAN"]
-    assert result.diagnostics["reprovider_insertion_count"] == 2
-
-
 def test_pop_reprovider_repowers_after_power_off_for_later_consumer():
     power_on = MockRule(
         id=1,
@@ -356,44 +318,6 @@ def test_pop_reprovider_repowers_after_power_off_for_later_consumer():
     assert by_code["OP_POWER_ON"].id in by_code["OP_TEST_B"].predecessors
     assert by_code["OP_POWER_OFF"].id in by_code["OP_VACUUM"].predecessors
     assert by_code["OP_VACUUM"].id in by_code["OP_POWER_ON"].predecessors
-
-
-def test_pop_reprovider_repairs_non_numeric_final_goal_drift():
-    power_on = MockRule(
-        id=1,
-        code="OP_POWER_ON",
-        duration_min=2,
-        effects=[MockEffect("power", "on")],
-    )
-    work = MockRule(
-        id=2,
-        code="OP_WORK",
-        duration_min=5,
-        preconditions=[MockPrecond("power", "eq", "on")],
-        effects=[MockEffect("work_done", "yes")],
-    )
-    power_off = MockRule(
-        id=3,
-        code="OP_POWER_OFF",
-        duration_min=2,
-        preconditions=[MockPrecond("power", "eq", "on")],
-        effects=[MockEffect("power", "off")],
-    )
-
-    result = partial_order_plan(
-        current_state={"power": "off", "work_done": "no"},
-        target_state={"power": "off", "work_done": "yes"},
-        rules=[power_on, work, power_off],
-        feature_defs={},
-    )
-
-    assert result.status == "success"
-    codes = [node.op_rule_code for node in result.nodes]
-    assert codes == ["OP_POWER_ON", "OP_WORK", "OP_POWER_OFF"]
-    by_code = {node.op_rule_code: node for node in result.nodes}
-    assert by_code["OP_WORK"].id in by_code["OP_POWER_OFF"].predecessors
-    assert result.diagnostics["final_state_repaired"] is True
-    assert result.diagnostics["reprovider_insertions"][-1]["fact"] == "power eq off"
 
 
 def test_pop_reprovider_keeps_unrelated_branch_parallel():

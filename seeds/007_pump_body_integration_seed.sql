@@ -198,7 +198,8 @@ INSERT INTO resource (machine_id, code, name, resource_type, capacity, is_availa
 ((SELECT id FROM machine WHERE code = 'PMP-BDY-001'), 'PMP-CLN-01', 'Pump Chamber Cleaning Crew', 'PUMP_CLEANING_CREW', 1, true, '{"skill":"chamber_cleaning"}'),
 ((SELECT id FROM machine WHERE code = 'PMP-BDY-001'), 'PMP-QA-01', 'Pump QA Inspector', 'PUMP_QA_INSPECTOR', 1, true, '{"skill":"final_test"}'),
 ((SELECT id FROM machine WHERE code = 'PMP-BDY-001'), 'PMP-RPR-01', 'Pump Repair Team', 'PUMP_REPAIR_TEAM', 1, true, '{"skill":"fault_recovery"}')
-ON CONFLICT (machine_id, code) DO UPDATE SET
+ON CONFLICT (code) DO UPDATE SET
+    machine_id = EXCLUDED.machine_id,
     name = EXCLUDED.name,
     resource_type = EXCLUDED.resource_type,
     capacity = EXCLUDED.capacity,

@@ -192,7 +192,6 @@ async def setup():
         for i, (code, name) in enumerate(SPACES.items(), 1):
             r = Resource(
                 id=BASE_ID + i,
-                machine_id=m.id,
                 code=code,
                 name=name,
                 resource_type=code,

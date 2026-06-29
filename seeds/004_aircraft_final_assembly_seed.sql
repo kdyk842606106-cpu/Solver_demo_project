@@ -156,7 +156,8 @@ INSERT INTO resource (machine_id, code, name, resource_type, capacity, is_availa
 ((SELECT id FROM machine WHERE code = 'AFA-001'), 'AF-HYD-01', 'Hydraulic Team A', 'HYDRAULIC_TEAM', 1, true, '{"skill":"hydraulic_landing_gear"}'),
 ((SELECT id FROM machine WHERE code = 'AFA-001'), 'AF-QA-01', 'QA Inspector A', 'QA_INSPECTOR', 1, true, '{"skill":"integration_test"}'),
 ((SELECT id FROM machine WHERE code = 'AFA-001'), 'AF-RPR-01', 'Repair Team A', 'REPAIR_TEAM', 1, true, '{"skill":"fault_recovery"}')
-ON CONFLICT (machine_id, code) DO UPDATE SET
+ON CONFLICT (code) DO UPDATE SET
+    machine_id = EXCLUDED.machine_id,
     name = EXCLUDED.name,
     resource_type = EXCLUDED.resource_type,
     capacity = EXCLUDED.capacity,

@@ -8,67 +8,30 @@ Patches PostgreSQL-specific column types (JSONB, ARRAY) for SQLite compatibility
 import pytest
 import pytest_asyncio
 from collections.abc import AsyncGenerator
-from sqlalchemy import JSON
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from sqlalchemy import Numeric
-
 from app.db.models import (
-    ActivityPackageAtomicRef,
-    ActivityNode,
-    AtomicActivity,
     Base,
-    CandidatePlan,
-    CandidatePlanStep,
-    FeatureDefinition,
     Machine,
     MachineState,
     MachineStateFeature,
     MachineType,
-    MaintenanceIntentTemplate,
     OpRule,
     OpRuleEffect,
     OpRulePrecond,
     OpRuleResourceReq,
     Resource,
-    ScopeGuard,
-    ScopeGuardPrecond,
-    ScheduleResult,
-    SolveRequest,
     StateFeatureDef,
-    StateNode,
 )
-from app.db.session import Base as SessionBase, get_db_session
+from app.db.session import Base as SessionBase, get_db_session, patch_sqlite_types
 
 
 # ============================================================
 # SQLite compatibility: patch PostgreSQL-specific column types
 # ============================================================
 
-CandidatePlanStep.__table__.c.predecessor_ids.type = JSON()
-StateFeatureDef.__table__.c.allowed_values.type = JSON()
-Resource.__table__.c.meta.type = JSON()
-SolveRequest.__table__.c.overrides.type = JSON()
-SolveRequest.__table__.c.objectives.type = JSON()
-SolveRequest.__table__.c.constraints.type = JSON()
-SolveRequest.__table__.c.blockage_constraints.type = JSON()
-ScheduleResult.__table__.c.tasks.type = JSON()
-FeatureDefinition.__table__.c.allowed_values.type = JSON()
-ActivityNode.__table__.c.metadata_json.type = JSON()
-AtomicActivity.__table__.c.metadata_json.type = JSON()
-ActivityPackageAtomicRef.__table__.c.metadata_json.type = JSON()
-StateNode.__table__.c.metadata_json.type = JSON()
-ScopeGuard.__table__.c.metadata_json.type = JSON()
-ScopeGuardPrecond.__table__.c.value_list.type = JSON()
-OpRulePrecond.__table__.c.value_list.type = JSON()
-MaintenanceIntentTemplate.__table__.c.target_state_node_ids.type = JSON()
-MaintenanceIntentTemplate.__table__.c.candidate_activity_scope_ids.type = JSON()
-MaintenanceIntentTemplate.__table__.c.observed_fact_templates.type = JSON()
-MaintenanceIntentTemplate.__table__.c.desired_fact_templates.type = JSON()
-MaintenanceIntentTemplate.__table__.c.metadata_json.type = JSON()
-OpRuleEffect.__table__.c.delta_value.type = Numeric(10, 2)
-CandidatePlan.__table__.c.parent_plan_id.type = Numeric()
+patch_sqlite_types(force=True)
 
 
 # Use in-memory SQLite for testing

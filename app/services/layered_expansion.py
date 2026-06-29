@@ -22,6 +22,7 @@ from app.db.models import (
     ScopeGuard,
     ScopeGuardPrecond,
     StateNode,
+    StateNodeReference,
 )
 from app.db.schemas import LayeredExpansionRequest
 
@@ -53,6 +54,42 @@ def _is_leaf_node(
         for child in children_by_parent.get(node.id, [])
         if include_inactive or child.is_active
     ]
+
+
+def _state_children_by_parent(
+    state_nodes: list[StateNode],
+    state_refs: list[StateNodeReference],
+    *,
+    include_inactive: bool,
+) -> dict[int | None, list[StateNode]]:
+    children: dict[int | None, list[StateNode]] = defaultdict(list)
+    by_id = {node.id: node for node in state_nodes}
+    seen: set[tuple[int | None, int]] = set()
+    for node in state_nodes:
+        parent = by_id.get(node.parent_id) if node.parent_id is not None else None
+        if not include_inactive and (not node.is_active or (parent is not None and not parent.is_active)):
+            continue
+        children[node.parent_id].append(node)
+        seen.add((node.parent_id, node.id))
+
+    for ref in state_refs:
+        if not ref.is_active:
+            continue
+        node = by_id.get(ref.state_node_id)
+        parent = by_id.get(ref.parent_state_node_id)
+        if node is None or parent is None:
+            continue
+        if not include_inactive and (not node.is_active or not parent.is_active):
+            continue
+        key = (ref.parent_state_node_id, ref.state_node_id)
+        if key in seen:
+            continue
+        children[ref.parent_state_node_id].append(node)
+        seen.add(key)
+
+    for values in children.values():
+        values.sort(key=lambda item: (item.sort_order, item.id))
+    return children
 
 
 def _descendant_state_leaf_nodes(
@@ -233,15 +270,23 @@ async def expand_layered_context(
         select(StateNode).where(StateNode.machine_type_id == machine_type_id)
     )
     state_nodes = list(state_result.scalars().all())
+    state_ref_result = await session.execute(
+        select(StateNodeReference)
+        .join(StateNode, StateNodeReference.state_node_id == StateNode.id)
+        .where(StateNode.machine_type_id == machine_type_id)
+    )
+    state_refs = list(state_ref_result.scalars().all())
 
     activity_by_id = {node.id: node for node in activity_nodes}
     state_by_id = {node.id: node for node in state_nodes}
     activity_children: dict[int | None, list[ActivityNode]] = defaultdict(list)
-    state_children: dict[int | None, list[StateNode]] = defaultdict(list)
     for node in activity_nodes:
         activity_children[node.parent_id].append(node)
-    for node in state_nodes:
-        state_children[node.parent_id].append(node)
+    state_children = _state_children_by_parent(
+        state_nodes,
+        state_refs,
+        include_inactive=payload.include_inactive,
+    )
     atomic_refs_by_package: dict[int, list[ActivityPackageAtomicRef]] = defaultdict(list)
     for ref in atomic_refs:
         atomic_refs_by_package[ref.activity_node_id].append(ref)

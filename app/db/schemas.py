@@ -354,6 +354,7 @@ class ActivityNodeCreate(BaseModel):
     level: int = Field(..., ge=1, le=3, description="Hierarchy level: 1, 2, or legacy 3")
     code: Optional[str] = Field(None, max_length=64, description="Activity node code")
     name: str = Field(..., min_length=1, max_length=128, description="Activity node name")
+    description: Optional[str] = Field(None, description="Activity node description")
     activity_category: str = Field(default="normal", max_length=32, description="normal/repair/maintenance")
     sort_order: int = Field(default=0, description="Display order under the same parent")
     is_active: bool = Field(default=True, description="Whether this node is active")
@@ -367,6 +368,7 @@ class ActivityNodeUpdate(BaseModel):
     level: int = Field(..., ge=1, le=3, description="Hierarchy level: 1, 2, or legacy 3")
     code: Optional[str] = Field(None, max_length=64, description="Activity node code")
     name: str = Field(..., min_length=1, max_length=128, description="Activity node name")
+    description: Optional[str] = Field(None, description="Activity node description")
     activity_category: str = Field(default="normal", max_length=32, description="normal/repair/maintenance")
     sort_order: int = Field(default=0, description="Display order under the same parent")
     is_active: bool = Field(default=True, description="Whether this node is active")
@@ -382,6 +384,7 @@ class ActivityNodeResponse(BaseSchema):
     level: int
     code: str
     name: str
+    description: Optional[str] = None
     activity_category: str = "normal"
     sort_order: int = 0
     is_active: bool
@@ -395,6 +398,7 @@ class AtomicActivityCreate(BaseModel):
     machine_type_id: int = Field(..., gt=0, description="Machine type ID")
     code: Optional[str] = Field(None, max_length=64, description="Atomic activity code")
     name: str = Field(..., min_length=1, max_length=128, description="Atomic activity name")
+    description: Optional[str] = Field(None, description="Atomic activity description")
     activity_category: str = Field(default="normal", max_length=32, description="normal/repair/maintenance")
     sort_order: int = Field(default=0, description="Display order")
     is_active: bool = Field(default=True, description="Whether this atomic activity is active")
@@ -406,6 +410,7 @@ class AtomicActivityUpdate(BaseModel):
 
     code: Optional[str] = Field(None, max_length=64, description="Atomic activity code")
     name: str = Field(..., min_length=1, max_length=128, description="Atomic activity name")
+    description: Optional[str] = Field(None, description="Atomic activity description")
     activity_category: str = Field(default="normal", max_length=32, description="normal/repair/maintenance")
     sort_order: int = Field(default=0, description="Display order")
     is_active: bool = Field(default=True, description="Whether this atomic activity is active")
@@ -419,6 +424,7 @@ class AtomicActivityResponse(BaseSchema):
     machine_type_id: int
     code: str
     name: str
+    description: Optional[str] = None
     activity_category: str = "normal"
     sort_order: int = 0
     is_active: bool
@@ -500,6 +506,98 @@ class StateNodeResponse(BaseSchema):
     is_active: bool
     metadata_json: Optional[dict[str, Any]] = None
     created_at: datetime
+
+
+class StateNodeReferenceCreate(BaseModel):
+    """Schema for adding an additional display parent to a state node."""
+
+    parent_state_node_id: int = Field(..., gt=0, description="Additional parent state node ID")
+    sort_order: int = Field(default=0, description="Display order under the reference parent")
+    is_active: bool = Field(default=True, description="Whether this reference is active")
+    metadata_json: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class StateNodeReferenceUpdate(BaseModel):
+    """Schema for updating a state reference display instance."""
+
+    sort_order: int = Field(default=0, description="Display order under the reference parent")
+    is_active: bool = Field(default=True, description="Whether this reference is active")
+    metadata_json: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class StateNodeReferenceResponse(BaseSchema):
+    """Schema for a state node reference response."""
+
+    id: int
+    state_node_id: int
+    state_node_code: Optional[str] = None
+    state_node_name: Optional[str] = None
+    parent_state_node_id: int
+    parent_state_node_code: Optional[str] = None
+    parent_state_node_name: Optional[str] = None
+    sort_order: int = 0
+    is_active: bool
+    metadata_json: Optional[dict[str, Any]] = None
+    created_at: datetime
+
+
+class ActivityStateBindingCreate(BaseModel):
+    """Schema for creating a network-editor state/activity binding."""
+
+    machine_type_id: int = Field(..., gt=0, description="Machine type ID")
+    activity_node_id: Optional[int] = Field(None, gt=0, description="Virtual activity node ID")
+    atomic_activity_id: Optional[int] = Field(None, gt=0, description="Executable atomic activity ID")
+    op_rule_id: Optional[int] = Field(None, gt=0, description="Linked executable rule ID")
+    state_node_id: int = Field(..., gt=0, description="Bound state node ID")
+    binding_role: str = Field(..., description="input/output/context_input/declared_output")
+    covered_leaf_state_ids: Optional[list[int]] = Field(None, description="Snapshot of covered leaf state IDs")
+    is_inherited: bool = Field(default=False, description="Whether this is an inherited projection")
+    is_active: bool = Field(default=True, description="Whether this binding is active")
+    metadata_json: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class ActivityStateBindingUpdate(BaseModel):
+    """Schema for updating a network-editor state/activity binding."""
+
+    machine_type_id: int = Field(..., gt=0, description="Machine type ID")
+    activity_node_id: Optional[int] = Field(None, gt=0, description="Virtual activity node ID")
+    atomic_activity_id: Optional[int] = Field(None, gt=0, description="Executable atomic activity ID")
+    op_rule_id: Optional[int] = Field(None, gt=0, description="Linked executable rule ID")
+    state_node_id: int = Field(..., gt=0, description="Bound state node ID")
+    binding_role: str = Field(..., description="input/output/context_input/declared_output")
+    covered_leaf_state_ids: Optional[list[int]] = Field(None, description="Snapshot of covered leaf state IDs")
+    is_inherited: bool = Field(default=False, description="Whether this is an inherited projection")
+    is_active: bool = Field(default=True, description="Whether this binding is active")
+    metadata_json: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class ActivityStateBindingResponse(BaseSchema):
+    """Schema for a network-editor state/activity binding response."""
+
+    id: int
+    machine_type_id: int
+    activity_node_id: Optional[int] = None
+    activity_node_code: Optional[str] = None
+    activity_node_name: Optional[str] = None
+    atomic_activity_id: Optional[int] = None
+    atomic_activity_code: Optional[str] = None
+    atomic_activity_name: Optional[str] = None
+    op_rule_id: Optional[int] = None
+    op_rule_code: Optional[str] = None
+    op_rule_name: Optional[str] = None
+    state_node_id: int
+    state_node_code: Optional[str] = None
+    state_node_name: Optional[str] = None
+    binding_role: str
+    binding_type: str
+    coverage_policy: str = "snapshot"
+    covered_leaf_state_ids: list[int] = Field(default_factory=list)
+    coverage_status: str
+    is_inherited: bool
+    is_active: bool
+    metadata_json: Optional[dict[str, Any]] = None
+    created_at: datetime
+    updated_at: datetime
 
 
 class ScopeGuardPrecondCreate(BaseModel):
@@ -748,6 +846,145 @@ class LayeredHealthCheckResponse(BaseModel):
     effective_rules: list[EffectiveRulePreview] = Field(default_factory=list)
     provider_graph: list[LayeredHealthFactNode] = Field(default_factory=list)
     diagnostics: list[LayeredHealthDiagnostic] = Field(default_factory=list)
+
+
+class NetworkEditorRequest(BaseModel):
+    """Selection and display options for network-editor projections."""
+
+    state_root_ids: list[int] = Field(default_factory=list, description="Selected state roots")
+    activity_scope_node_ids: list[int] = Field(default_factory=list, description="Selected activity scopes")
+    view_mode: str = Field(default="outline", pattern="^(outline|implementation|solver_ready)$")
+    include_inactive: bool = Field(default=False, description="Whether inactive nodes are included")
+    state_depth: int = Field(default=0, ge=0, le=32, description="Visible state depth from selected roots; 0 means unlimited")
+    activity_depth: int = Field(default=0, ge=0, le=32, description="Visible activity depth from selected scopes; 0 means unlimited")
+
+
+class NetworkEditorDraftChange(BaseModel):
+    """One queued edit-session mutation for unified network-editor submit."""
+
+    client_id: Optional[str] = Field(None, min_length=1, max_length=128)
+    entity_type: str = Field(..., min_length=1, max_length=64)
+    operation: str = Field(..., min_length=1, max_length=32)
+    entity_id: Optional[int] = Field(None, gt=0)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    label: Optional[str] = Field(None, max_length=256)
+
+
+class NetworkEditorCommitRequest(BaseModel):
+    """Apply an edit-session draft as one database request."""
+
+    changes: list[NetworkEditorDraftChange] = Field(default_factory=list)
+    base_revision: Optional[str] = Field(None, min_length=1, max_length=128)
+    validate_after_apply: bool = Field(default=True)
+    allow_warnings: bool = Field(default=True)
+    validation_payload: NetworkEditorRequest = Field(default_factory=NetworkEditorRequest)
+
+
+class NetworkEditorCommitResponse(BaseModel):
+    """Result of a unified network-editor submit."""
+
+    machine_type_id: int
+    applied_change_count: int
+    results: list[dict[str, Any]] = Field(default_factory=list)
+    validation: Optional[dict[str, Any]] = None
+    revision: Optional[str] = None
+
+
+class NetworkEditorImpactRequest(NetworkEditorRequest):
+    """Selection request for network-editor impact analysis."""
+
+    state_node_id: Optional[int] = Field(default=None, gt=0)
+    activity_graph_id: Optional[str] = Field(default=None, min_length=1)
+
+
+class NetworkEditorIssue(BaseModel):
+    """Modeling or solver-readiness issue returned by the network editor."""
+
+    id: str
+    code: str
+    severity: str
+    category: str
+    message: str
+    related_state_ids: list[int] = Field(default_factory=list)
+    related_activity_ids: list[str] = Field(default_factory=list)
+    details: Optional[dict[str, Any]] = None
+    suggested_action: Optional[str] = None
+
+
+class NetworkEditorGraphResponse(BaseModel):
+    """Projected state/activity graph for the network editor."""
+
+    machine_type_id: int
+    revision: Optional[str] = None
+    view_mode: str
+    state_nodes: list[dict[str, Any]] = Field(default_factory=list)
+    activity_nodes: list[dict[str, Any]] = Field(default_factory=list)
+    bindings: list[dict[str, Any]] = Field(default_factory=list)
+    edges: list[dict[str, Any]] = Field(default_factory=list)
+    summary: dict[str, Any] = Field(default_factory=dict)
+    validation_summary: dict[str, Any] = Field(default_factory=dict)
+
+
+class NetworkEditorValidationResponse(BaseModel):
+    """Split modeling and solver-ready validation result."""
+
+    machine_type_id: int
+    status: str
+    summary: dict[str, Any] = Field(default_factory=dict)
+    modeling_issues: list[NetworkEditorIssue] = Field(default_factory=list)
+    solver_ready_issues: list[NetworkEditorIssue] = Field(default_factory=list)
+
+
+class NetworkEditorImpactResponse(BaseModel):
+    """Read-only impact analysis for a selected state or activity graph node."""
+
+    machine_type_id: int
+    view_mode: str
+    selection_type: str
+    selection_id: str
+    status: str
+    selected: dict[str, Any] = Field(default_factory=dict)
+    summary: dict[str, Any] = Field(default_factory=dict)
+    parent_state_chain: list[dict[str, Any]] = Field(default_factory=list)
+    child_coverage: dict[str, Any] = Field(default_factory=dict)
+    reference_parent_states: list[dict[str, Any]] = Field(default_factory=list)
+    upstream_activities: list[dict[str, Any]] = Field(default_factory=list)
+    downstream_activities: list[dict[str, Any]] = Field(default_factory=list)
+    direct_precondition_states: list[dict[str, Any]] = Field(default_factory=list)
+    inherited_precondition_states: list[dict[str, Any]] = Field(default_factory=list)
+    output_states: list[dict[str, Any]] = Field(default_factory=list)
+    owner_virtual_activities: list[dict[str, Any]] = Field(default_factory=list)
+    affected_parent_states: list[dict[str, Any]] = Field(default_factory=list)
+    affected_virtual_activities: list[dict[str, Any]] = Field(default_factory=list)
+    affected_executable_activities: list[dict[str, Any]] = Field(default_factory=list)
+    package_bindings: list[dict[str, Any]] = Field(default_factory=list)
+    bindings: list[dict[str, Any]] = Field(default_factory=list)
+    participates_in_solver: Optional[bool] = None
+    issues: list[NetworkEditorIssue] = Field(default_factory=list)
+
+
+class NetworkEditorSolverPrecheckResponse(BaseModel):
+    """Solver readiness precheck projection without launching the Scheduler."""
+
+    machine_type_id: int
+    status: str
+    summary: dict[str, Any] = Field(default_factory=dict)
+    executable_activities: list[dict[str, Any]] = Field(default_factory=list)
+    excluded_virtual_activities: list[dict[str, Any]] = Field(default_factory=list)
+    virtual_activity_groups: list[dict[str, Any]] = Field(default_factory=list)
+    state_aggregation_rules: list[dict[str, Any]] = Field(default_factory=list)
+    blocking_issues: list[NetworkEditorIssue] = Field(default_factory=list)
+    request_preview: dict[str, Any] = Field(default_factory=dict)
+    solve_request_template: dict[str, Any] = Field(default_factory=dict)
+    goal_facts: list[dict[str, Any]] = Field(default_factory=list)
+    candidate_activities: list[dict[str, Any]] = Field(default_factory=list)
+    effective_rules: list[dict[str, Any]] = Field(default_factory=list)
+    layered_health_summary: dict[str, Any] = Field(default_factory=dict)
+    layered_health_diagnostics: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class NetworkEditorExportPreviewResponse(NetworkEditorSolverPrecheckResponse):
+    """Deprecated compatibility response for the legacy export-preview endpoint."""
 
 
 class MaintenanceFactTemplate(BaseModel):

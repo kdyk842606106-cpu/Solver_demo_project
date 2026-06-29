@@ -102,8 +102,7 @@ async def _seed_pump_body_data(client):
          "meta": {"skill": "fault_recovery"}},
     ]
     for res in resources:
-        res = {"machine_id": machine_id, **res}
-        r = await client.post("/api/v1/resources", json=res)
+        r = await client.post("/api/v1/resources", json={**res, "machine_id": machine_id})
         assert r.status_code == 201, r.text
 
     # 5) States

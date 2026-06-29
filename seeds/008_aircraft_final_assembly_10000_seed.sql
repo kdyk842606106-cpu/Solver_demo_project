@@ -137,8 +137,8 @@ INSERT INTO resource (id, machine_id, code, name, resource_type, capacity, is_av
 (10010, 10000, 'SPACE-HYD-BAY-10000', 'Hydraulic bay workspace', 'AFA_SPACE_HYD_BAY', 1, true, '{"line":"aircraft_final_assembly"}'::jsonb),
 (10011, 10000, 'SPACE-FINAL-TEST-10000', 'Final test workspace', 'AFA_SPACE_FINAL_TEST', 1, true, '{"line":"aircraft_final_assembly"}'::jsonb)
 ON CONFLICT (id) DO UPDATE SET
-    code = EXCLUDED.code,
     machine_id = EXCLUDED.machine_id,
+    code = EXCLUDED.code,
     name = EXCLUDED.name,
     resource_type = EXCLUDED.resource_type,
     capacity = EXCLUDED.capacity,

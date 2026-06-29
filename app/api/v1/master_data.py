@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import (
+    ActivityStateBinding,
     ActivityPackageAtomicRef,
     ActivityNode,
     AtomicActivity,
@@ -40,8 +41,12 @@ from app.db.models import (
     SolveRequest,
     StateFeatureDef,
     StateNode,
+    StateNodeReference,
 )
 from app.db.schemas import (
+    ActivityStateBindingCreate,
+    ActivityStateBindingResponse,
+    ActivityStateBindingUpdate,
     ActivityPackageAtomicRefCreate,
     ActivityPackageAtomicRefResponse,
     ActivityNodeCreate,
@@ -63,6 +68,15 @@ from app.db.schemas import (
     MaintenanceIntentTemplateCreate,
     MaintenanceIntentTemplateResponse,
     MaintenanceIntentTemplateUpdate,
+    NetworkEditorCommitRequest,
+    NetworkEditorCommitResponse,
+    NetworkEditorExportPreviewResponse,
+    NetworkEditorGraphResponse,
+    NetworkEditorImpactRequest,
+    NetworkEditorImpactResponse,
+    NetworkEditorRequest,
+    NetworkEditorSolverPrecheckResponse,
+    NetworkEditorValidationResponse,
     OpRuleCreate,
     OpRuleDetailResponse,
     OpRuleUpdate,
@@ -75,6 +89,9 @@ from app.db.schemas import (
     StateFeatureDefCreate,
     StateFeatureDefResponse,
     StateFeatureDefUpdate,
+    StateNodeReferenceCreate,
+    StateNodeReferenceResponse,
+    StateNodeReferenceUpdate,
     StateNodeCreate,
     StateNodeResponse,
     StateNodeUpdate,
@@ -87,6 +104,13 @@ from app.db.schemas import (
 from app.db.session import get_db_session
 from app.services.layered_expansion import expand_layered_context
 from app.services.layered_health import check_layered_health
+from app.services.network_editor import (
+    analyze_network_editor_impact,
+    get_network_editor_revision,
+    precheck_network_editor_solver,
+    project_network_editor_graph,
+    validate_network_editor_model,
+)
 
 router = APIRouter(tags=["master-data"])
 
@@ -272,6 +296,38 @@ async def _get_state_node_or_404(node_id: int, session: AsyncSession) -> StateNo
     return obj
 
 
+async def _get_state_node_reference_or_404(ref_id: int, session: AsyncSession) -> StateNodeReference:
+    result = await session.execute(
+        select(StateNodeReference)
+        .where(StateNodeReference.id == ref_id)
+        .options(
+            selectinload(StateNodeReference.state_node),
+            selectinload(StateNodeReference.parent_state_node),
+        )
+    )
+    obj = result.scalar_one_or_none()
+    if obj is None:
+        raise HTTPException(status_code=404, detail=f"State node reference {ref_id} not found")
+    return obj
+
+
+async def _get_activity_state_binding_or_404(binding_id: int, session: AsyncSession) -> ActivityStateBinding:
+    result = await session.execute(
+        select(ActivityStateBinding)
+        .where(ActivityStateBinding.id == binding_id)
+        .options(
+            selectinload(ActivityStateBinding.activity_node),
+            selectinload(ActivityStateBinding.atomic_activity),
+            selectinload(ActivityStateBinding.op_rule),
+            selectinload(ActivityStateBinding.state_node),
+        )
+    )
+    obj = result.scalar_one_or_none()
+    if obj is None:
+        raise HTTPException(status_code=404, detail=f"Activity-state binding {binding_id} not found")
+    return obj
+
+
 async def _get_scope_guard_or_404(guard_id: int, session: AsyncSession) -> ScopeGuard:
     result = await session.execute(
         select(ScopeGuard)
@@ -445,6 +501,15 @@ async def _validate_activity_parent(
         raise HTTPException(status_code=422, detail="Activity parent must belong to the same machine type")
     if parent.level != level - 1:
         raise HTTPException(status_code=422, detail="Activity parent level must be exactly one level above child")
+    if current_id is not None:
+        current_parent_id = parent.parent_id
+        seen: set[int] = set()
+        while current_parent_id is not None and current_parent_id not in seen:
+            if current_parent_id == current_id:
+                raise HTTPException(status_code=422, detail="Activity parent would create a cycle")
+            seen.add(current_parent_id)
+            ancestor = await _get_activity_node_or_404(current_parent_id, session)
+            current_parent_id = ancestor.parent_id
 
 
 async def _validate_state_parent(
@@ -470,6 +535,15 @@ async def _validate_state_parent(
         raise HTTPException(status_code=422, detail="State parent level must be exactly one level above child")
     if parent.state_kind != "aggregate" or parent.feature_key or parent.target_value:
         raise HTTPException(status_code=422, detail="State parent must be an aggregate package before adding children")
+    if current_id is not None:
+        current_parent_id = parent.parent_id
+        seen: set[int] = set()
+        while current_parent_id is not None and current_parent_id not in seen:
+            if current_parent_id == current_id:
+                raise HTTPException(status_code=422, detail="State parent would create a cycle")
+            seen.add(current_parent_id)
+            ancestor = await _get_state_node_or_404(current_parent_id, session)
+            current_parent_id = ancestor.parent_id
 
 
 def _append_allowed_value(allowed_values: Any, value: str) -> list[Any]:
@@ -578,6 +652,585 @@ async def _validate_atomic_activity_for_rule(
         raise HTTPException(status_code=422, detail="Atomic activity must belong to the same machine type as the op rule")
 
 
+async def _load_state_nodes_for_machine(session: AsyncSession, machine_type_id: int) -> list[StateNode]:
+    result = await session.execute(
+        select(StateNode)
+        .where(StateNode.machine_type_id == machine_type_id)
+        .order_by(StateNode.level, StateNode.sort_order, StateNode.id)
+    )
+    return list(result.scalars().all())
+
+
+async def _load_state_references_for_machine(session: AsyncSession, machine_type_id: int) -> list[StateNodeReference]:
+    result = await session.execute(
+        select(StateNodeReference)
+        .join(StateNode, StateNodeReference.state_node_id == StateNode.id)
+        .where(StateNode.machine_type_id == machine_type_id)
+        .order_by(StateNodeReference.parent_state_node_id, StateNodeReference.sort_order, StateNodeReference.id)
+    )
+    return list(result.scalars().all())
+
+
+def _state_children_by_parent(
+    nodes: list[StateNode],
+    references: Optional[list[StateNodeReference]] = None,
+    *,
+    active_only: bool,
+) -> dict[Optional[int], list[StateNode]]:
+    by_parent: dict[Optional[int], list[StateNode]] = {}
+    by_id = {node.id: node for node in nodes}
+    seen: set[tuple[Optional[int], int]] = set()
+    for node in nodes:
+        parent = by_id.get(node.parent_id) if node.parent_id is not None else None
+        if active_only and (not node.is_active or (parent is not None and not parent.is_active)):
+            continue
+        key = (node.parent_id, node.id)
+        by_parent.setdefault(node.parent_id, []).append(node)
+        seen.add(key)
+
+    for ref in references or []:
+        if not ref.is_active:
+            continue
+        node = by_id.get(ref.state_node_id)
+        parent = by_id.get(ref.parent_state_node_id)
+        if node is None or parent is None:
+            continue
+        if active_only and (not node.is_active or not parent.is_active):
+            continue
+        key = (ref.parent_state_node_id, ref.state_node_id)
+        if key in seen:
+            continue
+        by_parent.setdefault(ref.parent_state_node_id, []).append(node)
+        seen.add(key)
+
+    for children in by_parent.values():
+        children.sort(key=lambda item: (item.sort_order, item.id))
+    return by_parent
+
+
+def _leaf_ids_under_state(
+    state_node_id: int,
+    nodes: list[StateNode],
+    references: Optional[list[StateNodeReference]] = None,
+    *,
+    active_only: bool,
+) -> list[int]:
+    by_id = {node.id: node for node in nodes}
+    by_parent = _state_children_by_parent(nodes, references, active_only=active_only)
+
+    def walk(node_id: int) -> list[int]:
+        node = by_id.get(node_id)
+        if node is None:
+            return []
+        if active_only and not node.is_active:
+            return []
+        children = by_parent.get(node_id, [])
+        if not children:
+            return [node_id] if node.feature_key and node.target_value else []
+        leaf_ids: list[int] = []
+        for child in children:
+            leaf_ids.extend(walk(child.id))
+        return leaf_ids
+
+    return walk(state_node_id)
+
+
+def _binding_type_for_state(
+    state_node: StateNode,
+    nodes: list[StateNode],
+    references: Optional[list[StateNodeReference]] = None,
+) -> str:
+    children = _state_children_by_parent(nodes, references, active_only=True)
+    has_children = bool(children.get(state_node.id))
+    if not has_children and state_node.feature_key and state_node.target_value and state_node.state_kind != "aggregate":
+        return "atomic_state"
+    return "state_package"
+
+
+def _compute_coverage_status(
+    binding: ActivityStateBinding,
+    nodes: list[StateNode],
+    references: Optional[list[StateNodeReference]] = None,
+) -> str:
+    active_leaf_ids = set(_leaf_ids_under_state(binding.state_node_id, nodes, references, active_only=True))
+    all_leaf_ids = set(_leaf_ids_under_state(binding.state_node_id, nodes, references, active_only=False))
+    covered_ids = {int(item) for item in (binding.covered_leaf_state_ids or [])}
+
+    if not covered_ids:
+        return "stale"
+    if not covered_ids.issubset(all_leaf_ids):
+        return "stale"
+    if covered_ids == active_leaf_ids and active_leaf_ids:
+        return "complete"
+    if covered_ids.issubset(active_leaf_ids):
+        return "partial" if binding.coverage_status == "partial" else "stale"
+    return "stale"
+
+
+async def _resolve_covered_leaf_ids(
+    session: AsyncSession,
+    state_node: StateNode,
+    explicit_ids: Optional[list[int]],
+) -> list[int]:
+    nodes = await _load_state_nodes_for_machine(session, state_node.machine_type_id)
+    references = await _load_state_references_for_machine(session, state_node.machine_type_id)
+    all_leaf_ids = set(_leaf_ids_under_state(state_node.id, nodes, references, active_only=False))
+    active_leaf_ids = _leaf_ids_under_state(state_node.id, nodes, references, active_only=True)
+    if explicit_ids is None:
+        return active_leaf_ids
+
+    explicit_set = {int(item) for item in explicit_ids}
+    if len(explicit_set) != len(explicit_ids):
+        raise HTTPException(status_code=422, detail="covered_leaf_state_ids cannot contain duplicates")
+    if not explicit_set.issubset(all_leaf_ids):
+        raise HTTPException(status_code=422, detail="covered_leaf_state_ids must belong to the bound state package")
+    return sorted(explicit_set)
+
+
+async def _validate_state_reference(
+    session: AsyncSession,
+    state_node: StateNode,
+    parent_state_node: StateNode,
+) -> None:
+    if state_node.id == parent_state_node.id:
+        raise HTTPException(status_code=422, detail="State reference cannot point to itself")
+    if state_node.machine_type_id != parent_state_node.machine_type_id:
+        raise HTTPException(status_code=422, detail="State reference parent must belong to the same machine type")
+    existing = await session.execute(
+        select(StateNodeReference.id)
+        .where(
+            StateNodeReference.state_node_id == state_node.id,
+            StateNodeReference.parent_state_node_id == parent_state_node.id,
+        )
+        .limit(1)
+    )
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=409, detail="State node reference already exists")
+
+    nodes = await _load_state_nodes_for_machine(session, state_node.machine_type_id)
+    refs = await session.execute(
+        select(StateNodeReference).where(
+            StateNodeReference.state_node.has(machine_type_id=state_node.machine_type_id)
+        )
+    )
+    adjacency: dict[int, list[int]] = {}
+    for node in nodes:
+        if node.parent_id is not None:
+            adjacency.setdefault(node.parent_id, []).append(node.id)
+    for ref in refs.scalars().all():
+        adjacency.setdefault(ref.parent_state_node_id, []).append(ref.state_node_id)
+    adjacency.setdefault(parent_state_node.id, []).append(state_node.id)
+
+    stack = [state_node.id]
+    seen: set[int] = set()
+    while stack:
+        current = stack.pop()
+        if current == parent_state_node.id:
+            raise HTTPException(status_code=422, detail="State reference would create a cycle")
+        if current in seen:
+            continue
+        seen.add(current)
+        stack.extend(adjacency.get(current, []))
+
+
+async def _resolve_binding_payload(
+    session: AsyncSession,
+    payload: ActivityStateBindingCreate | ActivityStateBindingUpdate,
+) -> tuple[Optional[ActivityNode], Optional[AtomicActivity], Optional[OpRule], StateNode, str, list[int], str]:
+    valid_roles = {"input", "output", "context_input", "declared_output"}
+    if payload.binding_role not in valid_roles:
+        raise HTTPException(status_code=422, detail="Invalid binding_role")
+    if bool(payload.activity_node_id) == bool(payload.atomic_activity_id):
+        raise HTTPException(status_code=422, detail="Use either activity_node_id or atomic_activity_id, not both")
+
+    await _get_machine_type_or_404(payload.machine_type_id, session)
+    state_node = await _get_state_node_or_404(payload.state_node_id, session)
+    if state_node.machine_type_id != payload.machine_type_id:
+        raise HTTPException(status_code=422, detail="State node must belong to the same machine type as the binding")
+
+    activity_node: Optional[ActivityNode] = None
+    atomic_activity: Optional[AtomicActivity] = None
+    op_rule: Optional[OpRule] = None
+    if payload.activity_node_id:
+        activity_node = await _get_activity_node_or_404(payload.activity_node_id, session)
+        if activity_node.machine_type_id != payload.machine_type_id:
+            raise HTTPException(status_code=422, detail="Activity node must belong to the same machine type as the binding")
+        if activity_node.level not in (1, 2):
+            raise HTTPException(status_code=422, detail="Virtual activity bindings can only target level-1 or level-2 activity nodes")
+        if payload.binding_role not in {"context_input", "declared_output"}:
+            raise HTTPException(status_code=422, detail="Virtual activity bindings only support context_input or declared_output roles")
+        if payload.op_rule_id is not None:
+            raise HTTPException(status_code=422, detail="Virtual activity bindings cannot link op_rule_id")
+    else:
+        atomic_activity = await _get_atomic_activity_or_404(payload.atomic_activity_id or 0, session)
+        if atomic_activity.machine_type_id != payload.machine_type_id:
+            raise HTTPException(status_code=422, detail="Atomic activity must belong to the same machine type as the binding")
+        if payload.binding_role not in {"input", "output"}:
+            raise HTTPException(status_code=422, detail="Executable bindings only support input or output roles")
+        if payload.op_rule_id is None:
+            active_rules = [
+                rule for rule in atomic_activity.op_rules
+                if rule.atomic_activity_id == atomic_activity.id and rule.is_active
+            ]
+            if len(active_rules) == 1:
+                op_rule = active_rules[0]
+            elif len(active_rules) > 1:
+                raise HTTPException(status_code=422, detail="Executable binding requires explicit op_rule_id when atomic activity has multiple active rules")
+        else:
+            op_rule = await _get_rule_or_404(payload.op_rule_id, session)
+            if op_rule.machine_type_id != payload.machine_type_id:
+                raise HTTPException(status_code=422, detail="Op rule must belong to the same machine type as the binding")
+            if op_rule.atomic_activity_id != atomic_activity.id:
+                raise HTTPException(status_code=422, detail="Op rule must bind to the same atomic activity")
+
+    covered_leaf_ids = await _resolve_covered_leaf_ids(session, state_node, payload.covered_leaf_state_ids)
+    nodes = await _load_state_nodes_for_machine(session, state_node.machine_type_id)
+    references = await _load_state_references_for_machine(session, state_node.machine_type_id)
+    binding_type = _binding_type_for_state(state_node, nodes, references)
+    temp_binding = ActivityStateBinding(
+        machine_type_id=payload.machine_type_id,
+        state_node_id=state_node.id,
+        binding_role=payload.binding_role,
+        binding_type=binding_type,
+        covered_leaf_state_ids=covered_leaf_ids,
+        coverage_status="partial" if payload.covered_leaf_state_ids is not None else "complete",
+    )
+    coverage_status = _compute_coverage_status(temp_binding, nodes, references)
+    return activity_node, atomic_activity, op_rule, state_node, binding_type, covered_leaf_ids, coverage_status
+
+
+def _is_executable_rule_binding_role(binding_role: Optional[str]) -> bool:
+    return binding_role in {"input", "output"}
+
+
+_BINDING_MANAGED_FACTS_METADATA_KEY = "_network_editor_managed_rule_facts"
+
+
+def _fact_key_to_metadata(binding_role: str, key: tuple[str, str, str]) -> dict[str, str]:
+    feature_key, operator_or_effect_type, value = key
+    if binding_role == "input":
+        return {
+            "feature_key": feature_key,
+            "operator": operator_or_effect_type,
+            "feature_value": value,
+        }
+    return {
+        "feature_key": feature_key,
+        "effect_type": operator_or_effect_type,
+        "new_value": value,
+    }
+
+
+def _fact_key_from_metadata(binding_role: str, item: Any) -> tuple[str, str, str] | None:
+    if not isinstance(item, dict):
+        return None
+    feature_key = item.get("feature_key")
+    if not feature_key:
+        return None
+    if binding_role == "input":
+        operator = item.get("operator") or "eq"
+        feature_value = item.get("feature_value")
+        if feature_value is None:
+            return None
+        return (str(feature_key), str(operator), str(feature_value))
+    effect_type = item.get("effect_type") or "set"
+    new_value = item.get("new_value")
+    if new_value is None:
+        return None
+    return (str(feature_key), str(effect_type), str(new_value))
+
+
+def _binding_managed_rule_fact_keys(
+    binding: ActivityStateBinding,
+    binding_role: Optional[str] = None,
+) -> set[tuple[str, str, str]]:
+    role = binding_role or binding.binding_role
+    if not _is_executable_rule_binding_role(role):
+        return set()
+    metadata = binding.metadata_json if isinstance(binding.metadata_json, dict) else {}
+    fact_metadata = metadata.get(_BINDING_MANAGED_FACTS_METADATA_KEY)
+    if not isinstance(fact_metadata, dict):
+        return set()
+    raw_items = fact_metadata.get(role)
+    if not isinstance(raw_items, list):
+        return set()
+    keys: set[tuple[str, str, str]] = set()
+    for item in raw_items:
+        key = _fact_key_from_metadata(role, item)
+        if key is not None:
+            keys.add(key)
+    return keys
+
+
+def _set_binding_managed_rule_fact_keys(
+    binding: ActivityStateBinding,
+    binding_role: str,
+    keys: set[tuple[str, str, str]],
+) -> None:
+    metadata = dict(binding.metadata_json or {})
+    fact_metadata = metadata.get(_BINDING_MANAGED_FACTS_METADATA_KEY)
+    if not isinstance(fact_metadata, dict):
+        fact_metadata = {}
+    else:
+        fact_metadata = dict(fact_metadata)
+
+    if keys:
+        fact_metadata[binding_role] = [
+            _fact_key_to_metadata(binding_role, key)
+            for key in sorted(keys, key=lambda item: (item[0], item[1], item[2]))
+        ]
+    else:
+        fact_metadata.pop(binding_role, None)
+
+    if fact_metadata:
+        metadata[_BINDING_MANAGED_FACTS_METADATA_KEY] = fact_metadata
+    else:
+        metadata.pop(_BINDING_MANAGED_FACTS_METADATA_KEY, None)
+    binding.metadata_json = metadata or None
+
+
+async def _rule_fact_keys_for_leaf_ids(
+    session: AsyncSession,
+    binding_role: Optional[str],
+    leaf_ids: list[int] | None,
+) -> set[tuple[str, str, str]]:
+    if not _is_executable_rule_binding_role(binding_role) or not leaf_ids:
+        return set()
+    result = await session.execute(select(StateNode).where(StateNode.id.in_(leaf_ids)))
+    keys: set[tuple[str, str, str]] = set()
+    for leaf in result.scalars().all():
+        if not leaf.feature_key or leaf.target_value is None:
+            continue
+        if binding_role == "input":
+            keys.add((leaf.feature_key, leaf.operator or "eq", leaf.target_value))
+        else:
+            keys.add((leaf.feature_key, "set", leaf.target_value))
+    return keys
+
+
+async def _rule_fact_keys_for_binding(
+    session: AsyncSession,
+    binding: ActivityStateBinding,
+) -> set[tuple[str, str, str]]:
+    if binding.atomic_activity_id is None or binding.op_rule_id is None:
+        return set()
+    return await _rule_fact_keys_for_leaf_ids(session, binding.binding_role, binding.covered_leaf_state_ids or [])
+
+
+async def _managed_rule_fact_keys_for_active_bindings(
+    session: AsyncSession,
+    op_rule_id: int,
+    binding_role: str,
+    *,
+    exclude_binding_id: Optional[int] = None,
+) -> set[tuple[str, str, str]]:
+    result = await session.execute(
+        select(ActivityStateBinding).where(
+            ActivityStateBinding.op_rule_id == op_rule_id,
+            ActivityStateBinding.binding_role == binding_role,
+            ActivityStateBinding.atomic_activity_id.is_not(None),
+            ActivityStateBinding.is_active.is_(True),
+        )
+    )
+    keys: set[tuple[str, str, str]] = set()
+    for binding in result.scalars().all():
+        if exclude_binding_id is not None and binding.id == exclude_binding_id:
+            continue
+        keys.update(_binding_managed_rule_fact_keys(binding, binding_role))
+    return keys
+
+
+async def _existing_rule_fact_keys(
+    session: AsyncSession,
+    op_rule_id: int,
+    binding_role: str,
+    keys: set[tuple[str, str, str]],
+) -> set[tuple[str, str, str]]:
+    existing_keys: set[tuple[str, str, str]] = set()
+    for feature_key, operator_or_effect_type, value in keys:
+        if binding_role == "input":
+            exists = await session.execute(
+                select(OpRulePrecond.id)
+                .where(
+                    OpRulePrecond.op_rule_id == op_rule_id,
+                    OpRulePrecond.feature_key == feature_key,
+                    OpRulePrecond.operator == operator_or_effect_type,
+                    OpRulePrecond.feature_value == value,
+                )
+                .limit(1)
+            )
+        else:
+            exists = await session.execute(
+                select(OpRuleEffect.id)
+                .where(
+                    OpRuleEffect.op_rule_id == op_rule_id,
+                    OpRuleEffect.feature_key == feature_key,
+                    OpRuleEffect.effect_type == operator_or_effect_type,
+                    OpRuleEffect.new_value == value,
+                )
+                .limit(1)
+            )
+        if exists.scalar_one_or_none() is not None:
+            existing_keys.add((feature_key, operator_or_effect_type, value))
+    return existing_keys
+
+
+async def _sync_binding_rule_facts(
+    binding: ActivityStateBinding,
+    session: AsyncSession,
+    *,
+    previous_managed_keys: set[tuple[str, str, str]] | None = None,
+) -> None:
+    if binding.op_rule_id is None or not _is_executable_rule_binding_role(binding.binding_role):
+        metadata = dict(binding.metadata_json or {})
+        metadata.pop(_BINDING_MANAGED_FACTS_METADATA_KEY, None)
+        binding.metadata_json = metadata or None
+        return
+
+    desired_keys = set()
+    if binding.atomic_activity_id is not None and binding.is_active:
+        desired_keys = await _rule_fact_keys_for_binding(session, binding)
+
+    existing_keys = await _existing_rule_fact_keys(
+        session,
+        binding.op_rule_id,
+        binding.binding_role,
+        desired_keys,
+    )
+    keys_to_add = desired_keys - existing_keys
+    if keys_to_add:
+        await _add_rule_facts_for_keys(session, binding.op_rule_id, binding.binding_role, keys_to_add)
+
+    managed_by_other = await _managed_rule_fact_keys_for_active_bindings(
+        session,
+        binding.op_rule_id,
+        binding.binding_role,
+        exclude_binding_id=binding.id,
+    )
+    previous_managed_keys = previous_managed_keys or set()
+    managed_keys = (
+        keys_to_add
+        | (desired_keys & managed_by_other)
+        | (desired_keys & previous_managed_keys)
+    )
+    _set_binding_managed_rule_fact_keys(binding, binding.binding_role, managed_keys)
+
+
+async def _desired_rule_fact_keys(
+    session: AsyncSession,
+    op_rule_id: Optional[int],
+    binding_role: Optional[str],
+) -> set[tuple[str, str, str]]:
+    if op_rule_id is None or not _is_executable_rule_binding_role(binding_role):
+        return set()
+    result = await session.execute(
+        select(ActivityStateBinding).where(
+            ActivityStateBinding.op_rule_id == op_rule_id,
+            ActivityStateBinding.binding_role == binding_role,
+            ActivityStateBinding.atomic_activity_id.is_not(None),
+            ActivityStateBinding.is_active.is_(True),
+        )
+    )
+    leaf_ids: set[int] = set()
+    for binding in result.scalars().all():
+        leaf_ids.update(int(item) for item in (binding.covered_leaf_state_ids or []))
+    return await _rule_fact_keys_for_leaf_ids(session, binding_role, sorted(leaf_ids))
+
+
+async def _add_rule_facts_for_keys(
+    session: AsyncSession,
+    op_rule_id: int,
+    binding_role: str,
+    keys: set[tuple[str, str, str]],
+) -> None:
+    if binding_role == "input":
+        for feature_key, operator, feature_value in keys:
+            exists = await session.execute(
+                select(OpRulePrecond.id)
+                .where(
+                    OpRulePrecond.op_rule_id == op_rule_id,
+                    OpRulePrecond.feature_key == feature_key,
+                    OpRulePrecond.operator == operator,
+                    OpRulePrecond.feature_value == feature_value,
+                )
+                .limit(1)
+            )
+            if exists.scalar_one_or_none() is None:
+                session.add(
+                    OpRulePrecond(
+                        op_rule_id=op_rule_id,
+                        feature_key=feature_key,
+                        operator=operator,
+                        feature_value=feature_value,
+                        value_list=None,
+                    )
+                )
+    else:
+        for feature_key, effect_type, new_value in keys:
+            exists = await session.execute(
+                select(OpRuleEffect.id)
+                .where(
+                    OpRuleEffect.op_rule_id == op_rule_id,
+                    OpRuleEffect.feature_key == feature_key,
+                    OpRuleEffect.new_value == new_value,
+                    OpRuleEffect.effect_type == effect_type,
+                )
+                .limit(1)
+            )
+            if exists.scalar_one_or_none() is None:
+                session.add(
+                    OpRuleEffect(
+                        op_rule_id=op_rule_id,
+                        feature_key=feature_key,
+                        new_value=new_value,
+                        effect_type=effect_type,
+                        delta_value=None,
+                    )
+                )
+
+
+async def _remove_rule_facts_for_keys(
+    session: AsyncSession,
+    op_rule_id: int,
+    binding_role: str,
+    keys: set[tuple[str, str, str]],
+) -> None:
+    for feature_key, operator_or_effect_type, value in keys:
+        if binding_role == "input":
+            await session.execute(
+                delete(OpRulePrecond).where(
+                    OpRulePrecond.op_rule_id == op_rule_id,
+                    OpRulePrecond.feature_key == feature_key,
+                    OpRulePrecond.operator == operator_or_effect_type,
+                    OpRulePrecond.feature_value == value,
+                )
+            )
+        else:
+            await session.execute(
+                delete(OpRuleEffect).where(
+                    OpRuleEffect.op_rule_id == op_rule_id,
+                    OpRuleEffect.feature_key == feature_key,
+                    OpRuleEffect.effect_type == operator_or_effect_type,
+                    OpRuleEffect.new_value == value,
+                )
+            )
+
+
+async def _reconcile_rule_binding_facts(
+    session: AsyncSession,
+    op_rule_id: Optional[int],
+    binding_role: Optional[str],
+    *,
+    stale_keys: set[tuple[str, str, str]] | None = None,
+) -> None:
+    if op_rule_id is None or not _is_executable_rule_binding_role(binding_role):
+        return
+    desired_keys = await _desired_rule_fact_keys(session, op_rule_id, binding_role)
+    stale_without_active_binding = (stale_keys or set()) - desired_keys
+    if stale_without_active_binding:
+        await _remove_rule_facts_for_keys(session, op_rule_id, binding_role, stale_without_active_binding)
+
+
 async def _validate_activity_package_for_ref(
     session: AsyncSession,
     package_id: int,
@@ -596,6 +1249,7 @@ def _serialize_activity_node(node: ActivityNode) -> dict[str, Any]:
         "level": node.level,
         "code": node.code,
         "name": node.name,
+        "description": node.description,
         "activity_category": node.activity_category,
         "sort_order": node.sort_order,
         "is_active": node.is_active,
@@ -610,6 +1264,7 @@ def _serialize_atomic_activity(activity: AtomicActivity) -> dict[str, Any]:
         "machine_type_id": activity.machine_type_id,
         "code": activity.code,
         "name": activity.name,
+        "description": activity.description,
         "activity_category": activity.activity_category,
         "sort_order": activity.sort_order,
         "is_active": activity.is_active,
@@ -650,6 +1305,66 @@ def _serialize_state_node(node: StateNode) -> dict[str, Any]:
         "is_active": node.is_active,
         "metadata_json": node.metadata_json,
         "created_at": node.created_at,
+    }
+
+
+def _serialize_state_node_reference(ref: StateNodeReference) -> dict[str, Any]:
+    state_node = ref.state_node
+    parent_state_node = ref.parent_state_node
+    return {
+        "id": ref.id,
+        "state_node_id": ref.state_node_id,
+        "state_node_code": state_node.code if state_node else None,
+        "state_node_name": state_node.name if state_node else None,
+        "parent_state_node_id": ref.parent_state_node_id,
+        "parent_state_node_code": parent_state_node.code if parent_state_node else None,
+        "parent_state_node_name": parent_state_node.name if parent_state_node else None,
+        "sort_order": ref.sort_order,
+        "is_active": ref.is_active,
+        "metadata_json": ref.metadata_json,
+        "created_at": ref.created_at,
+    }
+
+
+async def _serialize_activity_state_binding(
+    binding: ActivityStateBinding,
+    session: AsyncSession,
+) -> dict[str, Any]:
+    nodes = await _load_state_nodes_for_machine(session, binding.machine_type_id)
+    references = await _load_state_references_for_machine(session, binding.machine_type_id)
+    coverage_status = _compute_coverage_status(binding, nodes, references)
+    if binding.coverage_status != coverage_status:
+        binding.coverage_status = coverage_status
+
+    activity_node = binding.activity_node
+    atomic_activity = binding.atomic_activity
+    op_rule = binding.op_rule
+    state_node = binding.state_node
+    return {
+        "id": binding.id,
+        "machine_type_id": binding.machine_type_id,
+        "activity_node_id": binding.activity_node_id,
+        "activity_node_code": activity_node.code if activity_node else None,
+        "activity_node_name": activity_node.name if activity_node else None,
+        "atomic_activity_id": binding.atomic_activity_id,
+        "atomic_activity_code": atomic_activity.code if atomic_activity else None,
+        "atomic_activity_name": atomic_activity.name if atomic_activity else None,
+        "op_rule_id": binding.op_rule_id,
+        "op_rule_code": op_rule.code if op_rule else None,
+        "op_rule_name": op_rule.name if op_rule else None,
+        "state_node_id": binding.state_node_id,
+        "state_node_code": state_node.code if state_node else None,
+        "state_node_name": state_node.name if state_node else None,
+        "binding_role": binding.binding_role,
+        "binding_type": binding.binding_type,
+        "coverage_policy": binding.coverage_policy,
+        "covered_leaf_state_ids": binding.covered_leaf_state_ids or [],
+        "coverage_status": binding.coverage_status,
+        "is_inherited": binding.is_inherited,
+        "is_active": binding.is_active,
+        "metadata_json": binding.metadata_json,
+        "created_at": binding.created_at,
+        "updated_at": binding.updated_at,
     }
 
 
@@ -1335,6 +2050,7 @@ async def update_atomic_activity(
         await _ensure_atomic_code_unique(db, obj.machine_type_id, code, exclude_id=atomic_activity_id)
         obj.code = code
     obj.name = payload.name
+    obj.description = payload.description
     obj.activity_category = payload.activity_category
     obj.sort_order = payload.sort_order
     obj.is_active = payload.is_active
@@ -1489,6 +2205,7 @@ async def update_activity_node(
     if code:
         obj.code = code
     obj.name = payload.name
+    obj.description = payload.description
     obj.activity_category = payload.activity_category
     obj.sort_order = payload.sort_order
     obj.is_active = payload.is_active
@@ -1599,6 +2316,233 @@ async def delete_state_node(node_id: int, db: AsyncSession = Depends(get_db_sess
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.get(
+    "/machine-types/{machine_type_id}/state-node-references",
+    response_model=list[StateNodeReferenceResponse],
+)
+async def list_state_node_references(
+    machine_type_id: int,
+    db: AsyncSession = Depends(get_db_session),
+):
+    await _get_machine_type_or_404(machine_type_id, db)
+    result = await db.execute(
+        select(StateNodeReference)
+        .join(StateNodeReference.state_node)
+        .where(StateNode.machine_type_id == machine_type_id)
+        .options(
+            selectinload(StateNodeReference.state_node),
+            selectinload(StateNodeReference.parent_state_node),
+        )
+        .order_by(StateNodeReference.parent_state_node_id, StateNodeReference.sort_order, StateNodeReference.id)
+    )
+    return [_serialize_state_node_reference(item) for item in result.scalars().all()]
+
+
+@router.post(
+    "/state-nodes/{node_id}/references",
+    response_model=StateNodeReferenceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_state_node_reference(
+    node_id: int,
+    payload: StateNodeReferenceCreate,
+    db: AsyncSession = Depends(get_db_session),
+):
+    state_node = await _get_state_node_or_404(node_id, db)
+    parent_state_node = await _get_state_node_or_404(payload.parent_state_node_id, db)
+    await _validate_state_reference(db, state_node, parent_state_node)
+
+    ref = StateNodeReference(
+        state_node_id=node_id,
+        parent_state_node_id=payload.parent_state_node_id,
+        sort_order=payload.sort_order,
+        is_active=payload.is_active,
+        metadata_json=payload.metadata_json,
+    )
+    db.add(ref)
+    await db.flush()
+    ref = await _get_state_node_reference_or_404(ref.id, db)
+    return _serialize_state_node_reference(ref)
+
+
+@router.put("/state-node-references/{ref_id}", response_model=StateNodeReferenceResponse)
+async def update_state_node_reference(
+    ref_id: int,
+    payload: StateNodeReferenceUpdate,
+    db: AsyncSession = Depends(get_db_session),
+):
+    ref = await _get_state_node_reference_or_404(ref_id, db)
+    ref.sort_order = payload.sort_order
+    ref.is_active = payload.is_active
+    ref.metadata_json = payload.metadata_json
+    await db.flush()
+    ref = await _get_state_node_reference_or_404(ref.id, db)
+    return _serialize_state_node_reference(ref)
+
+
+@router.delete("/state-node-references/{ref_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_state_node_reference(ref_id: int, db: AsyncSession = Depends(get_db_session)):
+    ref = await _get_state_node_reference_or_404(ref_id, db)
+    await db.delete(ref)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/machine-types/{machine_type_id}/activity-state-bindings",
+    response_model=list[ActivityStateBindingResponse],
+)
+async def list_activity_state_bindings(
+    machine_type_id: int,
+    db: AsyncSession = Depends(get_db_session),
+):
+    await _get_machine_type_or_404(machine_type_id, db)
+    result = await db.execute(
+        select(ActivityStateBinding)
+        .where(ActivityStateBinding.machine_type_id == machine_type_id)
+        .options(
+            selectinload(ActivityStateBinding.activity_node),
+            selectinload(ActivityStateBinding.atomic_activity),
+            selectinload(ActivityStateBinding.op_rule),
+            selectinload(ActivityStateBinding.state_node),
+        )
+        .order_by(ActivityStateBinding.id)
+    )
+    return [await _serialize_activity_state_binding(item, db) for item in result.scalars().all()]
+
+
+@router.post(
+    "/activity-state-bindings",
+    response_model=ActivityStateBindingResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_activity_state_binding(
+    payload: ActivityStateBindingCreate,
+    db: AsyncSession = Depends(get_db_session),
+):
+    activity_node, atomic_activity, op_rule, _, binding_type, covered_leaf_ids, coverage_status = (
+        await _resolve_binding_payload(db, payload)
+    )
+    binding = ActivityStateBinding(
+        machine_type_id=payload.machine_type_id,
+        activity_node_id=activity_node.id if activity_node else None,
+        atomic_activity_id=atomic_activity.id if atomic_activity else None,
+        op_rule_id=op_rule.id if op_rule else None,
+        state_node_id=payload.state_node_id,
+        binding_role=payload.binding_role,
+        binding_type=binding_type,
+        coverage_policy="snapshot",
+        covered_leaf_state_ids=covered_leaf_ids,
+        coverage_status=coverage_status,
+        is_inherited=payload.is_inherited,
+        is_active=payload.is_active,
+        metadata_json=payload.metadata_json,
+    )
+    db.add(binding)
+    await db.flush()
+    await _sync_binding_rule_facts(binding, db)
+    await db.flush()
+    binding = await _get_activity_state_binding_or_404(binding.id, db)
+    return await _serialize_activity_state_binding(binding, db)
+
+
+@router.put("/activity-state-bindings/{binding_id}", response_model=ActivityStateBindingResponse)
+async def update_activity_state_binding(
+    binding_id: int,
+    payload: ActivityStateBindingUpdate,
+    db: AsyncSession = Depends(get_db_session),
+):
+    binding = await _get_activity_state_binding_or_404(binding_id, db)
+    if payload.machine_type_id != binding.machine_type_id:
+        raise HTTPException(status_code=422, detail="Activity-state binding machine_type_id cannot be changed")
+    old_op_rule_id = binding.op_rule_id
+    old_binding_role = binding.binding_role
+    old_managed_keys = _binding_managed_rule_fact_keys(binding, old_binding_role)
+    activity_node, atomic_activity, op_rule, _, binding_type, covered_leaf_ids, coverage_status = (
+        await _resolve_binding_payload(db, payload)
+    )
+    binding.machine_type_id = payload.machine_type_id
+    binding.activity_node_id = activity_node.id if activity_node else None
+    binding.atomic_activity_id = atomic_activity.id if atomic_activity else None
+    binding.op_rule_id = op_rule.id if op_rule else None
+    binding.state_node_id = payload.state_node_id
+    binding.binding_role = payload.binding_role
+    binding.binding_type = binding_type
+    binding.coverage_policy = "snapshot"
+    binding.covered_leaf_state_ids = covered_leaf_ids
+    binding.coverage_status = coverage_status
+    binding.is_inherited = payload.is_inherited
+    binding.is_active = payload.is_active
+    binding.metadata_json = payload.metadata_json
+    await db.flush()
+    await _sync_binding_rule_facts(
+        binding,
+        db,
+        previous_managed_keys=(
+            old_managed_keys
+            if binding.op_rule_id == old_op_rule_id and binding.binding_role == old_binding_role
+            else set()
+        ),
+    )
+    await _reconcile_rule_binding_facts(
+        db,
+        old_op_rule_id,
+        old_binding_role,
+        stale_keys=old_managed_keys,
+    )
+    await db.flush()
+    binding = await _get_activity_state_binding_or_404(binding_id, db)
+    return await _serialize_activity_state_binding(binding, db)
+
+
+@router.delete("/activity-state-bindings/{binding_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_activity_state_binding(
+    binding_id: int,
+    db: AsyncSession = Depends(get_db_session),
+):
+    binding = await _get_activity_state_binding_or_404(binding_id, db)
+    old_op_rule_id = binding.op_rule_id
+    old_binding_role = binding.binding_role
+    old_managed_keys = _binding_managed_rule_fact_keys(binding, old_binding_role)
+    await db.delete(binding)
+    await db.flush()
+    await _reconcile_rule_binding_facts(
+        db,
+        old_op_rule_id,
+        old_binding_role,
+        stale_keys=old_managed_keys,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/activity-state-bindings/{binding_id}/refresh-coverage",
+    response_model=ActivityStateBindingResponse,
+)
+async def refresh_activity_state_binding_coverage(
+    binding_id: int,
+    db: AsyncSession = Depends(get_db_session),
+):
+    binding = await _get_activity_state_binding_or_404(binding_id, db)
+    old_managed_keys = _binding_managed_rule_fact_keys(binding, binding.binding_role)
+    covered_leaf_ids = await _resolve_covered_leaf_ids(db, binding.state_node, None)
+    binding.covered_leaf_state_ids = covered_leaf_ids
+    binding.coverage_status = "complete"
+    nodes = await _load_state_nodes_for_machine(db, binding.machine_type_id)
+    references = await _load_state_references_for_machine(db, binding.machine_type_id)
+    binding.coverage_status = _compute_coverage_status(binding, nodes, references)
+    await db.flush()
+    await _sync_binding_rule_facts(binding, db, previous_managed_keys=old_managed_keys)
+    await _reconcile_rule_binding_facts(
+        db,
+        binding.op_rule_id,
+        binding.binding_role,
+        stale_keys=old_managed_keys,
+    )
+    await db.flush()
+    binding = await _get_activity_state_binding_or_404(binding_id, db)
+    return await _serialize_activity_state_binding(binding, db)
+
+
 @router.get("/activity-nodes/{activity_node_id}/scope-guards", response_model=list[ScopeGuardResponse])
 async def list_scope_guards(activity_node_id: int, db: AsyncSession = Depends(get_db_session)):
     await _get_activity_node_or_404(activity_node_id, db)
@@ -1689,6 +2633,629 @@ async def preview_layered_health_check(
 ):
     await _get_machine_type_or_404(machine_type_id, db)
     return await check_layered_health(db, machine_type_id, payload)
+
+
+@router.post(
+    "/machine-types/{machine_type_id}/network-editor/graph",
+    response_model=NetworkEditorGraphResponse,
+)
+async def preview_network_editor_graph(
+    machine_type_id: int,
+    payload: NetworkEditorRequest,
+    db: AsyncSession = Depends(get_db_session),
+):
+    await _get_machine_type_or_404(machine_type_id, db)
+    return await project_network_editor_graph(db, machine_type_id, payload)
+
+
+@router.post(
+    "/machine-types/{machine_type_id}/network-editor/validate",
+    response_model=NetworkEditorValidationResponse,
+)
+async def validate_network_editor(
+    machine_type_id: int,
+    payload: NetworkEditorRequest,
+    db: AsyncSession = Depends(get_db_session),
+):
+    await _get_machine_type_or_404(machine_type_id, db)
+    return await validate_network_editor_model(db, machine_type_id, payload)
+
+
+@router.post(
+    "/machine-types/{machine_type_id}/network-editor/impact",
+    response_model=NetworkEditorImpactResponse,
+)
+async def analyze_network_editor_impact_endpoint(
+    machine_type_id: int,
+    payload: NetworkEditorImpactRequest,
+    db: AsyncSession = Depends(get_db_session),
+):
+    await _get_machine_type_or_404(machine_type_id, db)
+    if bool(payload.state_node_id) == bool(payload.activity_graph_id):
+        raise HTTPException(status_code=422, detail="Select exactly one state_node_id or activity_graph_id")
+    result = await analyze_network_editor_impact(db, machine_type_id, payload)
+    if result["status"] == "not_found":
+        raise HTTPException(status_code=404, detail="Selected network editor node was not found")
+    return result
+
+
+@router.post(
+    "/machine-types/{machine_type_id}/network-editor/solver-precheck",
+    response_model=NetworkEditorSolverPrecheckResponse,
+)
+async def precheck_network_editor_solver_endpoint(
+    machine_type_id: int,
+    payload: NetworkEditorRequest,
+    db: AsyncSession = Depends(get_db_session),
+):
+    await _get_machine_type_or_404(machine_type_id, db)
+    return await precheck_network_editor_solver(db, machine_type_id, payload)
+
+
+@router.post(
+    "/machine-types/{machine_type_id}/network-editor/export-preview",
+    response_model=NetworkEditorExportPreviewResponse,
+    deprecated=True,
+)
+async def preview_network_editor_export_endpoint(
+    machine_type_id: int,
+    payload: NetworkEditorRequest,
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await precheck_network_editor_solver_endpoint(machine_type_id, payload, db)
+
+
+def _commit_result(change_index: int, change_type: str, operation: str, result: Any = None) -> dict[str, Any]:
+    if hasattr(result, "model_dump"):
+        payload = result.model_dump()
+    elif isinstance(result, Response):
+        payload = None
+    else:
+        payload = result
+    return {
+        "index": change_index,
+        "entity_type": change_type,
+        "operation": operation,
+        "result": payload,
+    }
+
+
+def _draft_result_id(result: Any) -> Optional[int]:
+    if hasattr(result, "model_dump"):
+        result = result.model_dump()
+    if isinstance(result, dict):
+        raw_id = result.get("id")
+        return int(raw_id) if raw_id is not None else None
+    raw_id = getattr(result, "id", None)
+    return int(raw_id) if raw_id is not None else None
+
+
+def _store_network_editor_draft_ref(
+    draft_refs: dict[str, dict[str, Any]],
+    client_id: Optional[str],
+    entity_type: str,
+    result: Any,
+) -> None:
+    if not client_id:
+        return
+    result_id = _draft_result_id(result)
+    if result_id is None:
+        return
+    draft_refs[client_id] = {
+        "entity_type": entity_type,
+        "id": result_id,
+        "result": result,
+    }
+
+
+def _resolve_network_editor_draft_ref(
+    value: Any,
+    draft_refs: dict[str, dict[str, Any]],
+    *,
+    expected_entity_type: str,
+    field_name: str,
+) -> Any:
+    if not isinstance(value, dict) or "_draft_ref" not in value:
+        return value
+    ref_id = value.get("_draft_ref")
+    if not isinstance(ref_id, str) or not ref_id:
+        raise HTTPException(status_code=422, detail=f"{field_name} _draft_ref must be a non-empty string")
+    ref = draft_refs.get(ref_id)
+    if ref is None:
+        raise HTTPException(status_code=422, detail=f"{field_name} references unknown draft change {ref_id}")
+    if ref.get("entity_type") != expected_entity_type:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{field_name} expected {expected_entity_type} draft ref, got {ref.get('entity_type')}",
+        )
+    return ref["id"]
+
+
+def _resolve_network_editor_binding_refs(payload: dict[str, Any], draft_refs: dict[str, dict[str, Any]]) -> None:
+    if "state_node_id" in payload:
+        payload["state_node_id"] = _resolve_network_editor_draft_ref(
+            payload["state_node_id"],
+            draft_refs,
+            expected_entity_type="state_node",
+            field_name="state_node_id",
+        )
+    if "activity_node_id" in payload:
+        payload["activity_node_id"] = _resolve_network_editor_draft_ref(
+            payload["activity_node_id"],
+            draft_refs,
+            expected_entity_type="activity_node",
+            field_name="activity_node_id",
+        )
+    if "atomic_activity_id" in payload:
+        payload["atomic_activity_id"] = _resolve_network_editor_draft_ref(
+            payload["atomic_activity_id"],
+            draft_refs,
+            expected_entity_type="atomic_activity",
+            field_name="atomic_activity_id",
+        )
+    if "op_rule_id" in payload:
+        payload["op_rule_id"] = _resolve_network_editor_draft_ref(
+            payload["op_rule_id"],
+            draft_refs,
+            expected_entity_type="op_rule",
+            field_name="op_rule_id",
+        )
+    if "covered_leaf_state_ids" in payload and isinstance(payload["covered_leaf_state_ids"], list):
+        payload["covered_leaf_state_ids"] = [
+            _resolve_network_editor_draft_ref(
+                state_id,
+                draft_refs,
+                expected_entity_type="state_node",
+                field_name="covered_leaf_state_ids",
+            )
+            for state_id in payload["covered_leaf_state_ids"]
+        ]
+
+
+def _resolve_network_editor_state_refs(payload: dict[str, Any], draft_refs: dict[str, dict[str, Any]]) -> None:
+    if "parent_id" in payload:
+        payload["parent_id"] = _resolve_network_editor_draft_ref(
+            payload["parent_id"],
+            draft_refs,
+            expected_entity_type="state_node",
+            field_name="parent_id",
+        )
+
+
+def _resolve_network_editor_activity_refs(payload: dict[str, Any], draft_refs: dict[str, dict[str, Any]]) -> None:
+    if "parent_id" in payload:
+        payload["parent_id"] = _resolve_network_editor_draft_ref(
+            payload["parent_id"],
+            draft_refs,
+            expected_entity_type="activity_node",
+            field_name="parent_id",
+        )
+
+
+def _resolve_network_editor_atomic_refs(payload: dict[str, Any], draft_refs: dict[str, dict[str, Any]]) -> None:
+    if "package_id" in payload:
+        payload["package_id"] = _resolve_network_editor_draft_ref(
+            payload["package_id"],
+            draft_refs,
+            expected_entity_type="activity_node",
+            field_name="package_id",
+        )
+
+
+def _resolve_network_editor_rule_refs(payload: dict[str, Any], draft_refs: dict[str, dict[str, Any]]) -> None:
+    if "activity_node_id" in payload:
+        payload["activity_node_id"] = _resolve_network_editor_draft_ref(
+            payload["activity_node_id"],
+            draft_refs,
+            expected_entity_type="activity_node",
+            field_name="activity_node_id",
+        )
+    if "atomic_activity_id" in payload:
+        payload["atomic_activity_id"] = _resolve_network_editor_draft_ref(
+            payload["atomic_activity_id"],
+            draft_refs,
+            expected_entity_type="atomic_activity",
+            field_name="atomic_activity_id",
+        )
+
+
+async def _state_has_membership(
+    session: AsyncSession,
+    state_node_id: int,
+    parent_state_node_id: int,
+) -> bool:
+    state = await _get_state_node_or_404(state_node_id, session)
+    if state.parent_id == parent_state_node_id:
+        return True
+    result = await session.execute(
+        select(StateNodeReference.id).where(
+            StateNodeReference.state_node_id == state_node_id,
+            StateNodeReference.parent_state_node_id == parent_state_node_id,
+            StateNodeReference.is_active.is_(True),
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def _create_state_package_fork(
+    machine_type_id: int,
+    payload: dict[str, Any],
+    db: AsyncSession,
+) -> dict[str, Any]:
+    source_state_node_id = payload.get("source_state_node_id")
+    current_parent_state_node_id = payload.get("current_parent_state_node_id")
+    if not source_state_node_id or not current_parent_state_node_id:
+        raise HTTPException(
+            status_code=422,
+            detail="state_package_fork requires source_state_node_id and current_parent_state_node_id",
+        )
+
+    source = await _get_state_node_or_404(int(source_state_node_id), db)
+    current_parent = await _get_state_node_or_404(int(current_parent_state_node_id), db)
+    if source.machine_type_id != machine_type_id or current_parent.machine_type_id != machine_type_id:
+        raise HTTPException(status_code=422, detail="Forked state packages must belong to the same machine type")
+    if source.feature_key or source.state_kind != "aggregate":
+        raise HTTPException(status_code=422, detail="Only aggregate state packages can be forked")
+    if current_parent.id == source.id:
+        raise HTTPException(status_code=422, detail="Fork parent cannot be the source state package")
+
+    branch_payload = dict(payload.get("branch") or {})
+    branch_name = str(branch_payload.get("name") or "").strip()
+    branch_reason = str(payload.get("reason") or branch_payload.get("reason") or "").strip()
+    if not branch_name:
+        raise HTTPException(status_code=422, detail="state_package_fork requires branch.name")
+    if not branch_reason:
+        raise HTTPException(status_code=422, detail="state_package_fork requires a branch reason")
+    branch_metadata = dict(branch_payload.get("metadata_json") or {})
+    branch_metadata["_network_editor_branch"] = {
+        "source_state_node_id": source.id,
+        "source_state_node_code": source.code,
+        "source_state_node_name": source.name,
+        "current_parent_state_node_id": current_parent.id,
+        "reason": branch_reason,
+    }
+    branch = await create_state_node(
+        machine_type_id,
+        StateNodeCreate(
+            machine_type_id=machine_type_id,
+            parent_id=current_parent.id,
+            level=current_parent.level + 1,
+            code=branch_payload.get("code"),
+            name=branch_name,
+            feature_key=None,
+            operator="eq",
+            target_value=None,
+            state_kind="aggregate",
+            sort_order=int(branch_payload.get("sort_order") or source.sort_order or 0),
+            is_active=bool(branch_payload.get("is_active", True)),
+            metadata_json=branch_metadata,
+        ),
+        db,
+    )
+    branch_id = int(branch["id"])
+
+    nodes = await _load_state_nodes_for_machine(db, machine_type_id)
+    refs = await _load_state_references_for_machine(db, machine_type_id)
+    direct_member_ids: list[int] = []
+    seen_members: set[int] = set()
+    for node in nodes:
+        if node.parent_id == source.id and node.id not in seen_members:
+            direct_member_ids.append(node.id)
+            seen_members.add(node.id)
+    for ref in refs:
+        if ref.is_active and ref.parent_state_node_id == source.id and ref.state_node_id not in seen_members:
+            direct_member_ids.append(ref.state_node_id)
+            seen_members.add(ref.state_node_id)
+
+    removed_state_node_id = payload.get("removed_state_node_id")
+    if removed_state_node_id is not None:
+        removed_state_node_id = int(removed_state_node_id)
+        if removed_state_node_id not in seen_members:
+            raise HTTPException(status_code=422, detail="removed_state_node_id is not a direct member of the source package")
+    copied_reference_count = 0
+    for member_id in direct_member_ids:
+        if removed_state_node_id is not None and member_id == removed_state_node_id:
+            continue
+        if member_id == branch_id or await _state_has_membership(db, member_id, branch_id):
+            continue
+        await create_state_node_reference(
+            member_id,
+            StateNodeReferenceCreate(
+                parent_state_node_id=branch_id,
+                sort_order=0,
+                is_active=True,
+                metadata_json={"_network_editor_branch_copy": {"source_state_node_id": source.id}},
+            ),
+            db,
+        )
+        copied_reference_count += 1
+
+    added_state_result: dict[str, Any] | None = None
+    added_state = dict(payload.get("added_state") or {})
+    added_mode = str(added_state.get("mode") or "").lower()
+    if added_mode == "create":
+        state_payload = dict(added_state.get("payload") or {})
+        state_payload["machine_type_id"] = machine_type_id
+        state_payload["parent_id"] = branch_id
+        state_payload["level"] = current_parent.level + 2
+        added_state_result = await create_state_node(machine_type_id, StateNodeCreate(**state_payload), db)
+    elif added_mode == "reuse":
+        added_state_node_id = added_state.get("state_node_id")
+        if not added_state_node_id:
+            raise HTTPException(status_code=422, detail="state_package_fork reuse requires added_state.state_node_id")
+        added_node = await _get_state_node_or_404(int(added_state_node_id), db)
+        if added_node.machine_type_id != machine_type_id:
+            raise HTTPException(status_code=422, detail="Reused state must belong to the same machine type")
+        if not await _state_has_membership(db, added_node.id, branch_id):
+            added_ref = await create_state_node_reference(
+                added_node.id,
+                StateNodeReferenceCreate(
+                    parent_state_node_id=branch_id,
+                    sort_order=int(added_state.get("sort_order") or 0),
+                    is_active=True,
+                    metadata_json={"_network_editor_reuse": added_state.get("metadata_json") or {}},
+                ),
+                db,
+            )
+            added_state_result = added_ref
+        else:
+            added_state_result = _serialize_state_node(added_node)
+    elif added_mode:
+        raise HTTPException(status_code=422, detail=f"Unsupported state_package_fork added_state mode: {added_mode}")
+
+    removed_reference_id = None
+    replace_reference_id = payload.get("replace_reference_id")
+    if replace_reference_id:
+        ref = await _get_state_node_reference_or_404(int(replace_reference_id), db)
+        if ref.state_node_id != source.id or ref.parent_state_node_id != current_parent.id:
+            raise HTTPException(status_code=422, detail="replace_reference_id does not match the fork source and parent")
+        await delete_state_node_reference(ref.id, db)
+        removed_reference_id = ref.id
+
+    return {
+        "branch": branch,
+        "added_state": added_state_result,
+        "removed_state_node_id": removed_state_node_id,
+        "copied_reference_count": copied_reference_count,
+        "removed_reference_id": removed_reference_id,
+    }
+
+
+async def _apply_network_editor_commit_change(
+    machine_type_id: int,
+    index: int,
+    change: Any,
+    db: AsyncSession,
+    draft_refs: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    entity_type = change.entity_type.strip().lower()
+    operation = change.operation.strip().lower()
+    payload = dict(change.payload or {})
+    entity_id = change.entity_id
+
+    try:
+        if entity_type == "state_node":
+            _resolve_network_editor_state_refs(payload, draft_refs)
+            if operation == "create":
+                result = await create_state_node(machine_type_id, StateNodeCreate(**payload), db)
+                _store_network_editor_draft_ref(draft_refs, change.client_id, entity_type, result)
+            elif operation == "update":
+                if not entity_id:
+                    raise HTTPException(status_code=422, detail="state_node update requires entity_id")
+                result = await update_state_node(entity_id, StateNodeUpdate(**payload), db)
+            elif operation == "delete":
+                if not entity_id:
+                    raise HTTPException(status_code=422, detail="state_node delete requires entity_id")
+                result = await delete_state_node(entity_id, db)
+            else:
+                raise HTTPException(status_code=422, detail=f"Unsupported state_node operation: {operation}")
+            return _commit_result(index, entity_type, operation, result)
+
+        if entity_type == "activity_node":
+            _resolve_network_editor_activity_refs(payload, draft_refs)
+            if operation == "create":
+                result = await create_activity_node(machine_type_id, ActivityNodeCreate(**payload), db)
+                _store_network_editor_draft_ref(draft_refs, change.client_id, entity_type, result)
+            elif operation == "update":
+                if not entity_id:
+                    raise HTTPException(status_code=422, detail="activity_node update requires entity_id")
+                result = await update_activity_node(entity_id, ActivityNodeUpdate(**payload), db)
+            elif operation == "delete":
+                if not entity_id:
+                    raise HTTPException(status_code=422, detail="activity_node delete requires entity_id")
+                result = await delete_activity_node(entity_id, db)
+            else:
+                raise HTTPException(status_code=422, detail=f"Unsupported activity_node operation: {operation}")
+            return _commit_result(index, entity_type, operation, result)
+
+        if entity_type == "atomic_activity":
+            _resolve_network_editor_atomic_refs(payload, draft_refs)
+            package_id = payload.pop("package_id", None)
+            if operation == "create":
+                result = await create_atomic_activity(machine_type_id, AtomicActivityCreate(**payload), db)
+                _store_network_editor_draft_ref(draft_refs, change.client_id, entity_type, result)
+                if package_id:
+                    await create_activity_package_atomic_ref(
+                        int(package_id),
+                        ActivityPackageAtomicRefCreate(
+                            atomic_activity_id=int(result["id"]),
+                            sort_order=int(result.get("sort_order") or 0),
+                            is_active=True,
+                            metadata_json=None,
+                        ),
+                        db,
+                    )
+            elif operation == "update":
+                if not entity_id:
+                    raise HTTPException(status_code=422, detail="atomic_activity update requires entity_id")
+                result = await update_atomic_activity(entity_id, AtomicActivityUpdate(**payload), db)
+            elif operation == "delete":
+                if not entity_id:
+                    raise HTTPException(status_code=422, detail="atomic_activity delete requires entity_id")
+                result = await delete_atomic_activity(entity_id, db)
+            else:
+                raise HTTPException(status_code=422, detail=f"Unsupported atomic_activity operation: {operation}")
+            return _commit_result(index, entity_type, operation, result)
+
+        if entity_type == "activity_package_atomic_ref":
+            if operation == "create":
+                package_id = payload.pop("package_id", None)
+                if not package_id:
+                    raise HTTPException(status_code=422, detail="activity_package_atomic_ref create requires package_id")
+                result = await create_activity_package_atomic_ref(
+                    int(package_id),
+                    ActivityPackageAtomicRefCreate(**payload),
+                    db,
+                )
+            elif operation == "delete":
+                if not entity_id:
+                    raise HTTPException(status_code=422, detail="activity_package_atomic_ref delete requires entity_id")
+                result = await delete_activity_package_atomic_ref(entity_id, db)
+            else:
+                raise HTTPException(status_code=422, detail=f"Unsupported activity_package_atomic_ref operation: {operation}")
+            return _commit_result(index, entity_type, operation, result)
+
+        if entity_type == "state_node_reference":
+            if operation == "create":
+                state_node_id = payload.pop("state_node_id", None)
+                if not state_node_id:
+                    raise HTTPException(status_code=422, detail="state_node_reference create requires state_node_id")
+                result = await create_state_node_reference(
+                    int(state_node_id),
+                    StateNodeReferenceCreate(**payload),
+                    db,
+                )
+            elif operation == "update":
+                if not entity_id:
+                    raise HTTPException(status_code=422, detail="state_node_reference update requires entity_id")
+                result = await update_state_node_reference(entity_id, StateNodeReferenceUpdate(**payload), db)
+            elif operation == "delete":
+                if not entity_id:
+                    raise HTTPException(status_code=422, detail="state_node_reference delete requires entity_id")
+                result = await delete_state_node_reference(entity_id, db)
+            else:
+                raise HTTPException(status_code=422, detail=f"Unsupported state_node_reference operation: {operation}")
+            return _commit_result(index, entity_type, operation, result)
+
+        if entity_type == "state_package_fork":
+            if operation != "create":
+                raise HTTPException(status_code=422, detail=f"Unsupported state_package_fork operation: {operation}")
+            result = await _create_state_package_fork(machine_type_id, payload, db)
+            return _commit_result(index, entity_type, operation, result)
+
+        if entity_type == "op_rule":
+            _resolve_network_editor_rule_refs(payload, draft_refs)
+            if operation == "create":
+                result = await create_op_rule(machine_type_id, OpRuleCreate(**payload), db)
+                _store_network_editor_draft_ref(draft_refs, change.client_id, entity_type, result)
+            elif operation == "update":
+                if not entity_id:
+                    raise HTTPException(status_code=422, detail="op_rule update requires entity_id")
+                result = await update_op_rule(entity_id, OpRuleUpdate(**payload), db)
+            elif operation == "delete":
+                if not entity_id:
+                    raise HTTPException(status_code=422, detail="op_rule delete requires entity_id")
+                result = await delete_op_rule(entity_id, db)
+            else:
+                raise HTTPException(status_code=422, detail=f"Unsupported op_rule operation: {operation}")
+            return _commit_result(index, entity_type, operation, result)
+
+        if entity_type == "activity_state_binding":
+            _resolve_network_editor_binding_refs(payload, draft_refs)
+            if operation == "create":
+                result = await create_activity_state_binding(ActivityStateBindingCreate(**payload), db)
+            elif operation == "update":
+                if not entity_id:
+                    raise HTTPException(status_code=422, detail="activity_state_binding update requires entity_id")
+                result = await update_activity_state_binding(entity_id, ActivityStateBindingUpdate(**payload), db)
+            elif operation == "delete":
+                if not entity_id:
+                    raise HTTPException(status_code=422, detail="activity_state_binding delete requires entity_id")
+                result = await delete_activity_state_binding(entity_id, db)
+            elif operation == "refresh_coverage":
+                if not entity_id:
+                    raise HTTPException(status_code=422, detail="activity_state_binding refresh_coverage requires entity_id")
+                result = await refresh_activity_state_binding_coverage(entity_id, db)
+            else:
+                raise HTTPException(status_code=422, detail=f"Unsupported activity_state_binding operation: {operation}")
+            return _commit_result(index, entity_type, operation, result)
+    except HTTPException as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={
+                "message": exc.detail,
+                "change_index": index,
+                "entity_type": entity_type,
+                "operation": operation,
+                "label": change.label,
+            },
+        ) from exc
+
+    raise HTTPException(status_code=422, detail=f"Unsupported network editor entity_type: {entity_type}")
+
+
+@router.post(
+    "/machine-types/{machine_type_id}/network-editor/commit",
+    response_model=NetworkEditorCommitResponse,
+)
+async def commit_network_editor_draft(
+    machine_type_id: int,
+    payload: NetworkEditorCommitRequest,
+    db: AsyncSession = Depends(get_db_session),
+):
+    await _get_machine_type_or_404(machine_type_id, db)
+    if payload.base_revision:
+        current_revision = await get_network_editor_revision(db, machine_type_id)
+        if current_revision != payload.base_revision:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "Network editor data changed after this edit session started",
+                    "base_revision": payload.base_revision,
+                    "current_revision": current_revision,
+                },
+            )
+    results = []
+    draft_refs: dict[str, dict[str, Any]] = {}
+    for index, change in enumerate(payload.changes):
+        results.append(await _apply_network_editor_commit_change(machine_type_id, index, change, db, draft_refs))
+
+    validation = None
+    if payload.validate_after_apply:
+        validation = await validate_network_editor_model(db, machine_type_id, payload.validation_payload)
+        modeling_issues = validation.get("modeling_issues") or []
+        solver_ready_issues = validation.get("solver_ready_issues") or []
+        commit_blocking_issues = [
+            issue for issue in modeling_issues
+            if issue.get("severity") == "error"
+        ]
+        review_issues = [
+            issue for issue in [*modeling_issues, *solver_ready_issues]
+            if issue.get("severity") in {"warning", "error"}
+            and issue not in commit_blocking_issues
+        ]
+        if commit_blocking_issues or (review_issues and not payload.allow_warnings):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "Network editor validation requires review before unified submit",
+                    "error_count": len(commit_blocking_issues),
+                    "warning_count": len(review_issues),
+                    "solver_ready_error_count": sum(
+                        1 for issue in solver_ready_issues
+                        if issue.get("severity") == "error"
+                    ),
+                    "validation": validation,
+                },
+            )
+
+    return {
+        "machine_type_id": machine_type_id,
+        "applied_change_count": len(results),
+        "results": results,
+        "validation": validation,
+        "revision": await get_network_editor_revision(db, machine_type_id),
+    }
 
 
 @router.get(

@@ -68,6 +68,9 @@ class MachineType(Base):
     state_nodes: Mapped[list["StateNode"]] = relationship(
         "StateNode", back_populates="machine_type", cascade="all, delete-orphan"
     )
+    activity_state_bindings: Mapped[list["ActivityStateBinding"]] = relationship(
+        "ActivityStateBinding", back_populates="machine_type", cascade="all, delete-orphan"
+    )
     maintenance_intent_templates: Mapped[list["MaintenanceIntentTemplate"]] = relationship(
         "MaintenanceIntentTemplate", back_populates="machine_type", cascade="all, delete-orphan"
     )
@@ -251,6 +254,9 @@ class OpRule(Base):
     atomic_activity: Mapped[Optional["AtomicActivity"]] = relationship(
         "AtomicActivity", back_populates="op_rules"
     )
+    activity_state_bindings: Mapped[list["ActivityStateBinding"]] = relationship(
+        "ActivityStateBinding", back_populates="op_rule"
+    )
 
     def __repr__(self) -> str:
         return f"<OpRule(id={self.id}, code='{self.code}', name='{self.name}', duration_min={self.duration_min})>"
@@ -412,6 +418,7 @@ class ActivityNode(Base):
     level: Mapped[int] = mapped_column(Integer, nullable=False)
     code: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     activity_category: Mapped[str] = mapped_column(String(32), nullable=False, default="normal")
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -438,6 +445,9 @@ class ActivityNode(Base):
     atomic_refs: Mapped[list["ActivityPackageAtomicRef"]] = relationship(
         "ActivityPackageAtomicRef", back_populates="activity_node", cascade="all, delete-orphan"
     )
+    activity_state_bindings: Mapped[list["ActivityStateBinding"]] = relationship(
+        "ActivityStateBinding", back_populates="activity_node", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<ActivityNode(id={self.id}, level={self.level}, code='{self.code}')>"
@@ -461,6 +471,7 @@ class AtomicActivity(Base):
     )
     code: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     activity_category: Mapped[str] = mapped_column(String(32), nullable=False, default="normal")
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -477,6 +488,9 @@ class AtomicActivity(Base):
     )
     op_rules: Mapped[list["OpRule"]] = relationship(
         "OpRule", back_populates="atomic_activity"
+    )
+    activity_state_bindings: Mapped[list["ActivityStateBinding"]] = relationship(
+        "ActivityStateBinding", back_populates="atomic_activity", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:
@@ -559,12 +573,149 @@ class StateNode(Base):
     children: Mapped[list["StateNode"]] = relationship(
         "StateNode", back_populates="parent", cascade="all, delete-orphan"
     )
+    references_as_state: Mapped[list["StateNodeReference"]] = relationship(
+        "StateNodeReference",
+        back_populates="state_node",
+        cascade="all, delete-orphan",
+        foreign_keys="StateNodeReference.state_node_id",
+    )
+    references_as_parent: Mapped[list["StateNodeReference"]] = relationship(
+        "StateNodeReference",
+        back_populates="parent_state_node",
+        cascade="all, delete-orphan",
+        foreign_keys="StateNodeReference.parent_state_node_id",
+    )
+    activity_state_bindings: Mapped[list["ActivityStateBinding"]] = relationship(
+        "ActivityStateBinding", back_populates="state_node", cascade="all, delete-orphan"
+    )
     scope_guard_preconditions: Mapped[list["ScopeGuardPrecond"]] = relationship(
         "ScopeGuardPrecond", back_populates="state_node"
     )
 
     def __repr__(self) -> str:
         return f"<StateNode(id={self.id}, level={self.level}, code='{self.code}')>"
+
+
+class StateNodeReference(Base):
+    """Additional display parent for a state node."""
+
+    __tablename__ = "state_node_reference"
+    __table_args__ = (
+        UniqueConstraint("state_node_id", "parent_state_node_id", name="uq_state_node_reference_pair"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    state_node_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("state_node.id", ondelete="CASCADE"), nullable=False
+    )
+    parent_state_node_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("state_node.id", ondelete="CASCADE"), nullable=False
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    metadata_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    state_node: Mapped["StateNode"] = relationship(
+        "StateNode",
+        back_populates="references_as_state",
+        foreign_keys=[state_node_id],
+    )
+    parent_state_node: Mapped["StateNode"] = relationship(
+        "StateNode",
+        back_populates="references_as_parent",
+        foreign_keys=[parent_state_node_id],
+    )
+
+    def __repr__(self) -> str:
+        return (
+            "<StateNodeReference("
+            f"state_node_id={self.state_node_id}, parent_state_node_id={self.parent_state_node_id})>"
+        )
+
+
+class ActivityStateBinding(Base):
+    """State/activity semantic binding used by the network editor."""
+
+    __tablename__ = "activity_state_binding"
+    __table_args__ = (
+        CheckConstraint(
+            "(activity_node_id IS NOT NULL AND atomic_activity_id IS NULL) "
+            "OR (activity_node_id IS NULL AND atomic_activity_id IS NOT NULL)",
+            name="ck_activity_state_binding_one_activity_identity",
+        ),
+        CheckConstraint(
+            "binding_role IN ('input', 'output', 'context_input', 'declared_output')",
+            name="ck_activity_state_binding_role",
+        ),
+        CheckConstraint(
+            "binding_type IN ('state_package', 'atomic_state')",
+            name="ck_activity_state_binding_type",
+        ),
+        CheckConstraint(
+            "coverage_policy IN ('snapshot')",
+            name="ck_activity_state_binding_coverage_policy",
+        ),
+        CheckConstraint(
+            "coverage_status IN ('complete', 'partial', 'stale')",
+            name="ck_activity_state_binding_coverage_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    machine_type_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("machine_type.id", ondelete="CASCADE"), nullable=False
+    )
+    activity_node_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("activity_node.id", ondelete="CASCADE"), nullable=True
+    )
+    atomic_activity_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("atomic_activity.id", ondelete="CASCADE"), nullable=True
+    )
+    op_rule_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("op_rule.id", ondelete="SET NULL"), nullable=True
+    )
+    state_node_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("state_node.id", ondelete="CASCADE"), nullable=False
+    )
+    binding_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    binding_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    coverage_policy: Mapped[str] = mapped_column(String(32), nullable=False, default="snapshot")
+    covered_leaf_state_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    coverage_status: Mapped[str] = mapped_column(String(32), nullable=False, default="stale")
+    is_inherited: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    metadata_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    machine_type: Mapped["MachineType"] = relationship(
+        "MachineType", back_populates="activity_state_bindings"
+    )
+    activity_node: Mapped[Optional["ActivityNode"]] = relationship(
+        "ActivityNode", back_populates="activity_state_bindings"
+    )
+    atomic_activity: Mapped[Optional["AtomicActivity"]] = relationship(
+        "AtomicActivity", back_populates="activity_state_bindings"
+    )
+    op_rule: Mapped[Optional["OpRule"]] = relationship(
+        "OpRule", back_populates="activity_state_bindings"
+    )
+    state_node: Mapped["StateNode"] = relationship(
+        "StateNode", back_populates="activity_state_bindings"
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<ActivityStateBinding(id={self.id}, role='{self.binding_role}', "
+            f"state_node_id={self.state_node_id})>"
+        )
 
 
 class ScopeGuard(Base):

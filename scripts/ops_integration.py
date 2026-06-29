@@ -107,13 +107,12 @@ async def create_machine(session: AsyncSession, machine_type_id: int) -> int:
     return m.id
 
 
-async def create_resources(session: AsyncSession, machine_id: int) -> dict[str, int]:
+async def create_resources(session: AsyncSession) -> dict[str, int]:
     """Create space resources."""
     resource_map = {}
     for i, (code, name) in enumerate(SPACES.items(), start=1):
         r = Resource(
             id=BASE_ID + i,
-            machine_id=machine_id,
             code=code,
             name=name,
             resource_type=code,
@@ -254,7 +253,7 @@ async def main():
         m_id = await create_machine(session, mt_id)
         
         print("Creating resources (spaces)...")
-        resource_map = await create_resources(session, m_id)
+        resource_map = await create_resources(session)
         
         print("Creating states...")
         current_state_id, target_state_id = await create_states(session, m_id)

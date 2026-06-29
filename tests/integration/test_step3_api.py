@@ -53,14 +53,14 @@ async def _seed_base_data(client):
 
     # Resources
     for res in [
-        {"machine_id": machine_id, "code": "TECH-01", "name": "Tech Alice", "resource_type": "TECHNICIAN",
+        {"code": "TECH-01", "name": "Tech Alice", "resource_type": "TECHNICIAN",
          "capacity": 1, "is_available": True, "meta": None},
-        {"machine_id": machine_id, "code": "TECH-02", "name": "Tech Bob", "resource_type": "TECHNICIAN",
+        {"code": "TECH-02", "name": "Tech Bob", "resource_type": "TECHNICIAN",
          "capacity": 1, "is_available": True, "meta": None},
-        {"machine_id": machine_id, "code": "CLEAN-01", "name": "Cleaner", "resource_type": "CLEANER",
+        {"code": "CLEAN-01", "name": "Cleaner", "resource_type": "CLEANER",
          "capacity": 1, "is_available": True, "meta": None},
     ]:
-        r = await client.post("/api/v1/resources", json=res)
+        r = await client.post("/api/v1/resources", json={**res, "machine_id": machine_id})
         assert r.status_code == 201
 
     # Current state: cold / dirty / off
@@ -153,10 +153,10 @@ async def _seed_numeric_api_data(client):
     machine_id = r.json()["id"]
 
     for res in [
-        {"machine_id": machine_id, "code": "TECH-N1", "name": "Tech One", "resource_type": "TECHNICIAN", "capacity": 1, "is_available": True, "meta": None},
-        {"machine_id": machine_id, "code": "TECH-N2", "name": "Tech Two", "resource_type": "TECHNICIAN", "capacity": 1, "is_available": True, "meta": None},
+        {"code": "TECH-N1", "name": "Tech One", "resource_type": "TECHNICIAN", "capacity": 1, "is_available": True, "meta": None},
+        {"code": "TECH-N2", "name": "Tech Two", "resource_type": "TECHNICIAN", "capacity": 1, "is_available": True, "meta": None},
     ]:
-        r = await client.post("/api/v1/resources", json=res)
+        r = await client.post("/api/v1/resources", json={**res, "machine_id": machine_id})
         assert r.status_code == 201
 
     async def add_rule(code, name, duration, preconditions, effects):

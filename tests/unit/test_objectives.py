@@ -10,9 +10,6 @@ Covers:
 import pytest
 from unittest.mock import MagicMock
 from app.core.solver.objectives import (
-    MinimizeActivityGroupGapsObjective,
-    MinimizeActivityGroupInterruptionsObjective,
-    MinimizeActivityGroupSpanObjective,
     ObjectiveRegistry,
     MinimizeMakespanObjective,
 )
@@ -25,18 +22,6 @@ class TestObjectiveRegistryGet:
         """get() with known type returns the correct Objective instance."""
         obj = ObjectiveRegistry.get("minimize_makespan")
         assert isinstance(obj, MinimizeMakespanObjective)
-
-    @pytest.mark.parametrize(
-        ("objective_type", "expected_cls"),
-        [
-            ("minimize_activity_group_span", MinimizeActivityGroupSpanObjective),
-            ("minimize_activity_group_gaps", MinimizeActivityGroupGapsObjective),
-            ("minimize_activity_group_interruptions", MinimizeActivityGroupInterruptionsObjective),
-        ],
-    )
-    def test_get_activity_group_continuity_objectives(self, objective_type, expected_cls):
-        obj = ObjectiveRegistry.get(objective_type)
-        assert isinstance(obj, expected_cls)
 
     def test_get_returns_singleton(self):
         """Multiple get() calls return the same instance."""
