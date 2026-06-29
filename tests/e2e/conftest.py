@@ -17,32 +17,20 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.models import (
     Base,
-    CandidatePlanStep,
     Machine,
     MachineState,
     MachineStateFeature,
     MachineType,
-    MaintenanceIntentTemplate,
     OpRule,
     OpRuleEffect,
     OpRulePrecond,
     OpRuleResourceReq,
     Resource,
-    SolveRequest,
     StateFeatureDef,
 )
-from sqlalchemy import JSON
+from app.db.session import get_db_session, patch_sqlite_types
 
-SolveRequest.__table__.c.overrides.type = JSON()
-SolveRequest.__table__.c.objectives.type = JSON()
-SolveRequest.__table__.c.constraints.type = JSON()
-SolveRequest.__table__.c.blockage_constraints.type = JSON()
-MaintenanceIntentTemplate.__table__.c.target_state_node_ids.type = JSON()
-MaintenanceIntentTemplate.__table__.c.candidate_activity_scope_ids.type = JSON()
-MaintenanceIntentTemplate.__table__.c.observed_fact_templates.type = JSON()
-MaintenanceIntentTemplate.__table__.c.desired_fact_templates.type = JSON()
-MaintenanceIntentTemplate.__table__.c.metadata_json.type = JSON()
-from app.db.session import get_db_session
+patch_sqlite_types(force=True)
 
 
 # Type patches (JSONB/ARRAY → JSON for SQLite) are in tests/conftest.py
