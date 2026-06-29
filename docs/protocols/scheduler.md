@@ -75,6 +75,9 @@ RagData(
 - `resource_reqs`：canonical 多资源需求列表，来自所有 `is_required=True` 的 `op_rule_resource_req`。
 - `resource_type/resource_qty`：兼容旧数据与旧测试的主资源 fallback。
 - `not_before`：阻塞策略 A/AB 注入的最早开始时间约束。
+- `activity_node_id/activity_node_code/activity_node_name`：任务展示用活动元数据；原子活动路径会使用合成的负数 `activity_node_id` 兼容旧展示字段。
+- `atomic_activity_id`：TICKET-036 后原子活动规则的真实执行能力身份。
+- `activity_group_id/activity_group_code/activity_group_name`：二级活动包/活动组元数据，用于 Gantt 分组和连续性软目标诊断。
 
 ### 2. 加载资源
 
@@ -168,6 +171,13 @@ if t1.start_min < t2.end_min and t2.start_min < t1.end_min:
 - `resources`
 - `resource_type`
 - `resource_reqs`
+- `activity_node_id`
+- `activity_node_code`
+- `activity_node_name`
+- `atomic_activity_id`
+- `activity_group_id`
+- `activity_group_code`
+- `activity_group_name`
 
 ## 输入契约
 
@@ -179,6 +189,7 @@ Scheduler 对 Planner/DB 的假设：
 - `resource_reqs` 是 Scheduler 的主资源契约
 - `resource_type/resource_qty` 只用于兼容旧数据与旧测试
 - 对应资源类型若没有可用资源，模型会把容量回退到 `1`
+- 原子活动任务应携带原子活动和二级活动包元数据；共享原子活动归属到哪个二级包用于连续性目标仍是遗留策略问题。
 
 这个“回退到 1”是当前实现的容错策略，不代表真实业务语义。
 

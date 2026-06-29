@@ -15,9 +15,13 @@
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `POST` | `/api/v1/solve` | 提交求解请求并同步返回结果 |
+| `POST` | `/api/v1/solve/layered` | 从分层状态目标和活动范围发起一次联合求解 |
+| `POST` | `/api/v1/solve/maintenance` | 从维护意图模板发起一次联合维护求解 |
 | `GET` | `/api/v1/solve-requests/{request_id}` | 查询求解请求及排程结果 |
 | `GET` | `/api/v1/machines/{machine_id}/state` | 查询机台最近的当前状态 |
 | `GET` | `/api/v1/machines/{machine_id}/states` | 列出机台全部可选状态 |
+| `POST` | `/api/v1/imports/scenario` | 业务场景 Excel dry-run / strict upsert 导入 |
+| `GET` | `/api/v1/imports/scenario-template` | 下载业务场景 Excel 模板 |
 | `GET` | `/health` | 健康检查 |
 
 ## `POST /api/v1/solve`
@@ -49,8 +53,8 @@
 | `machine_id` | `int` | 必须存在于 `machine` 表 |
 | `current_state_id` | `int` | 必须存在于 `machine_state` 表，且属于该机台 |
 | `target_state_id` | `int` | 必须存在于 `machine_state` 表，且属于该机台 |
-| `objective` | `string` | 当前仅支持 `minimize_makespan` |
-| `objectives` | `array \| null` | 目标数组；当前仍以 `minimize_makespan` 为完整实现，`weight` 尚未形成真实多目标加权 |
+| `objective` | `string` | 兼容旧字段，默认 `minimize_makespan` |
+| `objectives` | `array \| null` | 目标数组；支持 `minimize_makespan` 以及 Scheduler 活动组连续性软目标，按 `weight` 合并为单一加权 CP-SAT 目标表达式 |
 | `parent_plan_id` | `int \| null` | 阻塞重排/版本链的父计划 ID |
 | `overrides` | `object \| null` | 透传保存到 `solve_request.overrides`，当前求解逻辑未消费 |
 | `blockage_constraints` | `object \| null` | 阻塞策略输入，支持 `strategy=A/B/AB`、实例级 `blocked_step_id`、兼容用 `blocked_op_rule_id`、`strategy_a.not_before_offset`、`strategy_b.blockage_reason` |
@@ -97,6 +101,13 @@
             "quantity": 1
           }
         ],
+        "activity_node_id": null,
+        "activity_node_code": null,
+        "activity_node_name": null,
+        "atomic_activity_id": null,
+        "activity_group_id": null,
+        "activity_group_code": null,
+        "activity_group_name": null,
         "predecessors": [],
         "not_before": null,
         "step_role": "normal"
@@ -191,8 +202,62 @@
 注意：
 
 - 当前代码不会先创建 `pending` 再改为 `running`
-- 返回给客户端的 `schedule.tasks` 已包含 `step_id`、`resource_reqs`、完整 `resources`、`not_before`、`step_role`
+- 返回给客户端的 `schedule.tasks` 已包含 `step_id`、`resource_reqs`、完整 `resources`、`not_before`、`step_role`、活动/原子活动/活动组展示元数据
 - 持久化到 `schedule_result.tasks` 的结构与 API 返回的排程字段基本一致，但不包含后置查询得到的 `step_id/step_role`
+
+## `POST /api/v1/solve/layered`
+
+从分层目标状态和活动能力范围发起求解。该入口会先展开目标状态树和活动范围，再复用 Planner / Scheduler 主链路。
+
+请求体核心字段：
+
+```json
+{
+  "machine_id": 1,
+  "current_state_id": 1,
+  "target_state_node_ids": [10],
+  "activity_scope_node_ids": [20, 21],
+  "include_inactive": false,
+  "current_state_overrides": {},
+  "goal_facts": [],
+  "objectives": [
+    {"type": "minimize_makespan", "weight": 1.0}
+  ],
+  "context": {"mode": "layered"}
+}
+```
+
+响应在普通 `SolveResponse` 基础上增加：
+
+- `layered.preflight_health`：求解前健康检查摘要。
+- `diagnostics.layered_health`：完整健康检查结果。
+- `diagnostics.layered_expansion`：目标事实、候选活动和 effective rule 展开结果。
+- `layered.activity_summary` / `layered.state_summary`：兼容旧前端的平铺解释。
+- `layered.activity_tree` / `layered.state_tree`：层级结果树。
+- `layered.activity_selection`：候选活动 selected / skipped 解释。
+
+TICKET-036 后，状态目标递归展开到活跃无子节点状态；原子活动通过 `atomic_activity_id` 表达真实身份，兼容字段 `activity_node_id` 可能为负数合成 ID。
+
+## `POST /api/v1/solve/maintenance`
+
+从一个或多个维护意图模板发起联合维护求解。服务会合并模板目标状态、候选活动范围、观测事实覆盖和期望事实，然后调用同一套分层求解链路。
+
+请求体核心字段：
+
+```json
+{
+  "machine_id": 1,
+  "current_state_id": 1,
+  "maintenance_intent_template_ids": [100, 101],
+  "observed_facts": [],
+  "desired_facts": [],
+  "objectives": [
+    {"type": "minimize_makespan", "weight": 1.0}
+  ]
+}
+```
+
+响应沿用 `/solve/layered` 的 `layered.*` 与 `diagnostics.*` 解释字段，`context.mode` 通常为 `maintenance`。
 
 ## `GET /api/v1/solve-requests/{request_id}`
 
@@ -300,16 +365,30 @@
 
 路由文件：`app/api/v1/master_data.py`
 
-提供设备、状态、活动、资源的 CRUD 接口，支持聚合读写（状态一次提交 features，活动一次提交 preconditions/effects/resource_reqs）。
+提供设备、状态、活动、资源、分层目标、活动能力和维护意图的 CRUD / preview 接口。
 
-覆盖端点：`/api/v1/machine-types`、`/machines`、`/states`、`/op-rules`、`/resources` 及其子资源。
+核心端点：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET/POST/PUT/DELETE` | `/api/v1/machine-types` 等 | 设备类型、设备、状态快照、规则、资源、特征定义 |
+| `GET/POST/PUT/DELETE` | `/api/v1/machine-types/{id}/state-nodes`、`/api/v1/state-nodes/{id}` | 任意深度状态目标树 |
+| `GET/POST/PUT/DELETE` | `/api/v1/machine-types/{id}/activity-nodes`、`/api/v1/activity-nodes/{id}` | 一级/二级活动包与 legacy 三级活动节点 |
+| `GET/POST/PUT/DELETE` | `/api/v1/machine-types/{id}/atomic-activities`、`/api/v1/atomic-activities/{id}` | 可复用原子活动库 |
+| `GET/POST/DELETE` | `/api/v1/activity-nodes/{package_id}/atomic-activity-refs`、`/api/v1/activity-package-atomic-refs/{id}` | 二级活动包到原子活动的引用 |
+| `GET/POST/PUT/DELETE` | `/api/v1/activity-nodes/{id}/scope-guards`、`/api/v1/scope-guards/{id}` | Scope Guard 与公共前置条件 |
+| `POST` | `/api/v1/machine-types/{id}/layered-expansion` | 展开状态目标、活动范围和 effective rules |
+| `POST` | `/api/v1/machine-types/{id}/layered-health-check` | Provider/Consumer 健康检查 |
+| `GET/POST/PUT/DELETE` | `/api/v1/machine-types/{id}/maintenance-intent-templates`、`/api/v1/maintenance-intent-templates/{id}` | 维护意图模板 |
+
+`OpRuleCreate/Update` 支持 `atomic_activity_id`，也保留 `activity_node_id`。两者不能同时传；新数据优先使用 `atomic_activity_id`。
 
 详细接口格式请查阅 Swagger UI (`/docs`) 或直接阅读 `master_data.py` 源码。
 ---
 
-## 计划中：业务场景导入 API（TICKET-012）
+## 业务场景导入 API（已实现）
 
-TICKET-012 已重新设计为“业务场景导入包”，用于支撑真实端到端测试数据装载。该能力尚未实现，API 契约先冻结如下：
+业务场景导入包用于支撑真实端到端测试数据装载。TICKET-036 后，模板同时支持分层状态目标、活动包、原子活动、活动包引用、维护意图和导入后健康检查。
 
 ### `POST /api/v1/imports/scenario`
 
@@ -325,7 +404,7 @@ TICKET-012 已重新设计为“业务场景导入包”，用于支撑真实端
 
 - `dry_run=true` 只解析和校验，不写数据库。
 - `dry_run=false` 使用 strict upsert 单事务导入，任意错误整批回滚。
-- 导入范围覆盖 feature catalog、machine type、machine、state feature defs、resources、rules、states、solve cases。
+- 导入范围覆盖 feature catalog、machine type、machine、state feature defs、resources、rules、states、solve cases，以及可选的 layered/maintenance sheets。
 
 响应结构：
 
@@ -339,6 +418,12 @@ TICKET-012 已重新设计为“业务场景导入包”，用于支撑真实端
     "rules_total": 120,
     "resources_total": 18,
     "states_total": 2,
+    "activity_nodes_total": 3,
+    "atomic_activities_total": 2,
+    "activity_package_atomic_refs_total": 2,
+    "state_nodes_total": 4,
+    "maintenance_intents_total": 1,
+    "layered_health_checks_total": 1,
     "solve_cases_total": 1
   },
   "preview": {
@@ -353,6 +438,8 @@ TICKET-012 已重新设计为“业务场景导入包”，用于支撑真实端
       "target_state_code": "TARGET"
     }
   ],
+  "maintenance_intent_templates": [],
+  "post_import_health_checks": [],
   "errors": []
 }
 ```

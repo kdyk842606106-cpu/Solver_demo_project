@@ -111,6 +111,36 @@ function Invoke-PythonCommand([object]$PythonCommand, [string[]]$Arguments) {
     Invoke-Native $PythonCommand.Exe $allArgs
 }
 
+function Test-VenvPython([string]$PythonPath) {
+    if (-not (Test-Path -LiteralPath $PythonPath -PathType Leaf)) {
+        return $false
+    }
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $PythonPath -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 2)" > $null 2>&1
+        $exitCode = $LASTEXITCODE
+    } catch {
+        $exitCode = -1
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    return $exitCode -eq 0
+}
+
+function Backup-BrokenVenv([string]$VenvPath) {
+    if (-not (Test-Path -LiteralPath $VenvPath)) {
+        return
+    }
+
+    $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $backupPath = "{0}.broken-{1}" -f $VenvPath, $timestamp
+    Move-Item -LiteralPath $VenvPath -Destination $backupPath
+    Write-Host ("Existing .venv is not runnable; moved it to {0}" -f $backupPath)
+}
+
 if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
     $ProjectRoot = Find-ProjectRoot
 } else {
@@ -122,6 +152,7 @@ $venvScripts = Join-Path -Path $venvRoot -ChildPath 'Scripts'
 $venvPython = Join-Path -Path $venvScripts -ChildPath 'python.exe'
 $frontendRoot = Join-Path -Path $ProjectRoot -ChildPath 'frontend'
 $registryFile = Join-Path -Path $frontendRoot -ChildPath '.npmrc'
+$npmCommand = if (Get-Command 'npm.cmd' -ErrorAction SilentlyContinue) { 'npm.cmd' } else { 'npm' }
 $projectRootName = Split-Path -Leaf $ProjectRoot
 $projectParentName = Split-Path -Leaf (Split-Path -Parent $ProjectRoot)
 
@@ -132,7 +163,7 @@ Write-Host "  Intranet Dev Environment Bootstrap"
 Write-Host "============================================"
 
 $pythonCommand = Resolve-PythonCommand
-Assert-Command 'npm' 'Install Node.js and ensure npm is on PATH.'
+Assert-Command $npmCommand 'Install Node.js and ensure npm is on PATH.'
 
 Write-Section 'Diagnostics'
 Write-Host "PSScriptRoot: $PSScriptRoot"
@@ -164,11 +195,12 @@ if (-not (Test-Path -LiteralPath (Join-Path -Path $ProjectRoot -ChildPath '.env'
 }
 
 Write-Section 'Creating virtual environment'
-if (-not (Test-Path -LiteralPath $venvPython -PathType Leaf)) {
+if (-not (Test-VenvPython $venvPython)) {
+    Backup-BrokenVenv $venvRoot
     Invoke-PythonCommand $pythonCommand @('-m', 'venv', $venvRoot)
     Write-Host '.venv create command completed'
 } else {
-    Write-Host '.venv already exists'
+    Write-Host '.venv already exists and is runnable'
 }
 
 if (-not (Test-Path -LiteralPath $venvPython -PathType Leaf)) {
@@ -201,7 +233,7 @@ Write-Host $registryLine
 
 Write-Section 'Installing frontend dependencies'
 Set-Location -LiteralPath $frontendRoot
-Invoke-Native 'npm' @('install')
+Invoke-Native $npmCommand @('install')
 Set-Location -LiteralPath $ProjectRoot
 
 Write-Section 'Bootstrap complete'

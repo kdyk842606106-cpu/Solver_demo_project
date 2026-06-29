@@ -1,9 +1,61 @@
 ---
 name: "source-command-session-start"
-description: "Load project context and prepare for a focused development session"
+description: "Load Solver project context, confirm scope, and route into the superpowers workflow when useful"
 ---
 
 # source-command-session-start
+
+## Canonical Instructions
+
+Use this skill when the user asks to run `session-start`, when a new Solver
+development session begins, or before any non-trivial implementation work in
+this project. This section supersedes any legacy migrated command text below.
+
+Load the project's three-layer context system before making changes:
+
+- `docs/ANCHOR.md`: permanent architecture, constraints, glossary, and roadmap
+- `docs/STATE_V*.md`: current version snapshot and task ledger
+- latest `docs/TICKET_*.md`: current scoped work item
+
+Execution:
+
+1. Read `docs/ANCHOR.md` in full.
+2. Find the current non-archived `docs/STATE_V*.md` and read it in full.
+3. Find all non-archived `docs/TICKET_*.md` files and read the highest-numbered
+   ticket as the active ticket.
+4. Surface any hanging decisions, blocking questions, or unresolved scope
+   decisions from STATE.
+5. Output this Chinese confirmation and stop until the user confirms:
+
+```text
+已就绪
+- 当前版本：[VERSION from STATE]
+- 本次任务：[latest TICKET title, or "未指定 - 需要创建 TICKET"]
+- 悬挂问题：[list blocking/hanging issues, or "无"]
+- 本次不做：[out-of-scope items from TICKET, or "待确认"]
+```
+
+After confirmation, route the task:
+
+- New feature, behavior change, workflow design, UI design, or architecture
+  change: use global `brainstorming`.
+- Approved design/spec already exists: use global `writing-plans`.
+- Approved implementation plan already exists: use global `plan-execution`.
+- Narrow bug diagnosis, dependency check, repo inspection, or small mechanical
+  fix: continue directly while obeying ANCHOR, STATE, and the active TICKET.
+
+Superpowers artifacts belong here:
+
+- specs: `docs/superpowers/specs/`
+- plans: `docs/superpowers/plans/`
+
+Rules:
+
+- Do not implement before the user confirms scope after context loading.
+- Project context wins over any global superpowers artifact.
+- If a spec or plan changes scope, update or propose updating the active TICKET
+  before implementation.
+- Mark TICKET subtasks complete only after implementation and verification.
 
 Use this skill when the user asks to run the migrated source command `session-start`.
 

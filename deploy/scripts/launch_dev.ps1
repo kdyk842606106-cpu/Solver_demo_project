@@ -65,6 +65,17 @@ function Test-PythonModule([string]$PythonExe, [string]$ModuleName) {
     return $exitCode -eq 0
 }
 
+function Get-EnvFileValue([string]$Path, [string]$Name) {
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $null
+    }
+    $line = Get-Content -LiteralPath $Path | Where-Object { $_ -match ("^{0}=" -f [regex]::Escape($Name)) } | Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($line)) {
+        return $null
+    }
+    return $line.Substring($Name.Length + 1).Trim()
+}
+
 if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
     $ProjectRoot = Find-ProjectRoot
 } else {
@@ -77,8 +88,43 @@ $venvPython = Join-Path -Path $venvScripts -ChildPath 'python.exe'
 $envFile = Join-Path -Path $ProjectRoot -ChildPath '.env'
 $frontendRoot = Join-Path -Path $ProjectRoot -ChildPath 'frontend'
 $npmrcFile = Join-Path -Path $frontendRoot -ChildPath '.npmrc'
+$npmCommand = if (Get-Command 'npm.cmd' -ErrorAction SilentlyContinue) { 'npm.cmd' } else { 'npm' }
+$localPgData = Join-Path -Path $ProjectRoot -ChildPath '.postgres-data'
+$localPgLogDir = Join-Path -Path $ProjectRoot -ChildPath '.postgres-logs'
+$localPgLog = Join-Path -Path $localPgLogDir -ChildPath 'postgres.log'
+$postgresBin = Join-Path -Path ${env:ProgramFiles} -ChildPath 'PostgreSQL\15\bin'
+$pgCtl = Join-Path -Path $postgresBin -ChildPath 'pg_ctl.exe'
 $projectRootName = Split-Path -Leaf $ProjectRoot
 $projectParentName = Split-Path -Leaf (Split-Path -Parent $ProjectRoot)
+
+function Ensure-WorkspacePostgres {
+    $dbPort = Get-EnvFileValue $envFile 'DB_PORT'
+    if ($dbPort -ne '55432' -or -not (Test-Path -LiteralPath $localPgData)) {
+        return
+    }
+    if (-not (Test-Path -LiteralPath $pgCtl -PathType Leaf)) {
+        throw "Workspace PostgreSQL data exists, but pg_ctl was not found at $pgCtl"
+    }
+    if (-not (Test-Path -LiteralPath $localPgLogDir)) {
+        New-Item -ItemType Directory -Path $localPgLogDir | Out-Null
+    }
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $pgCtl -D $localPgData status > $null 2>&1
+        $statusExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($statusExitCode -eq 0) {
+        Write-Host 'Workspace PostgreSQL is already running'
+        return
+    }
+
+    Write-Host 'Starting workspace PostgreSQL on DB_PORT=55432'
+    Invoke-Native $pgCtl @('-D', $localPgData, '-l', $localPgLog, '-o', '-p 55432', 'start')
+}
 
 Set-Location -LiteralPath $ProjectRoot
 
@@ -145,6 +191,7 @@ if ($Mode -eq 'docker') {
     }
 } else {
     Write-Section 'Checking database connectivity'
+    Ensure-WorkspacePostgres
     Invoke-Native $venvPython @('scripts/test_db_connection.py')
 }
 
@@ -164,7 +211,7 @@ Write-Section 'Starting backend'
 $escapedProjectRoot = $ProjectRoot.Replace("'", "''")
 $escapedVenvPython = $venvPython.Replace("'", "''")
 $backendCommand = "Set-Location -LiteralPath '$escapedProjectRoot'; & '$escapedVenvPython' -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
-Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-Command', $backendCommand | Out-Null
+Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $backendCommand -WindowStyle Hidden | Out-Null
 
 Write-Section 'Waiting for backend health'
 $backendHealthUrl = 'http://127.0.0.1:8000/health'
@@ -188,8 +235,8 @@ if (-not $backendReady) {
 
 Write-Section 'Starting frontend'
 $escapedFrontendRoot = $frontendRoot.Replace("'", "''")
-$frontendCommand = "Set-Location -LiteralPath '$escapedFrontendRoot'; npm run dev -- --host 0.0.0.0"
-Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-Command', $frontendCommand | Out-Null
+$frontendCommand = "Set-Location -LiteralPath '$escapedFrontendRoot'; & '$npmCommand' run dev -- --host 0.0.0.0"
+Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $frontendCommand -WindowStyle Hidden | Out-Null
 
 Write-Section 'Launch complete'
 Write-Host 'Backend:  http://localhost:8000/docs'

@@ -102,7 +102,7 @@ Before finishing cutover, verify these alignment rules:
 - No outdated plan is presented as current if the version boundary invalidated
   it; mark it superseded instead
 - The first TICKET for the new version clearly states whether the next session
-  should start with `brainstorming`, `writing-plans`, or `executing-plans`
+  should start with `brainstorming`, `writing-plans`, or `plan-execution`
 
 ## Output summary
 

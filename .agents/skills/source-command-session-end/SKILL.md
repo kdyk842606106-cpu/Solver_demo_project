@@ -5,6 +5,52 @@ description: "Sync completed work back to the STATE document and prepare handoff
 
 # source-command-session-end
 
+## Canonical Instructions
+
+Use this skill when the user asks to run `session-end`, or at the end of a
+development session that changed code, docs, specs, plans, or project state.
+This section supersedes any legacy migrated command text below.
+
+Purpose:
+
+- summarize what happened
+- update STATE precisely
+- update the active TICKET precisely
+- record superpowers spec/plan state when those workflows were used
+- report verification and remaining work
+
+Execution:
+
+1. Read the current non-archived `docs/STATE_V*.md`.
+2. Read the highest-numbered non-archived `docs/TICKET_*.md`.
+3. Report completion status in Chinese.
+4. Edit only necessary lines in STATE:
+   - completed subtasks
+   - new known issues or decisions
+   - important new files, specs, plans, or tests
+   - verification results
+5. Edit only necessary lines in the active TICKET:
+   - mark completed subtasks only after verification passes
+   - note partial work and failure reasons when relevant
+   - add a dated completion note if all scoped work is complete
+6. If `brainstorming`, `writing-plans`, or `plan-execution` was used, record:
+   - latest spec path under `docs/superpowers/specs/`
+   - latest plan path under `docs/superpowers/plans/`
+   - the last workflow used
+   - the exact next workflow or task to resume
+7. Check the session's changes against `docs/ANCHOR.md` and report either
+   `无违反` or concise violations with file references.
+8. Propose the next TICKET if the active TICKET is complete; otherwise list
+   remaining scoped subtasks.
+9. End with a one-paragraph Chinese handoff summary for the next session.
+
+Rules:
+
+- Always update files when the session produced durable state changes.
+- Never mark work complete if verification failed.
+- Keep edits precise and local.
+- Project context wins over any global superpowers artifact.
+
 Use this skill when the user asks to run the migrated source command `session-end`.
 
 ## Command Template

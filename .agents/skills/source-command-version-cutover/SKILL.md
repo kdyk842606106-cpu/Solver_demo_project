@@ -5,6 +5,45 @@ description: "Archive current STATE document and bootstrap the next version"
 
 # source-command-version-cutover
 
+## Canonical Instructions
+
+Use this skill only when the current version is complete and the user asks to run
+`version-cutover` or begin the next version. This section supersedes any legacy
+migrated command text below.
+
+Pre-cutover gate:
+
+1. Read the current non-archived `docs/STATE_V*.md`.
+2. Verify all current-version STEP tasks are complete.
+3. Verify no blocking hanging decisions remain.
+4. Verify no unresolved ANCHOR violations remain.
+5. Verify acceptance criteria have been checked.
+
+If any item is not satisfied, list what remains and stop.
+
+Execution:
+
+1. Create `docs/archive/ARCHIVE_VX.X.md` with the version goal, completed
+   features, key decisions, known limitations, final data/workflow state, and
+   relevant superpowers spec/plan references.
+2. Move completed non-archived `docs/TICKET_*.md` files to `docs/archive/`.
+3. Move `docs/STATE_VX.X.md` to `docs/archive/STATE_VX.X.md`.
+4. Create `docs/STATE_VX+1.md` with next-version goals, carried-forward
+   baseline, technical debt, planned changes, reset task status, hanging
+   decisions, and active `docs/superpowers/` references when relevant.
+5. Ask whether `docs/ANCHOR.md` needs a fundamental update. Do not modify it
+   unless the user explicitly confirms.
+6. Create or propose the first TICKET for the next version from the new STATE
+   and any active approved superpowers spec/plan.
+7. Ensure the first TICKET says whether the next workflow is `brainstorming`,
+   `writing-plans`, `plan-execution`, or direct implementation.
+
+Rules:
+
+- Do not cut over a partially complete version.
+- Do not silently change ANCHOR.
+- Preserve traceability from STATE/TICKET to specs, plans, code, and tests.
+
 Use this skill when the user asks to run the migrated source command `version-cutover`.
 
 ## Command Template

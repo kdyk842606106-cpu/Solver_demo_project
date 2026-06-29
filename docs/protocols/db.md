@@ -21,6 +21,13 @@ The DB layer provides:
 - `op_rule_effect`
 - `op_rule_resource_req`
 - `resource`
+- `activity_node`
+- `state_node`
+- `scope_guard`
+- `scope_guard_precond`
+- `atomic_activity`
+- `activity_package_atomic_ref`
+- `maintenance_intent_template`
 - `solve_request`
 - `candidate_plan`
 - `candidate_plan_step`
@@ -84,6 +91,25 @@ Important fields:
 `predecessor_ids` stores predecessor `step_order` values. Repeated
 `op_rule_id` values are valid and represent separate activity instances.
 
+## Layered State / Activity Contracts
+
+TICKET-036 keeps old layered tables compatible while changing the preferred
+model:
+
+- `state_node.level >= 1`; active childless nodes are atomic states.
+- Atomic state nodes carry `feature_key`, `operator`, and `target_value`.
+- Aggregate state nodes have children and must not bind concrete facts.
+- Atomic state writes auto-ensure global `feature_definition` and per-machine-type
+  `state_feature_def` rows.
+- `activity_node` level 1/2 rows are business packages/scopes used for
+  organization, Scope Guards, maintenance scopes, grouping, and explanation.
+- `atomic_activity` rows are reusable executable activity definitions.
+- `activity_package_atomic_ref` attaches atomic activities to level-2 activity
+  packages, allowing reuse across packages.
+- `op_rule.atomic_activity_id` is the preferred executable binding. Existing
+  `op_rule.activity_node_id` remains nullable and supports legacy level-3
+  activity-node data.
+
 ## `schedule_result`
 
 Written by Scheduler and read by API.
@@ -111,3 +137,5 @@ multi-resource fields:
 - Domain modules must not import FastAPI modules.
 - Planner persistence remains `candidate_plan` + `candidate_plan_step`; POP
   causal links and threat decisions are not persisted in the current version.
+- Import and CRUD paths may preserve legacy level-3 `activity_node` rows, but
+  new Data Management flows should prefer `atomic_activity` bindings.

@@ -63,6 +63,21 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 - Swagger UI: `http://localhost:8000/docs`
 - 健康检查: `http://localhost:8000/health`
+- 前端页面: `http://localhost:8000/`。如果已经执行过 `npm run build`，后端会优先服务 `frontend/dist`；否则回退到 Vite 源码入口。
+
+### 8. 生产构建预览
+
+```bash
+cd frontend
+npm run build
+npm run preview:api
+```
+
+默认会在 `http://127.0.0.1:5173` 服务 `frontend/dist`，并把 `/api/*` 代理到 `http://127.0.0.1:8000`。如果后端或前端端口被占用，可覆盖参数：
+
+```bash
+npm run preview:api -- --backend http://127.0.0.1:8012 --port 8013
+```
 
 ## Windows 一键启动
 
@@ -264,6 +279,14 @@ Content-Type: application/json
 ```
 
 ## 已知实现特征
+
+当前主线能力包括：
+
+- 实例级 Partial Order Planner + CP-SAT Scheduler 两阶段求解。
+- 多资源 `resource_reqs`、计划版本链、阻塞重排和 `step_role` diff。
+- 分层/维护求解：状态目标树、活动能力范围、Scope Guard、维护意图和解释结果。
+- TICKET-036 后的新模型：状态目标支持任意深度树，活跃无子节点作为原子状态；活动能力由一级/二级活动包组织，`atomic_activity` 作为可复用执行能力，旧三级 `activity_node` 保留为兼容路径。
+- 业务场景 Excel 导入支持分层节点、原子活动、活动包引用、维护意图和导入后健康检查。
 
 详见 [`docs/STATE_V0.3.md`](./docs/STATE_V0.3.md) 和 [`docs/protocols/`](./docs/protocols/README.md)。
 

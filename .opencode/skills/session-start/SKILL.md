@@ -82,7 +82,7 @@ task type:
   looks small.
 - **Approved spec already exists**: invoke global `writing-plans` to create the
   executable implementation plan.
-- **Approved plan already exists**: invoke global `executing-plans` to execute
+- **Approved plan already exists**: invoke global `plan-execution` to execute
   the plan task-by-task.
 - **Bug diagnosis / narrow fix / non-creative implementation**: continue in the
   current session, but still obey `ANCHOR.md`, `STATE`, and `TICKET`.
