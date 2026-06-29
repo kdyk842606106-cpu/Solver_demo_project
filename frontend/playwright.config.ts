@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 import { readFileSync } from 'fs'
+import { dirname, resolve } from 'path'
+import { fileURLToPath } from 'url'
 
 // ============================================================
 // Playwright WebServer Configuration
@@ -14,12 +16,24 @@ const isWSL = process.platform === 'linux' && (() => {
   }
 })()
 
+const frontendRoot = dirname(fileURLToPath(import.meta.url))
+const projectRoot = resolve(frontendRoot, '..')
+const windowsProjectRoot = process.env.SOLVER_PROJECT_ROOT || projectRoot
+const windowsBackendScript = resolve(windowsProjectRoot, 'frontend', 'e2e', 'start-backend.bat')
+
+function toWslPath(windowsPath: string): string {
+  const normalized = windowsPath.replace(/\\/g, '/')
+  const driveMatch = normalized.match(/^([A-Za-z]):\/(.*)$/)
+  if (!driveMatch) return normalized
+  return `/mnt/${driveMatch[1].toLowerCase()}/${driveMatch[2]}`
+}
+
 // Backend command depends on runtime:
-// - WSL2: use cmd.exe to run Windows batch file (env vars via set)
-// - Windows native: same batch file
+// - WSL2: invoke the Windows batch file through cmd.exe
+// - Windows native: invoke the same batch file directly
 const backendCommand = isWSL
-  ? '/mnt/c/Windows/System32/cmd.exe /c "E:\\Solver_demo_project\\frontend\\e2e\\start-backend.bat"'
-  : 'E:\\Solver_demo_project\\frontend\\e2e\\start-backend.bat'
+  ? `/mnt/c/Windows/System32/cmd.exe /c "${toWslPath(windowsBackendScript)}"`
+  : `"${windowsBackendScript}"`
 const backendHealthUrl = isWSL
   ? 'http://172.26.16.1:8000/health'
   : 'http://127.0.0.1:8000/health'
@@ -48,7 +62,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: 'npm run dev',
+      command: process.platform === 'win32' ? 'npm.cmd run dev' : 'npm run dev',
       url: 'http://localhost:5173',
       timeout: 120 * 1000,
       reuseExistingServer: !process.env.CI,

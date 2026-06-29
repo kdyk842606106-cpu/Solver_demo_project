@@ -1,10 +1,42 @@
 import http from './index'
 
 // ── Machine Types ────────────────────────────────────────────
-export const getMachineTypes = () => http.get('/machine-types')
-export const createMachineType = (data) => http.post('/machine-types', data)
-export const updateMachineType = (id, data) => http.put(`/machine-types/${id}`, data)
-export const deleteMachineType = (id) => http.delete(`/machine-types/${id}`)
+let machineTypesCache = null
+let machineTypesInFlight = null
+
+const clearMachineTypesCache = () => {
+  machineTypesCache = null
+  machineTypesInFlight = null
+}
+
+export const getMachineTypes = ({ force = false } = {}) => {
+  if (!force && machineTypesCache) return Promise.resolve(machineTypesCache)
+  if (!force && machineTypesInFlight) return machineTypesInFlight
+  machineTypesInFlight = http.get('/machine-types')
+    .then((data) => {
+      machineTypesCache = data
+      return data
+    })
+    .finally(() => {
+      machineTypesInFlight = null
+    })
+  return machineTypesInFlight
+}
+export const createMachineType = async (data) => {
+  const result = await http.post('/machine-types', data)
+  clearMachineTypesCache()
+  return result
+}
+export const updateMachineType = async (id, data) => {
+  const result = await http.put(`/machine-types/${id}`, data)
+  clearMachineTypesCache()
+  return result
+}
+export const deleteMachineType = async (id) => {
+  const result = await http.delete(`/machine-types/${id}`)
+  clearMachineTypesCache()
+  return result
+}
 
 // ── Machines ─────────────────────────────────────────────────
 export const getMachines = (params = {}) => http.get('/machines', { params })
@@ -116,3 +148,30 @@ export const importScenario = (file, { dryRun = true } = {}) => {
 
 export const downloadScenarioTemplate = () =>
   http.get('/imports/scenario-template', { responseType: 'blob' })
+
+// Network editor references and bindings
+export const getStateNodeReferences = (machineTypeId) =>
+  http.get(`/machine-types/${machineTypeId}/state-node-references`)
+export const createStateNodeReference = (stateNodeId, data) =>
+  http.post(`/state-nodes/${stateNodeId}/references`, data)
+export const deleteStateNodeReference = (id) => http.delete(`/state-node-references/${id}`)
+
+export const getActivityStateBindings = (machineTypeId) =>
+  http.get(`/machine-types/${machineTypeId}/activity-state-bindings`)
+export const createActivityStateBinding = (data) =>
+  http.post('/activity-state-bindings', data)
+export const updateActivityStateBinding = (id, data) =>
+  http.put(`/activity-state-bindings/${id}`, data)
+export const deleteActivityStateBinding = (id) => http.delete(`/activity-state-bindings/${id}`)
+export const refreshActivityStateBindingCoverage = (id) =>
+  http.post(`/activity-state-bindings/${id}/refresh-coverage`)
+export const previewNetworkEditorGraph = (machineTypeId, data) =>
+  http.post(`/machine-types/${machineTypeId}/network-editor/graph`, data)
+export const validateNetworkEditor = (machineTypeId, data) =>
+  http.post(`/machine-types/${machineTypeId}/network-editor/validate`, data)
+export const analyzeNetworkEditorImpact = (machineTypeId, data) =>
+  http.post(`/machine-types/${machineTypeId}/network-editor/impact`, data, { silentError: true })
+export const precheckNetworkEditorSolver = (machineTypeId, data) =>
+  http.post(`/machine-types/${machineTypeId}/network-editor/solver-precheck`, data)
+export const commitNetworkEditorDraft = (machineTypeId, data) =>
+  http.post(`/machine-types/${machineTypeId}/network-editor/commit`, data)

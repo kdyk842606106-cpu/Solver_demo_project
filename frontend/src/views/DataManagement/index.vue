@@ -38,6 +38,10 @@
         <ActivityCapabilityWorkspace />
       </el-tab-pane>
 
+      <el-tab-pane label="网络编辑器" name="networkEditor">
+        <NetworkEditorWorkspace @open-workspace="openWorkspace" />
+      </el-tab-pane>
+
       <el-tab-pane label="验证检查" name="validation">
         <ValidationWorkspace />
       </el-tab-pane>
@@ -124,6 +128,7 @@ import ResourcePage from './ResourcePage.vue'
 import BusinessStateDimensionPage from './BusinessStateDimensionPage.vue'
 import StateTargetWorkspace from './StateTargetWorkspace.vue'
 import ActivityCapabilityWorkspace from './ActivityCapabilityWorkspace.vue'
+import NetworkEditorWorkspace from './NetworkEditorWorkspace.vue'
 import ValidationWorkspace from './ValidationWorkspace.vue'
 import {
   downloadScenarioTemplate,
@@ -166,6 +171,10 @@ const previewRows = computed(() => {
 
 function openImport() {
   dialogVisible.value = true
+}
+
+function openWorkspace(name) {
+  activeWorkspace.value = name
 }
 
 function onFileChange(event) {

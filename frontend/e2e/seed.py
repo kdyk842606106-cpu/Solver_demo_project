@@ -6,13 +6,9 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from sqlalchemy import JSON, Numeric
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from app.db.models import (
     Base,
-    CandidatePlan,
-    CandidatePlanStep,
-    FeatureDefinition,
     Machine,
     MachineState,
     MachineStateFeature,
@@ -22,24 +18,11 @@ from app.db.models import (
     OpRulePrecond,
     OpRuleResourceReq,
     Resource,
-    ScheduleResult,
-    SolveRequest,
     StateFeatureDef,
 )
+from app.db.session import patch_sqlite_types
 
-# SQLite compatibility patches (copied from tests/conftest.py)
-CandidatePlanStep.__table__.c.predecessor_ids.type = JSON()
-StateFeatureDef.__table__.c.allowed_values.type = JSON()
-Resource.__table__.c.meta.type = JSON()
-SolveRequest.__table__.c.overrides.type = JSON()
-SolveRequest.__table__.c.objectives.type = JSON()
-SolveRequest.__table__.c.constraints.type = JSON()
-SolveRequest.__table__.c.blockage_constraints.type = JSON()
-ScheduleResult.__table__.c.tasks.type = JSON()
-FeatureDefinition.__table__.c.allowed_values.type = JSON()
-OpRulePrecond.__table__.c.value_list.type = JSON()
-OpRuleEffect.__table__.c.delta_value.type = Numeric(10, 2)
-CandidatePlan.__table__.c.parent_plan_id.type = Numeric()
+patch_sqlite_types(force=True)
 
 DB_PATH = Path(__file__).with_name('test.db')
 ASYNC_URL = f"sqlite+aiosqlite:///{DB_PATH}"

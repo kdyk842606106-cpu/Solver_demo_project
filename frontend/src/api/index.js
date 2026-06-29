@@ -20,8 +20,15 @@ http.interceptors.response.use(
       (status ? `HTTP ${status}` : '') ||
       error.message ||
       '请求失败'
-    ElMessage.error(message)
-    return Promise.reject(new Error(message))
+    const normalizedError = new Error(message)
+    normalizedError.status = status
+    normalizedError.errorCode = errorCode
+    normalizedError.response = error.response
+    normalizedError.data = data
+    if (!error.config?.silentError) {
+      ElMessage.error(message)
+    }
+    return Promise.reject(normalizedError)
   },
 )
 
