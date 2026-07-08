@@ -12,7 +12,7 @@
           placeholder="选择设备类型"
           filterable
           default-first-option
-          style="width: 300px"
+          style="width: 260px"
           @change="onTypeChange"
         >
           <el-option-group
@@ -34,7 +34,7 @@
           aria-label="视图模式"
           :options="[
             { label: '纲要', value: 'outline' },
-            { label: '实现', value: 'implementation' },
+            { label: '状态转移', value: 'implementation' },
             { label: '求解', value: 'solver_ready' },
           ]"
           @change="reloadGraph"
@@ -51,22 +51,28 @@
           </el-button>
           <el-button :icon="Close" :disabled="draftSubmitting" data-testid="network-editor-cancel-edit" @click="cancelEditSession">取消编辑</el-button>
         </template>
-        <el-button :icon="Plus" :disabled="!canMutate" data-testid="network-editor-create-state" @click="openCreateState()">新建状态</el-button>
-        <el-button :icon="Plus" :disabled="!canMutate" data-testid="network-editor-create-activity" @click="openCreateActivityNode()">新建虚拟活动</el-button>
-        <el-button :icon="Plus" :disabled="!canMutate" data-testid="network-editor-create-atomic" @click="openCreateAtomicActivity()">新建原子活动</el-button>
-        <el-button :icon="Refresh" :disabled="!canMutate" data-testid="network-editor-auto-arrange" @click="autoArrangeCanvas">自动整理</el-button>
-        <el-button :icon="Refresh" :disabled="!machineTypeId || draftSubmitting" data-testid="network-editor-refresh" @click="refreshWorkspace">刷新</el-button>
-        <el-button
-          :icon="Search"
-          data-testid="network-editor-impact"
-          :disabled="!machineTypeId || (!selectedStateId && !selectedActivityGraphId)"
-          :loading="impactLoading"
-          @click="loadImpact({ immediate: true })"
-        >
-          影响分析
-        </el-button>
-        <el-button type="primary" :icon="Link" :disabled="!machineTypeId" data-testid="network-editor-validate" @click="runValidation">校验</el-button>
-        <el-button :icon="Search" :disabled="!machineTypeId" data-testid="network-editor-solver-precheck" @click="runSolverPrecheck">求解预检</el-button>
+        <el-dropdown trigger="click" @command="handleToolbarCommand">
+          <el-button :icon="MoreFilled" data-testid="network-editor-more-actions">
+            更多
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="auto-arrange" :disabled="!canMutate" data-testid="network-editor-auto-arrange">
+                自动整理
+              </el-dropdown-item>
+              <el-dropdown-item command="refresh" :disabled="!machineTypeId || draftSubmitting" data-testid="network-editor-refresh">
+                刷新
+              </el-dropdown-item>
+              <el-dropdown-item
+                command="impact"
+                :disabled="!machineTypeId || (!selectedStateId && !selectedActivityGraphId) || impactLoading"
+                data-testid="network-editor-impact"
+              >
+                影响分析
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </div>
 
@@ -81,7 +87,7 @@
           collapse-tags-tooltip
           filterable
           placeholder="状态根节点"
-          style="min-width: 260px"
+          style="min-width: 220px"
           @change="reloadGraph"
         >
           <el-option v-for="item in stateNodes" :key="item.id" :label="nodeLabel(item)" :value="item.id" />
@@ -93,7 +99,7 @@
           collapse-tags-tooltip
           filterable
           placeholder="活动范围"
-          style="min-width: 260px"
+          style="min-width: 220px"
           @change="reloadGraph"
         >
           <el-option v-for="item in activityScopeOptions" :key="item.id" :label="nodeLabel(item)" :value="item.id" />
@@ -124,7 +130,14 @@
             {{ nodeLabel(item) }}
           </span>
         </div>
-        <div class="focus-boundaries">
+        <div
+          v-if="
+            focusedActivityCanvas.contextStates.length ||
+            focusedActivityCanvas.outputStates.length ||
+            focusedActivityCanvas.metrics.declaredOutputCount
+          "
+          class="focus-boundaries"
+        >
           <span>上下文</span>
           <el-tag
             v-for="state in focusedActivityCanvas.contextStates.slice(0, 3)"
@@ -180,84 +193,100 @@
           <strong>{{ graphSummary.activity_node_count || 0 }}</strong>
         </div>
         <div class="metric">
-          <span>虚拟活动</span>
-          <strong>{{ graphSummary.virtual_activity_count || 0 }}</strong>
-        </div>
-        <div class="metric">
-          <span>可执行活动</span>
-          <strong>{{ graphSummary.executable_activity_count || 0 }}</strong>
-        </div>
-        <div class="metric">
           <span>绑定</span>
           <strong>{{ graphSummary.binding_count || 0 }}</strong>
-        </div>
-        <div class="metric">
-          <span>状态深度</span>
-          <strong>{{ graphSummary.max_state_depth || 0 }}</strong>
-        </div>
-        <div class="metric">
-          <span>活动深度</span>
-          <strong>{{ graphSummary.max_activity_depth || 0 }}</strong>
-        </div>
-        <div class="metric">
-          <span>依赖链</span>
-          <strong>{{ graphSummary.longest_dependency_chain_depth || 0 }}</strong>
         </div>
         <div class="metric warning">
           <span>覆盖缺口</span>
           <strong>{{ graphSummary.coverage_gap_count || 0 }}</strong>
         </div>
-        <div class="metric warning">
-          <span>部分实现</span>
-          <strong>{{ graphSummary.partial_virtual_activity_count || 0 }}</strong>
-        </div>
-        <div class="metric warning">
-          <span>跨层级</span>
-          <strong>{{ graphSummary.cross_level_binding_count || 0 }}</strong>
-        </div>
-        <div class="metric warning">
-          <span>孤立节点</span>
-          <strong>{{ (graphSummary.orphan_state_count || 0) + (graphSummary.orphan_activity_count || 0) }}</strong>
-        </div>
         <div class="metric danger">
           <span>阻塞</span>
           <strong>{{ validationSummary.blocking_count || 0 }}</strong>
         </div>
-      </div>
-
-      <div class="solver-readiness-strip" :class="solverReadinessClass">
-        <div>
-          <strong>{{ solverReadinessTitle }}</strong>
-          <span>{{ solverReadinessDetail }}</span>
-        </div>
-        <el-button size="small" :type="solverReadinessButtonType" @click="runValidation">校验</el-button>
+        <el-popover placement="bottom-end" trigger="click" width="320">
+          <template #reference>
+            <el-button size="small" text data-testid="network-editor-summary-more">
+              更多指标
+            </el-button>
+          </template>
+          <div class="summary-overflow-grid">
+            <div v-for="metric in summaryOverflowMetrics" :key="metric.label">
+              <span>{{ metric.label }}</span>
+              <strong>{{ metric.value }}</strong>
+            </div>
+          </div>
+        </el-popover>
       </div>
 
       <div class="workspace-body" data-testid="network-editor-workspace-body">
-        <div class="editor-grid">
-          <section class="resource-pane" data-testid="network-editor-resource-pane">
+        <div
+          class="editor-grid"
+          :class="{
+            'resource-collapsed': resourcePaneCollapsed,
+            'properties-collapsed': propertiesPaneCollapsed,
+          }"
+          :style="editorGridStyle"
+        >
+          <section
+            class="resource-pane"
+            :class="{ collapsed: resourcePaneCollapsed }"
+            data-testid="network-editor-resource-pane"
+          >
           <div class="pane-header">
-            <span>资源树</span>
-            <el-tag size="small" type="info">{{ stateNodes.length + activityNodes.length + atomicActivities.length }} 项</el-tag>
+            <span>{{ resourcePaneCollapsed ? '资源' : '资源树' }}</span>
+            <div class="pane-header-actions">
+              <el-dropdown v-if="!resourcePaneCollapsed" trigger="click" @command="handleCreateCommand">
+                <el-button size="small" type="primary" :icon="Plus" :disabled="!canMutate" data-testid="network-editor-create-menu">
+                  新建
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="state" :disabled="!canMutate" data-testid="network-editor-create-state">
+                      状态
+                    </el-dropdown-item>
+                    <el-dropdown-item v-if="!isStateTransitionView || fullGraphDebugEnabled" command="atomic" :disabled="!canMutate" data-testid="network-editor-create-atomic">
+                      原子活动
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+              <el-tag v-if="!resourcePaneCollapsed" size="small" type="info">{{ stateNodes.length + activityNodes.length + atomicActivities.length }} 项</el-tag>
+              <el-button
+                size="small"
+                text
+                circle
+                :icon="resourcePaneCollapsed ? ArrowRight : ArrowLeft"
+                :aria-label="resourcePaneCollapsed ? '展开资源栏' : '折叠资源栏'"
+                data-testid="network-editor-resource-pane-toggle"
+                @click="toggleResourcePane"
+              />
+            </div>
           </div>
+          <div v-if="resourcePaneCollapsed" class="pane-rail">资源</div>
+          <template v-else>
           <el-input v-model="keyword" data-testid="network-editor-resource-search" clearable placeholder="搜索状态或活动" class="search-input" />
-          <div class="quick-create">
-            <el-button :icon="Plus" size="small" :disabled="!canMutate" data-testid="network-editor-resource-create-state" @click="openCreateState()">新建状态</el-button>
-            <el-button :icon="Plus" size="small" :disabled="!canMutate" data-testid="network-editor-resource-create-activity" @click="openCreateActivityNode()">新建虚拟活动</el-button>
-            <el-button :icon="Plus" size="small" :disabled="!canMutate" data-testid="network-editor-resource-create-atomic" @click="openCreateAtomicActivity()">新建原子活动</el-button>
-          </div>
           <div v-if="hasDraftChanges" class="draft-change-list">
             <div class="section-title">
               <span>编辑草稿</span>
               <el-tag size="small" type="danger">{{ draftChangeCount }}</el-tag>
             </div>
             <div
-              v-for="change in draftChanges"
+              v-for="change in draftDisplayChanges"
               :key="change.client_id"
               class="draft-change-row"
             >
               <el-tag size="small" type="warning">{{ draftOperationLabel(change.operation) }}</el-tag>
               <span>{{ change.label || draftEntityLabel(change.entity_type) }}</span>
+              <el-button
+                size="small"
+                type="danger"
+                link
+                :data-testid="`network-editor-undo-draft-${change.client_id}`"
+                @click="undoDraftDisplayChange(change)"
+              >
+                撤回
+              </el-button>
             </div>
           </div>
 
@@ -340,7 +369,7 @@
                 type="button"
                 @click="selectGraphActivity(node)"
               >
-                <span>{{ node.activity_type === 'virtual' ? '虚拟活动' : '可执行活动' }}</span>
+                <span>{{ node.activity_type === 'virtual' ? '虚拟活动' : '原子活动' }}</span>
                 <strong>{{ node.code }}</strong>
               </button>
             </div>
@@ -350,7 +379,12 @@
           <div class="resource-section">
             <div class="section-title">状态包成员</div>
             <div class="reference-form">
-              <el-select v-model="referenceForm.state_node_id" filterable placeholder="引用状态">
+              <el-select
+                v-model="referenceForm.state_node_id"
+                filterable
+                placeholder="引用状态"
+                data-testid="network-editor-reference-state-select"
+              >
                 <el-option
                   v-for="item in stateNodes"
                   :key="item.id"
@@ -358,7 +392,12 @@
                   :value="item.id"
                 />
               </el-select>
-              <el-select v-model="referenceForm.parent_state_node_id" filterable placeholder="加入状态包">
+              <el-select
+                v-model="referenceForm.parent_state_node_id"
+                filterable
+                placeholder="加入状态包"
+                data-testid="network-editor-reference-parent-select"
+              >
                 <el-option
                   v-for="item in stateNodes.filter((node) => !node.feature_key)"
                   :key="item.id"
@@ -378,11 +417,21 @@
               </el-table-column>
             </el-table>
           </div>
+          </template>
+          <div
+            v-if="!resourcePaneCollapsed"
+            class="pane-resize-handle resource-resize-handle"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize resource pane"
+            data-testid="network-editor-resource-pane-resize"
+            @pointerdown="startPaneResize('resource', $event)"
+          />
         </section>
 
           <section class="canvas-pane" v-loading="loading" data-testid="network-editor-canvas-pane">
           <div class="pane-header">
-            <span>二部图画布</span>
+            <span>网络画板</span>
             <el-tag size="small" :type="canvasStatusType">{{ canvasStatusLabel }}</el-tag>
           </div>
           <div
@@ -391,7 +440,7 @@
             data-testid="network-editor-solver-view-note"
           >
             <strong>求解视图</strong>
-            <span>仅显示可执行活动与求解事实投影，虚拟活动作为分组元数据保留在求解预检中。</span>
+            <span>仅显示原子活动与求解事实投影，虚拟活动作为分组元数据保留在求解预检中。</span>
           </div>
           <div class="canvas-action-bar">
             <span class="drag-hint">{{ dragHintLabel }}</span>
@@ -404,15 +453,9 @@
                 <el-button size="small" aria-label="放大画布" data-testid="network-editor-zoom-in" @click="changeCanvasZoom(canvasZoomStep)">+</el-button>
               </el-button-group>
             </div>
-            <el-button size="small" :disabled="!canQuickConnect" @click="createSelectedInputEdge">
-              {{ inputEdgeLabel }}
-            </el-button>
-            <el-button size="small" type="success" :disabled="!canQuickConnect" @click="createSelectedOutputEdge">
-              {{ outputEdgeLabel }}
-            </el-button>
           </div>
           <div
-            class="canvas x6-canvas-wrapper"
+            class="x6-canvas-wrapper"
             data-testid="network-editor-canvas"
             @click.self="closeContextMenu"
           >
@@ -428,6 +471,7 @@
               :state-root-ids="selectedStateRootIds"
               :state-depth="stateDepth"
               :activity-depth="activityDepth"
+              :viewport-reset-token="x6ViewportResetToken"
               @select-state="handleX6SelectState"
               @select-activity="handleX6SelectActivity"
               @toggle-state-expansion="toggleGraphStateExpansion"
@@ -440,8 +484,23 @@
               @layout-change="handleX6LayoutChange"
               @container-resize="handleX6ContainerResize"
               @blank-dblclick="handleX6BlankDoubleClick"
-              @connect-nodes="handleX6ConnectNodes"
+              @blank-contextmenu="openX6BlankContextMenu"
+              @proxy-edge-click="handleX6ProxyEdgeClick"
+              @proxy-edge-dblclick="handleX6ProxyEdgeDoubleClick"
+              @node-hover-change="handleX6NodeHoverChange"
             />
+            <div
+              v-if="blankCanvasMenu"
+              class="node-context-menu"
+              data-testid="network-editor-blank-context-menu"
+              :style="blankCanvasMenuStyle"
+              @click.stop
+            >
+              <div class="context-menu-title">画布添加</div>
+              <button type="button" :disabled="!canMutate" @click="createBlankState">
+                添加状态
+              </button>
+            </div>
           </div>
           <div
             v-if="false"
@@ -553,30 +612,10 @@
                   title="拖动调整位置"
                   @pointerdown.stop.prevent="startLayoutDrag(node, index, 'state', $event)"
                 />
-                <span
-                  v-if="isEditMode"
-                  class="semantic-port port-left"
-                  title="被产出端口：活动输出拖到这里"
-                  @dragover.prevent.stop="dragOverState(node, $event)"
-                  @dragleave.stop="leaveDropTarget(node)"
-                  @drop.prevent.stop="dropOnState(node)"
-                >
-                  产出
-                </span>
-                <span
-                  v-if="isEditMode"
-                  class="semantic-port port-right"
-                  draggable="true"
-                  title="前置端口：从这里拖到活动输入"
-                  @dragstart.stop="startStateDrag(node, $event)"
-                  @dragend="endCanvasDrag"
-                >
-                  输入
-                </span>
                 <span class="node-code">{{ node.code }}</span>
                 <span class="node-name">{{ node.name }}</span>
                 <span class="node-meta">
-                  {{ node.leaf_count || 1 }} 叶子
+                  {{ node.leaf_count || 1 }} 原子状态
                   <span v-if="stateNodeMetrics(node).childCount" class="node-metric-badge">
                     成员 {{ stateNodeMetrics(node).childCount }}
                   </span>
@@ -657,7 +696,7 @@
                 <div class="container-title">{{ container.name }}</div>
                 <div class="container-meta">
                   <small>{{ container.childCount }} 项</small>
-                  <small v-if="container.contextCount">上下文 {{ container.contextCount }}</small>
+                  <small v-if="container.contextCount">历史上下文 {{ container.contextCount }}</small>
                   <small
                     v-if="container.declaredOutputCount"
                     :class="{ warning: container.missingOutputCount, success: !container.missingOutputCount }"
@@ -709,26 +748,6 @@
                   title="拖动调整位置"
                   @pointerdown.stop.prevent="startLayoutDrag(node, index, 'activity', $event)"
                 />
-                <span
-                  v-if="isEditMode"
-                  class="semantic-port port-left"
-                  :title="node.activity_type === 'virtual' ? '上下文输入端口：状态拖到这里' : '输入端口：状态拖到这里'"
-                  @dragover.prevent.stop="dragOverActivity(node, $event)"
-                  @dragleave.stop="leaveDropTarget(node)"
-                  @drop.prevent.stop="dropOnActivity(node)"
-                >
-                  输入
-                </span>
-                <span
-                  v-if="isEditMode"
-                  class="semantic-port port-right"
-                  draggable="true"
-                  :title="node.activity_type === 'virtual' ? '声明输出端口：从这里拖到状态' : '输出端口：从这里拖到状态'"
-                  @dragstart.stop="startActivityDrag(node, $event)"
-                  @dragend="endCanvasDrag"
-                >
-                  产出
-                </span>
                 <span class="node-code">{{ node.code }}</span>
                 <span class="node-name">{{ node.name }}</span>
                 <span class="node-meta">
@@ -755,7 +774,7 @@
                     输入 {{ activityNodeMetrics(node).inputCount }}
                   </span>
                   <span v-if="activityNodeMetrics(node).inheritedInputCount" class="node-metric-badge inherited">
-                    上下文 {{ activityNodeMetrics(node).inheritedInputCount }}
+                    历史上下文 {{ activityNodeMetrics(node).inheritedInputCount }}
                   </span>
                   <span v-if="activityNodeMetrics(node).outputCount" class="node-metric-badge">
                     输出 {{ activityNodeMetrics(node).outputCount }}
@@ -842,6 +861,15 @@
               >
                 添加状态
               </button>
+              <button
+                v-if="contextMenu.kind === 'state'"
+                type="button"
+                :disabled="!canMutate"
+                data-testid="network-editor-context-delete-state"
+                @click="deleteContextNode"
+              >
+                删除状态
+              </button>
               <button v-if="contextMenu.kind === 'activity'" type="button" @click="focusContextActivity">
                 设为活动焦点
               </button>
@@ -861,12 +889,21 @@
                 编辑活动
               </button>
               <button
-                v-if="contextMenu.kind === 'activity' && contextMenu.node.activity_type === 'virtual' && contextMenu.node.level <= 2"
+                v-if="contextMenu.kind === 'activity' && contextMenu.node.activity_type === 'virtual' && contextMenu.node.level === 2"
                 type="button"
                 :disabled="!canMutate"
                 @click="createContextActivityInside"
               >
-                {{ contextMenu.node.level === 1 ? '添加子活动' : '添加原子活动' }}
+                添加原子活动
+              </button>
+              <button
+                v-if="contextMenu.kind === 'activity'"
+                type="button"
+                :disabled="!canMutate"
+                data-testid="network-editor-context-delete-activity"
+                @click="deleteContextNode"
+              >
+                删除活动
               </button>
             </div>
 
@@ -884,9 +921,6 @@
               <button type="button" :disabled="!multiSelectedStateIds.length" @click="stageSelectedStatesAsOutput">
                 设为产出
               </button>
-              <button type="button" :disabled="!canCreateActivityFromStateSelection" @click="createVirtualActivityFromStateSelection">
-                创建虚拟活动
-              </button>
               <button type="button" :disabled="!canCreateActivityFromStateSelection" @click="createAtomicActivityFromStateSelection">
                 创建原子活动
               </button>
@@ -897,11 +931,28 @@
           </div>
         </section>
 
-          <section class="properties-pane" data-testid="network-editor-properties-pane">
+          <section
+            class="properties-pane"
+            :class="{ collapsed: propertiesPaneCollapsed }"
+            data-testid="network-editor-properties-pane"
+          >
           <div class="pane-header">
-            <span>属性与绑定</span>
-            <el-tag size="small">{{ selectedBinding ? `#${selectedBinding.id}` : '未选绑定' }}</el-tag>
+            <span>{{ propertiesPaneCollapsed ? '属性' : '属性与绑定' }}</span>
+            <div class="pane-header-actions">
+              <el-tag v-if="!propertiesPaneCollapsed" size="small">{{ selectedBinding ? `#${selectedBinding.id}` : '未选绑定' }}</el-tag>
+              <el-button
+                size="small"
+                text
+                circle
+                :icon="propertiesPaneCollapsed ? ArrowLeft : ArrowRight"
+                :aria-label="propertiesPaneCollapsed ? '展开属性栏' : '折叠属性栏'"
+                data-testid="network-editor-properties-pane-toggle"
+                @click="togglePropertiesPane"
+              />
+            </div>
           </div>
+          <div v-if="propertiesPaneCollapsed" class="pane-rail">属性</div>
+          <template v-else>
 
           <div class="detail-block">
             <div class="section-title">当前选择</div>
@@ -932,6 +983,136 @@
             </div>
           </div>
 
+          <div v-if="isStateTransitionView && selectedStateGraphNode" class="detail-block" data-testid="network-editor-state-transition-detail">
+            <div class="section-title">达成定义</div>
+            <el-descriptions :column="1" size="small" border>
+              <el-descriptions-item label="目标状态">{{ selectedStateLabel }}</el-descriptions-item>
+              <el-descriptions-item label="状态类型">
+                <el-tag size="small" :type="isAtomicStateNode(selectedStateGraphNode) ? 'success' : 'warning'">
+                  {{ isAtomicStateNode(selectedStateGraphNode) ? '原子目标' : '状态包目标' }}
+                </el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="达成活动">
+                {{ selectedStateTransition?.realizerLabel || '待补达成活动' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="前置状态">
+                {{ selectedStateTransition?.preconditionCount || 0 }}
+              </el-descriptions-item>
+            </el-descriptions>
+            <div v-if="selectedStateTransition?.warnings?.length" class="transition-warning-list">
+              <el-tag
+                v-for="warning in selectedStateTransition.warnings"
+                :key="warning.label"
+                size="small"
+                :type="warning.type || 'warning'"
+              >
+                {{ warning.label }}
+              </el-tag>
+            </div>
+
+            <div class="transition-editor-section">
+              <div class="section-title compact">达成活动</div>
+              <div v-if="selectedTransitionRealizers.length" class="transition-list">
+                <el-tag
+                  v-for="item in selectedTransitionRealizers"
+                  :key="item.activityId"
+                  size="small"
+                  type="success"
+                  effect="plain"
+                >
+                  {{ item.activity ? nodeLabel(item.activity) : item.activityId }}
+                </el-tag>
+              </div>
+              <div class="transition-inline-form">
+                <el-select
+                  v-model="transitionRealizerActivityId"
+                  filterable
+                  clearable
+                  style="width: 100%"
+                  placeholder="选择已有原子活动作为达成活动"
+                  data-testid="network-editor-transition-realizer-select"
+                >
+                  <el-option
+                    v-for="item in transitionRealizerOptions"
+                    :key="item.id"
+                    :label="nodeLabel(item)"
+                    :value="item.id"
+                  />
+                </el-select>
+                <el-button
+                  type="primary"
+                  :disabled="!canAddTransitionRealizer"
+                  data-testid="network-editor-transition-add-realizer"
+                  @click="addTransitionRealizer"
+                >
+                  绑定达成活动
+                </el-button>
+                <el-button
+                  :disabled="!canMutate || !selectedStateId"
+                  data-testid="network-editor-transition-create-realizer"
+                  @click="openCreateTransitionRealizer"
+                >
+                  新建达成活动
+                </el-button>
+              </div>
+            </div>
+
+            <div class="transition-editor-section">
+              <div class="section-title compact">前置状态</div>
+              <div v-if="selectedTransitionPreconditions.length" class="transition-list">
+                <span
+                  v-for="item in selectedTransitionPreconditions"
+                  :key="`${item.activityId}-${item.stateNodeId}-${item.edge?.id || ''}`"
+                  class="transition-precondition-item"
+                  :data-testid="`network-editor-transition-precondition-${item.stateNodeId}`"
+                >
+                  <el-tag size="small" effect="plain">
+                    {{ nodeLabel(item.state) }}
+                  </el-tag>
+                  <el-button
+                    v-if="canMutate"
+                    link
+                    type="danger"
+                    size="small"
+                    :data-testid="`network-editor-transition-remove-precondition-${item.stateNodeId}`"
+                    @click="removeTransitionPrecondition(item)"
+                  >
+                    移除
+                  </el-button>
+                </span>
+              </div>
+              <el-empty v-else description="暂无前置状态" :image-size="40" />
+              <div class="transition-inline-form">
+                <el-select
+                  v-model="transitionPreconditionStateId"
+                  filterable
+                  clearable
+                  style="width: 100%"
+                  placeholder="选择任意层级状态作为前置"
+                  data-testid="network-editor-transition-precondition-select"
+                >
+                  <el-option
+                    v-for="item in stateSelectOptions"
+                    :key="item.id"
+                    :label="nodeLabel(item)"
+                    :value="item.id"
+                  />
+                </el-select>
+                <el-button
+                  type="primary"
+                  :disabled="!canAddTransitionPrecondition"
+                  data-testid="network-editor-transition-add-precondition"
+                  @click="addTransitionPrecondition"
+                >
+                  添加前置
+                </el-button>
+              </div>
+              <span v-if="selectedTransitionRealizers.length > 1" class="form-hint">
+                当前目标有多个达成活动，请先整理为唯一达成活动后再添加前置。
+              </span>
+            </div>
+          </div>
+
           <div class="detail-block" v-loading="impactLoading">
             <div class="section-title">影响分析</div>
             <div class="impact-grid">
@@ -951,7 +1132,7 @@
             <div v-if="impactStateCoverage" class="impact-coverage">
               <div class="impact-grid">
                 <div>
-                  <span>叶子状态</span>
+                  <span>原子状态</span>
                   <strong>{{ impactStateCoverage.leaf_state_count || 0 }}</strong>
                 </div>
                 <div>
@@ -1014,7 +1195,7 @@
             <div class="section-title">创建绑定</div>
             <el-form label-width="78px" @submit.prevent>
               <el-form-item label="角色">
-                <el-select v-model="bindingForm.binding_role" style="width: 100%">
+                <el-select v-model="bindingForm.binding_role" data-testid="network-editor-binding-role" style="width: 100%">
                   <el-option
                     v-for="item in roleOptions"
                     :key="item.value"
@@ -1024,7 +1205,7 @@
                 </el-select>
               </el-form-item>
               <el-form-item label="状态">
-                <el-select v-model="bindingForm.state_node_id" filterable style="width: 100%">
+                <el-select v-model="bindingForm.state_node_id" data-testid="network-editor-binding-state" filterable style="width: 100%">
                   <el-option
                     v-for="item in stateSelectOptions"
                     :key="item.id"
@@ -1034,7 +1215,7 @@
                 </el-select>
               </el-form-item>
               <el-form-item label="活动">
-                <el-select v-model="bindingForm.activity_graph_id" filterable style="width: 100%" @change="onBindingActivityChange">
+                <el-select v-model="bindingForm.activity_graph_id" data-testid="network-editor-binding-activity" filterable style="width: 100%" @change="onBindingActivityChange">
                   <el-option
                     v-for="item in activitySelectOptions"
                     :key="item.id"
@@ -1072,7 +1253,7 @@
                     collapse-tags
                     collapse-tags-tooltip
                     style="width: 100%"
-                    placeholder="选择覆盖的叶子状态"
+                    placeholder="选择覆盖的原子状态"
                   >
                     <el-option
                       v-for="item in bindingFormLeafStateOptions"
@@ -1141,7 +1322,7 @@
                 </div>
               </div>
               <div v-if="selectedCoverage.missingLeaves.length" class="coverage-list">
-                <span>缺失叶子状态</span>
+                <span>缺失原子状态</span>
                 <el-tag
                   v-for="leaf in selectedCoverage.missingLeaves"
                   :key="leaf.id"
@@ -1163,7 +1344,7 @@
                 </el-tag>
               </div>
               <div v-if="selectedCoverage.coveredLeaves.length" class="coverage-list compact">
-                <span>覆盖叶子</span>
+                <span>覆盖原子状态</span>
                 <el-tag
                   v-for="leaf in selectedCoverage.coveredLeaves.slice(0, 8)"
                   :key="leaf.id"
@@ -1182,10 +1363,52 @@
               <el-button type="danger" :disabled="!canMutate || !selectedBinding" data-testid="network-editor-remove-binding" @click="removeBinding">删除绑定</el-button>
             </div>
           </div>
+          </template>
+          <div
+            v-if="!propertiesPaneCollapsed"
+            class="pane-resize-handle properties-resize-handle"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize properties pane"
+            data-testid="network-editor-properties-pane-resize"
+            @pointerdown="startPaneResize('properties', $event)"
+          />
           </section>
         </div>
 
-        <section class="validation-pane" data-testid="network-editor-validation-pane">
+        <div class="validation-status-strip" :class="solverReadinessClass" data-testid="network-editor-validation-status">
+          <div class="validation-status-main">
+            <strong>{{ solverReadinessTitle }}</strong>
+            <span>{{ solverReadinessDetail }}</span>
+          </div>
+          <div class="validation-status-chips">
+            <el-tag size="small" type="info">建模 {{ validationResult?.modeling_issues?.length || 0 }}</el-tag>
+            <el-tag size="small" :type="(validationResult?.summary?.blocking_count || 0) ? 'danger' : 'success'">
+              阻塞 {{ validationResult?.summary?.blocking_count || 0 }}
+            </el-tag>
+            <el-tag size="small" :type="solverPrecheck?.status === 'ready' ? 'success' : 'warning'">
+              预检 {{ networkEditorStatusLabel(solverPrecheck?.status || 'none') }}
+            </el-tag>
+          </div>
+          <div class="validation-status-actions">
+            <el-button size="small" :type="solverReadinessButtonType" :disabled="!machineTypeId" data-testid="network-editor-validate" @click="runValidation">
+              校验
+            </el-button>
+            <el-button size="small" :disabled="!machineTypeId" data-testid="network-editor-solver-precheck" @click="runSolverPrecheck">
+              求解预检
+            </el-button>
+            <el-button
+              size="small"
+              text
+              data-testid="network-editor-validation-toggle"
+              @click="toggleValidationPanel"
+            >
+              {{ validationPanelExpanded ? '收起详情' : '展开详情' }}
+            </el-button>
+          </div>
+        </div>
+
+        <section v-if="validationPanelExpanded" class="validation-pane" data-testid="network-editor-validation-pane">
         <div class="issue-column">
           <div class="pane-header">
             <span>建模校验</span>
@@ -1374,7 +1597,7 @@
             </div>
           </div>
           <el-table :data="solverPrecheck?.executable_activities || []" size="small" border max-height="220">
-            <el-table-column prop="atomic_activity_code" label="可执行活动" width="140" />
+            <el-table-column prop="atomic_activity_code" label="原子活动" width="140" />
             <el-table-column prop="op_rule_code" label="规则" width="120" />
             <el-table-column label="继承/自身/输出" show-overflow-tooltip>
               <template #default="{ row }">
@@ -1447,7 +1670,17 @@
           <el-input v-model="stateForm.code" placeholder="留空自动生成" maxlength="64" />
         </el-form-item>
         <el-form-item label="名称">
-          <el-input v-model="stateForm.name" maxlength="128" />
+          <el-autocomplete
+            v-model="stateForm.name"
+            :fetch-suggestions="queryAtomicStateNameSuggestions"
+            value-key="name"
+            placeholder="搜索或输入状态名称"
+            :trigger-on-focus="true"
+            clearable
+            maxlength="128"
+            style="width: 100%"
+            @select="onAtomicStateNameSuggestionSelect"
+          />
         </el-form-item>
         <el-form-item label="类型">
           <el-segmented
@@ -1461,20 +1694,62 @@
             @change="onStateKindChange"
           />
         </el-form-item>
+        <el-form-item v-if="stateForm.state_kind !== 'aggregate'" label="状态对象" required>
+          <el-input
+            v-model="stateForm.state_object_name"
+            data-testid="network-editor-state-object-name"
+            placeholder="例如 模块B / 工装B / 管路"
+            maxlength="128"
+          />
+        </el-form-item>
         <el-form-item label="所在状态包">
-          <el-select v-model="stateForm.parent_id" clearable filterable style="width: 100%" @change="onStateParentChange">
+          <el-select
+            v-model="stateForm.parent_id"
+            clearable
+            filterable
+            style="width: 100%"
+            data-testid="network-editor-state-parent-select"
+            @change="onStateParentChange"
+          >
             <el-option v-for="item in stateParentOptions" :key="item.id" :label="nodeLabel(item)" :value="item.id" />
           </el-select>
         </el-form-item>
+        <el-form-item v-if="!stateEditId" label="引用已有">
+          <div class="inline-reference-row">
+            <el-select
+              v-model="stateForm.reference_state_node_id"
+              clearable
+              filterable
+              style="width: 100%"
+              placeholder="选择已有状态"
+              data-testid="network-editor-state-reference-select"
+            >
+              <el-option
+                v-for="item in stateReferenceOptions"
+                :key="item.id"
+                :label="nodeLabel(item)"
+                :value="item.id"
+              />
+            </el-select>
+            <el-button
+              :icon="Link"
+              :disabled="!canCreateStateReferenceFromDrawer"
+              data-testid="network-editor-state-reference-add"
+              @click="createStateReferenceFromDrawer"
+            >
+              引用到状态包
+            </el-button>
+          </div>
+        </el-form-item>
         <el-form-item v-if="stateForm.state_kind !== 'aggregate'" label="状态维度" required>
           <el-select
-            v-model="stateForm.feature_key"
+            v-model="stateForm.dimension_template_key"
             data-testid="network-editor-state-feature"
             placeholder="选择状态维度"
             filterable
             clearable
             style="width: 100%"
-            @change="onStateFeatureChange"
+            @change="onStateDimensionTemplateChange"
           >
             <el-option
               v-for="item in stateFeatureOptions"
@@ -1486,12 +1761,12 @@
         </el-form-item>
         <el-form-item v-if="stateForm.state_kind !== 'aggregate'" label="目标值" required>
           <el-select
-            v-if="stateTargetOptions.length"
             v-model="stateForm.target_value"
             data-testid="network-editor-state-target-value"
             placeholder="选择目标值"
             filterable
             clearable
+            :disabled="!stateTargetOptions.length"
             style="width: 100%"
           >
             <el-option
@@ -1502,7 +1777,7 @@
             />
           </el-select>
           <el-input
-            v-else
+            v-if="false"
             v-model="stateForm.target_value"
             data-testid="network-editor-state-target-value"
             placeholder="该维度未配置可选值，可临时填写"
@@ -1531,7 +1806,7 @@
     >
       <div class="duplicate-state-dialog">
         <p>
-          系统发现当前设备类型下已有相同或相似状态。推荐复用已有状态，并把它作为引用实例加入当前状态包。
+          系统发现当前设备类型下已有名称相似的状态。请确认继续新建，或改用状态包成员引用已有状态。
         </p>
         <el-radio-group v-model="duplicateStateSelectedId" class="duplicate-state-list">
           <el-radio
@@ -1820,34 +2095,6 @@
         <el-form-item label="启用">
           <el-switch v-model="activityForm.is_active" />
         </el-form-item>
-        <template v-if="!activityEditId">
-          <el-form-item label="上下文输入">
-            <el-select
-              v-model="activityForm.context_state_ids"
-              multiple
-              filterable
-              collapse-tags
-              collapse-tags-tooltip
-              style="width: 100%"
-              placeholder="创建后自动绑定为上下文输入"
-            >
-              <el-option v-for="item in stateSelectOptions" :key="item.id" :label="nodeLabel(item)" :value="item.id" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="声明输出">
-            <el-select
-              v-model="activityForm.output_state_ids"
-              multiple
-              filterable
-              collapse-tags
-              collapse-tags-tooltip
-              style="width: 100%"
-              placeholder="创建后自动绑定为声明输出"
-            >
-              <el-option v-for="item in stateSelectOptions" :key="item.id" :label="nodeLabel(item)" :value="item.id" />
-            </el-select>
-          </el-form-item>
-        </template>
       </el-form>
       <template #footer>
         <el-button data-testid="network-editor-activity-drawer-cancel" @click="activityDrawerVisible = false">取消</el-button>
@@ -1879,9 +2126,43 @@
           />
         </el-form-item>
         <el-form-item label="所属活动包">
-          <el-select v-model="atomicForm.package_id" clearable filterable style="width: 100%" :disabled="!!atomicEditId">
+          <el-select
+            v-model="atomicForm.package_id"
+            clearable
+            filterable
+            style="width: 100%"
+            :disabled="!!atomicEditId"
+            data-testid="network-editor-atomic-package-select"
+          >
             <el-option v-for="item in level2ActivityPackages" :key="item.id" :label="nodeLabel(item)" :value="item.id" />
           </el-select>
+        </el-form-item>
+        <el-form-item v-if="!atomicEditId" label="引用已有">
+          <div class="inline-reference-row">
+            <el-select
+              v-model="atomicForm.reference_atomic_activity_id"
+              clearable
+              filterable
+              style="width: 100%"
+              placeholder="选择已有原子活动"
+              data-testid="network-editor-atomic-reference-select"
+            >
+              <el-option
+                v-for="item in atomicActivityReferenceOptions"
+                :key="item.id"
+                :label="nodeLabel(item)"
+                :value="item.id"
+              />
+            </el-select>
+            <el-button
+              :icon="Link"
+              :disabled="!canCreateAtomicReference"
+              data-testid="network-editor-atomic-reference-add"
+              @click="createAtomicActivityReferenceFromForm"
+            >
+              引用到活动包
+            </el-button>
+          </div>
         </el-form-item>
         <el-form-item label="类型">
           <el-select v-model="atomicForm.activity_category" style="width: 100%">
@@ -1953,7 +2234,7 @@
                   collapse-tags
                   collapse-tags-tooltip
                   style="width: 100%"
-                  placeholder="选择产出的叶子状态"
+                  placeholder="选择产出的原子状态"
                 >
                   <el-option
                     v-for="leaf in row.leafOptions"
@@ -1987,9 +2268,9 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Check, Close, EditPen, Link, Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Check, Close, EditPen, Link, MoreFilled, Plus } from '@element-plus/icons-vue'
 import {
   analyzeNetworkEditorImpact,
   commitNetworkEditorDraft,
@@ -2007,6 +2288,7 @@ import {
   validateNetworkEditor,
 } from '../../api/masterData'
 import { buildHierarchyTree } from '../../utils/hierarchyTree'
+import { layoutNestedContainerGraph } from './networkEditorAutoLayout'
 import NetworkEditorX6Canvas from './components/NetworkEditorX6Canvas.vue'
 
 const emit = defineEmits(['open-workspace'])
@@ -2016,11 +2298,18 @@ const MACHINE_TYPE_RECENT_LIMIT = 5
 const DRAFT_STATE_ID_PREFIX = 'draft-state:'
 const DRAFT_ACTIVITY_ID_PREFIX = 'draft-activity:'
 const DRAFT_ATOMIC_ACTIVITY_ID_PREFIX = 'draft-atomic-activity:'
+const RESOURCE_PANE_DEFAULT_WIDTH = 260
+const RESOURCE_PANE_MIN_WIDTH = 200
+const RESOURCE_PANE_MAX_WIDTH = 460
+const PROPERTIES_PANE_DEFAULT_WIDTH = 320
+const PROPERTIES_PANE_MIN_WIDTH = 240
+const PROPERTIES_PANE_MAX_WIDTH = 560
 
 const machineTypes = ref([])
 const machineTypeId = ref(null)
 const recentMachineTypeIds = ref(readRecentMachineTypeIds())
 const viewMode = ref('implementation')
+const fullGraphDebugEnabled = ref(readNetworkEditorFullGraphDebugFlag())
 const includeInactive = ref(false)
 const loading = ref(false)
 const keyword = ref('')
@@ -2046,7 +2335,12 @@ const selectedStateId = ref(null)
 const selectedActivityGraphId = ref(null)
 const selectedBinding = ref(null)
 const selectionFocus = ref('')
+const hoveredFlowGraphId = ref(null)
 const contextMenu = ref(null)
+const blankCanvasMenu = ref(null)
+const resourcePaneCollapsed = ref(false)
+const propertiesPaneCollapsed = ref(false)
+const validationPanelExpanded = ref(false)
 const collapsedStateContainerKeys = ref(new Set())
 const collapsedActivityContainerKeys = ref(new Set())
 const multiSelectedStateIds = ref([])
@@ -2056,17 +2350,32 @@ const canvasDrag = ref(null)
 const dragOverTarget = ref(null)
 const layoutDrag = ref(null)
 const layoutDraft = ref({})
+const submittedLayoutOverlay = ref({ layout: {}, container: {} })
+const stateTransitionAutoLayout = ref(null)
+const relationAutoLayout = ref(null)
+const x6ViewportResetToken = ref(0)
 const containerMove = ref(null)
 const containerResize = ref(null)
 const containerDraft = ref({})
+const paneResize = ref(null)
+const resourcePaneWidth = ref(RESOURCE_PANE_DEFAULT_WIDTH)
+const propertiesPaneWidth = ref(PROPERTIES_PANE_DEFAULT_WIDTH)
+const editorGridStyle = computed(() => ({
+  '--resource-pane-width': `${resourcePaneWidth.value}px`,
+  '--properties-pane-width': `${propertiesPaneWidth.value}px`,
+}))
 const editorMode = ref('preview')
 const draftChanges = ref([])
 const pendingBindingPreview = ref(null)
 const draftSubmitting = ref(false)
 const draftSequence = ref(0)
+const draftBatchSequence = ref(0)
+let activeDraftBatch = null
 const editBaselineRevision = ref(null)
 const referenceForm = ref({ state_node_id: null, parent_state_node_id: null })
 const bindingForm = ref(defaultBindingForm())
+const transitionRealizerActivityId = ref(null)
+const transitionPreconditionStateId = ref(null)
 const stateDrawerVisible = ref(false)
 const activityDrawerVisible = ref(false)
 const atomicDrawerVisible = ref(false)
@@ -2075,6 +2384,8 @@ const duplicateStateCandidates = ref([])
 const duplicateStateSelectedId = ref(null)
 const pendingStatePayload = ref(null)
 const pendingStateLayout = ref(null)
+const pendingActivityLayout = ref(null)
+const pendingAtomicActivityLayout = ref(null)
 const batchBindingDialogVisible = ref(false)
 const batchBindingForm = ref({ input_state_ids: [], output_state_ids: [], op_rule_id: null })
 const packageChangeDialogVisible = ref(false)
@@ -2099,6 +2410,15 @@ const canvasZoomMax = 1.6
 const canvasZoomStep = 0.1
 const canvasZoom = ref(1)
 const nodeWidth = 220
+const transitionLayoutBaseX = 72
+const transitionLayoutBaseY = 70
+const transitionLayoutColumnGap = 248
+const transitionLayoutRowGap = 86
+const transitionLayoutRelayXOffset = 16
+const transitionLayoutRelayYOffset = 8
+const transitionLayoutRanksPerLane = 6
+const transitionLayoutMinLaneHeight = 242
+const transitionLayoutLaneGap = 96
 const rowHeight = 76
 const topPadding = 34
 const defaultStateX = 28
@@ -2117,6 +2437,21 @@ const ruleMaintenanceIssueCodes = new Set([
   'EXECUTABLE_RULE_AMBIGUOUS',
   'EXECUTABLE_RULE_BINDING_INVALID',
   'EXECUTABLE_RULE_NOT_EXPLICIT',
+])
+const activityFirstIssueCodes = new Set([
+  'ACTIVITY_MISSING_INPUT',
+  'ACTIVITY_MISSING_OUTPUT',
+  'ACTIVITY_SOLVER_PARTICIPATION_MISMATCH',
+  'ACTIVITY_WITHOUT_RULE',
+  'ATOMIC_ACTIVITY_WITHOUT_RULE',
+  'EXECUTABLE_MISSING_INPUT',
+  'EXECUTABLE_MISSING_OUTPUT',
+  'EXECUTABLE_MISSING_RULE',
+  'EXECUTABLE_RULE_AMBIGUOUS',
+  'EXECUTABLE_RULE_BINDING_INVALID',
+  'EXECUTABLE_RULE_NOT_EXPLICIT',
+  'ORPHAN_ACTIVITY',
+  'VIRTUAL_ACTIVITY_NOT_DECOMPOSED',
 ])
 
 const issueSeverityLabels = {
@@ -2167,14 +2502,13 @@ const issueCodeLabels = {
   STATE_AGGREGATION_CYCLE: '状态包聚合成环',
   STATE_PACKAGE_COVERAGE_LARGE: '状态包覆盖过宽',
   STATE_REFERENCE_CYCLE: '状态包引用成环',
-  TARGET_STATE_HAS_NO_LEAF: '目标状态没有叶子',
+  TARGET_STATE_HAS_NO_LEAF: '目标状态没有原子状态',
   VIRTUAL_ACTIVITY_NOT_DECOMPOSED: '虚拟活动未分解',
-  VIRTUAL_OUTPUT_NOT_IMPLEMENTED: '虚拟输出未实现',
 }
 const issueMessageLabels = {
   ACTIVITY_CONTAINER_CYCLE: '活动容器层级中存在循环引用。',
-  ACTIVITY_MISSING_INPUT: '活动已有产出状态，但还没有前置或上下文输入。',
-  ACTIVITY_MISSING_OUTPUT: '活动已有输入状态，但还没有产出或声明输出。',
+  ACTIVITY_MISSING_INPUT: '活动已有产出状态，但还没有前置输入。',
+  ACTIVITY_MISSING_OUTPUT: '活动已有输入状态，但还没有产出状态。',
   ACTIVITY_PACKAGE_WITHOUT_ATOMIC_REF: '选中的活动包下没有启用的原子活动引用。',
   ACTIVITY_SOLVER_PARTICIPATION_MISMATCH: '活动类型和求解参与标记不一致。',
   ACTIVITY_SCOPE_HAS_NO_LEAF: '选中的活动范围下没有启用的可执行原子活动。',
@@ -2195,7 +2529,7 @@ const issueMessageLabels = {
   EXECUTABLE_RULE_BINDING_INVALID: '绑定引用了停用或不属于该原子活动的规则。',
   EXECUTABLE_RULE_NOT_EXPLICIT: '原子活动存在多条启用规则，但绑定没有明确使用哪一条。',
   GRAPH_DEPENDENCY_CYCLE: '状态与活动之间存在循环依赖，求解器无法判断执行顺序。',
-  MULTIPLE_OUTPUT_PROVIDERS: '同一状态被多个可执行活动产出。',
+  MULTIPLE_OUTPUT_PROVIDERS: '同一状态被多个原子活动产出。',
   MULTI_PARENT_STATE_NOTICE: '同一状态被多个状态包引用显示。',
   NO_PROVIDER: '目标或前置状态缺少可达的提供者活动。',
   ORPHAN_ACTIVITY: '该活动当前没有连接到任何状态。',
@@ -2207,16 +2541,15 @@ const issueMessageLabels = {
   SELECTED_STATE_INACTIVE: '选中的目标状态已停用，默认求解预检会跳过它。',
   SCOPE_GUARD_WITHOUT_PRECONDITION: '活动范围约束没有配置前置条件。',
   STATE_AGGREGATION_CYCLE: '状态包聚合关系存在循环。',
-  STATE_PACKAGE_COVERAGE_LARGE: '该状态包绑定覆盖的叶子状态较多。',
+  STATE_PACKAGE_COVERAGE_LARGE: '该状态包绑定覆盖的原子状态较多。',
   STATE_REFERENCE_CYCLE: '状态包成员引用关系存在循环。',
-  TARGET_STATE_HAS_NO_LEAF: '目标状态下没有启用的原子叶子状态，不能展开为求解目标。',
+  TARGET_STATE_HAS_NO_LEAF: '目标状态下没有启用的原子状态，不能展开为求解目标。',
   VIRTUAL_ACTIVITY_NOT_DECOMPOSED: '虚拟活动下没有可执行原子活动。',
-  VIRTUAL_OUTPUT_NOT_IMPLEMENTED: '虚拟活动声明的输出没有被内部原子活动完整实现。',
 }
 const issueSuggestedActionLabels = {
   ACTIVITY_CONTAINER_CYCLE: '移除或改向其中一个活动归属关系，打断循环。',
-  ACTIVITY_MISSING_INPUT: '从状态右端口拖到活动左端口，添加输入或上下文输入。',
-  ACTIVITY_MISSING_OUTPUT: '从活动右端口拖到状态左端口，添加产出或声明输出。',
+  ACTIVITY_MISSING_INPUT: '为原子活动添加至少一个输入状态绑定。',
+  ACTIVITY_MISSING_OUTPUT: '为原子活动添加至少一个产出状态绑定。',
   ACTIVITY_PACKAGE_WITHOUT_ATOMIC_REF: '在该活动包下添加原子活动引用，或调整活动范围。',
   ACTIVITY_SOLVER_PARTICIPATION_MISMATCH: '修正活动类型或求解参与标记；通常虚拟活动仅展示，原子活动参与求解。',
   ACTIVITY_SCOPE_HAS_NO_LEAF: '展开该活动范围，补充下级活动包和原子活动，或改选更具体的范围。',
@@ -2243,17 +2576,16 @@ const issueSuggestedActionLabels = {
   ORPHAN_ACTIVITY: '为该活动添加输入和输出状态，或删除未使用活动。',
   ORPHAN_STATE: '把该状态连到一个活动，或确认它只是暂存/候选状态。',
   OUTPUT_STATE_UNUSED: '把该状态作为下游活动输入，或确认它是终点/目标状态。',
-  LEAF_STATE_WITHOUT_FEATURE: '在状态抽屉中补齐 feature_key 和目标值，或不要把该状态作为目标叶子。',
+  LEAF_STATE_WITHOUT_FEATURE: '在状态抽屉中补齐 feature_key 和目标值，或不要把该状态作为目标原子状态。',
   SELF_DEPENDENCY: '拆分状态或调整活动输入/输出，避免活动依赖自身产出。',
   SELECTED_ACTIVITY_INACTIVE: '启用该活动范围，或重新选择一个启用的活动范围。',
   SELECTED_STATE_INACTIVE: '启用该目标状态，或重新选择一个启用的目标状态。',
   SCOPE_GUARD_WITHOUT_PRECONDITION: '补充范围约束的前置条件，或删除无效约束。',
   STATE_AGGREGATION_CYCLE: '移除或改向其中一个状态包成员关系，打断循环。',
-  STATE_PACKAGE_COVERAGE_LARGE: '确认覆盖范围是否过宽；必要时改成更小状态包或部分叶子覆盖。',
+  STATE_PACKAGE_COVERAGE_LARGE: '确认覆盖范围是否过宽；必要时改成更小状态包或部分原子状态覆盖。',
   STATE_REFERENCE_CYCLE: '移除指回自身后代的状态包成员引用。',
   TARGET_STATE_HAS_NO_LEAF: '为该状态包补充启用的原子状态，或直接选择可求解的原子状态作为目标。',
   VIRTUAL_ACTIVITY_NOT_DECOMPOSED: '在虚拟活动容器内新增下级活动包或原子活动。',
-  VIRTUAL_OUTPUT_NOT_IMPLEMENTED: '在虚拟活动内部新增原子活动产出缺失叶子状态，或调整声明输出。',
 }
 const coverageStatusLabels = {
   complete: '完整',
@@ -2282,17 +2614,56 @@ const canMutate = computed(() => !!machineTypeId.value && isEditMode.value && !d
 const editorModeLabel = computed(() => (isEditMode.value ? '编辑模式' : '预览模式'))
 const draftChangeCount = computed(() => draftChanges.value.length)
 const hasDraftChanges = computed(() => draftChangeCount.value > 0)
+const draftDisplayChanges = computed(() => {
+  const rows = []
+  const batchRows = new Map()
+  for (const change of draftChanges.value) {
+    if (change?.draft_kind === 'layout' && change.draft_batch_id) {
+      let batchRow = batchRows.get(change.draft_batch_id)
+      if (!batchRow) {
+        batchRow = {
+          client_id: change.draft_batch_id,
+          client_ids: [],
+          changes: [],
+          entity_type: 'network_editor_layout',
+          operation: 'update',
+          label: change.draft_batch_label || '布局调整',
+        }
+        batchRows.set(change.draft_batch_id, batchRow)
+        rows.push(batchRow)
+      }
+      batchRow.client_ids.push(change.client_id)
+      batchRow.changes.push(change)
+      continue
+    }
+    rows.push({
+      ...change,
+      client_ids: [change.client_id],
+    })
+  }
+  for (const row of batchRows.values()) {
+    if (row.changes.length === 1) {
+      row.label = row.changes[0].label || row.label
+    } else if (row.label === '布局调整' && row.changes[0]?.label) {
+      row.label = `${row.changes[0].label} 等 ${row.changes.length} 项`
+    } else {
+      row.label = `${row.label}：${row.changes.length} 项`
+    }
+    delete row.changes
+  }
+  return rows
+})
 const machineTypeById = computed(() => new Map(machineTypes.value.map((item) => [String(item.id), item])))
 const stateFeatureDefByKey = computed(() =>
   new Map(stateFeatureDefs.value.map((item) => [item.feature_key, item])),
 )
 const stateFeatureOptions = computed(() =>
   stateFeatureDefs.value
-    .filter((item) => item?.feature_key && !String(item.feature_key).includes('__'))
+    .filter(isDimensionTemplateFeatureDef)
     .sort((a, b) => String(a.feature_name || a.feature_key).localeCompare(String(b.feature_name || b.feature_key))),
 )
 const selectedStateFeatureDef = computed(() =>
-  stateFeatureDefByKey.value.get(stateForm.value.feature_key) || null,
+  stateFeatureDefByKey.value.get(stateForm.value.dimension_template_key) || null,
 )
 const stateTargetOptions = computed(() =>
   normalizeAllowedValues(selectedStateFeatureDef.value?.allowed_values),
@@ -2317,6 +2688,13 @@ const contextMenuStyle = computed(() => {
   return {
     left: `${contextMenu.value.x}px`,
     top: `${contextMenu.value.y}px`,
+  }
+})
+const blankCanvasMenuStyle = computed(() => {
+  if (!blankCanvasMenu.value) return {}
+  return {
+    left: `${blankCanvasMenu.value.menuX}px`,
+    top: `${blankCanvasMenu.value.menuY}px`,
   }
 })
 const contextMenuTitle = computed(() => {
@@ -2345,16 +2723,46 @@ const canCreateActivityFromStateSelection = computed(() =>
 )
 const graphSummary = computed(() => graph.value?.summary || {})
 const validationSummary = computed(() => graph.value?.validation_summary || validationResult.value?.summary || {})
-const baseVisibleStateNodes = computed(() => graph.value?.state_nodes || [])
+const summaryOverflowMetrics = computed(() => [
+  { label: '虚拟活动', value: graphSummary.value.virtual_activity_count || 0 },
+  { label: '原子活动', value: graphSummary.value.executable_activity_count || 0 },
+  { label: '状态深度', value: graphSummary.value.max_state_depth || 0 },
+  { label: '活动深度', value: graphSummary.value.max_activity_depth || 0 },
+  { label: '依赖链', value: graphSummary.value.longest_dependency_chain_depth || 0 },
+  { label: '跨层级', value: graphSummary.value.cross_level_binding_count || 0 },
+  { label: '孤立节点', value: (graphSummary.value.orphan_state_count || 0) + (graphSummary.value.orphan_activity_count || 0) },
+])
+const deletedStateRootIdSet = computed(() => draftDeletedEntityIdSet('state_node'))
+const deletedStateIdSet = computed(() =>
+  hierarchyDeletedIdSet(stateNodes.value, deletedStateRootIdSet.value),
+)
+const deletedActivityRootIdSet = computed(() => draftDeletedEntityIdSet('activity_node'))
+const deletedActivityNodeIdSet = computed(() =>
+  hierarchyDeletedIdSet(activityNodes.value, deletedActivityRootIdSet.value),
+)
+const deletedAtomicActivityIdSet = computed(() => draftDeletedEntityIdSet('atomic_activity'))
+const activeAtomicActivities = computed(() =>
+  atomicActivities.value.filter((item) => !deletedAtomicActivityIdSet.value.has(String(item.id))),
+)
+const baseVisibleStateNodes = computed(() =>
+  (graph.value?.state_nodes || []).filter((node) => !stateGraphNodeDeleted(node)),
+)
 const draftStateGraphNodes = computed(() => {
   const nodes = []
   const graphByStateId = new Map(baseVisibleStateNodes.value.map((node) => [node.state_node_id, node]))
   for (const change of draftChanges.value) {
-    if (change.entity_type !== 'state_node' || change.operation !== 'create') continue
-    const node = draftStateGraphNode(change, graphByStateId)
+    if (change.operation !== 'create') continue
+    let node = null
+    if (change.entity_type === 'state_node') {
+      node = draftStateGraphNode(change, graphByStateId)
+    } else if (change.entity_type === 'state_node_reference') {
+      node = draftStateReferenceGraphNode(change, graphByStateId)
+    }
     if (!node) continue
     nodes.push(node)
-    graphByStateId.set(node.state_node_id, node)
+    if (change.entity_type === 'state_node') {
+      graphByStateId.set(node.state_node_id, node)
+    }
   }
   return nodes
 })
@@ -2362,7 +2770,9 @@ const visibleStateNodes = computed(() => [
   ...baseVisibleStateNodes.value,
   ...draftStateGraphNodes.value,
 ])
-const baseVisibleActivityNodes = computed(() => graph.value?.activity_nodes || [])
+const baseVisibleActivityNodes = computed(() =>
+  (graph.value?.activity_nodes || []).filter((node) => !activityGraphNodeDeleted(node)),
+)
 const draftActivityGraphNodes = computed(() => {
   const nodes = []
   const graphByActivityId = new Map(baseVisibleActivityNodes.value.map((node) => [node.activity_node_id, node]))
@@ -2379,23 +2789,39 @@ const draftActivityGraphNodes = computed(() => {
     if (!node) continue
     nodes.push(node)
   }
+  for (const change of draftChanges.value) {
+    if (change.entity_type !== 'activity_package_atomic_ref' || change.operation !== 'create') continue
+    const node = draftActivityPackageAtomicRefGraphNode(change, graphByActivityId)
+    if (!node) continue
+    nodes.push(node)
+  }
   return nodes
 })
 const visibleActivityNodes = computed(() => [
   ...baseVisibleActivityNodes.value,
   ...draftActivityGraphNodes.value,
 ])
-const x6VisibleStateNodes = computed(() =>
-  visibleStateNodes.value
-    .filter(isStateVisibleInX6)
-    .map(nodeWithDraftLayout),
+const allAtomicActivityGraphNodes = computed(() =>
+  atomicActivityReferenceOptions.value
+    .map(atomicActivityOptionGraphNode)
+    .filter(Boolean),
 )
-const x6VisibleActivityNodes = computed(() =>
-  visibleActivityNodes.value
-    .filter(isActivityVisibleInX6)
-    .map(nodeWithDraftLayout),
+const deletedBindingIdSet = computed(() => new Set(
+  draftChanges.value
+    .filter((change) =>
+      change.entity_type === 'activity_state_binding' &&
+      change.operation === 'delete' &&
+      change.entity_id,
+    )
+    .map((change) => Number(change.entity_id))
+    .filter(Number.isFinite),
+))
+const baseVisibleEdges = computed(() =>
+  (graph.value?.edges || []).filter((edge) =>
+    (!edge.binding_id || !deletedBindingIdSet.value.has(Number(edge.binding_id))) &&
+    !edgeEndpointDeleted(edge),
+  ),
 )
-const baseVisibleEdges = computed(() => graph.value?.edges || [])
 const draftBindingEdges = computed(() => {
   const edges = draftChanges.value
     .map((change, index) => draftBindingEdge(change, index))
@@ -2410,11 +2836,316 @@ const visibleEdges = computed(() => [
   ...baseVisibleEdges.value,
   ...draftBindingEdges.value,
 ])
+const stateTransitionEdges = computed(() => {
+  if (!isStateTransitionView.value) return visibleEdges.value
+  const edges = [...visibleEdges.value]
+  const seen = new Set(edges.map((edge) => edge.id))
+  for (const binding of bindings.value) {
+    if (!binding?.id || deletedBindingIdSet.value.has(Number(binding.id))) continue
+    const edge = bindingPayloadEdge(binding, {
+      idPrefix: `binding:${binding.id}`,
+      sourceKind: 'activity_state_binding',
+    })
+    if (!edge || seen.has(edge.id)) continue
+    edges.push({ ...edge, binding_id: binding.id, coverage_status: binding.coverage_status || edge.coverage_status })
+    seen.add(edge.id)
+  }
+  return edges
+})
+const stateTransitionBackboneEdges = computed(() => buildStateTransitionBackboneEdges())
+
+function uniqueEdgesById(edges) {
+  const seen = new Set()
+  const result = []
+  for (const edge of edges || []) {
+    const id = String(edge?.id || '')
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    result.push(edge)
+  }
+  return result
+}
+
+function draftDeletedEntityIdSet(entityType) {
+  return new Set(
+    draftChanges.value
+      .filter((change) =>
+        change.entity_type === entityType &&
+        change.operation === 'delete' &&
+        change.entity_id !== null &&
+        change.entity_id !== undefined,
+      )
+      .map((change) => String(change.entity_id)),
+  )
+}
+
+function hierarchyDeletedIdSet(nodes, rootIds) {
+  const deleted = new Set(Array.from(rootIds || []).map((id) => String(id)))
+  if (!deleted.size) return deleted
+  const childrenByParent = new Map()
+  for (const node of nodes || []) {
+    const parentKey = node.parent_id === null || node.parent_id === undefined ? '' : String(node.parent_id)
+    if (!childrenByParent.has(parentKey)) childrenByParent.set(parentKey, [])
+    childrenByParent.get(parentKey).push(String(node.id))
+  }
+  const stack = Array.from(deleted)
+  while (stack.length) {
+    const id = stack.pop()
+    for (const childId of childrenByParent.get(String(id)) || []) {
+      if (deleted.has(childId)) continue
+      deleted.add(childId)
+      stack.push(childId)
+    }
+  }
+  return deleted
+}
+
+function stateGraphNodeDeleted(node) {
+  const ids = deletedStateIdSet.value
+  if (!ids.size) return false
+  if (ids.has(String(node?.state_node_id))) return true
+  return flattenedPathIds(node?.path_ids).some((id) => ids.has(String(id)))
+}
+
+function activityGraphNodeDeleted(node) {
+  const activityIds = deletedActivityNodeIdSet.value
+  if (activityIds.has(String(node?.activity_node_id))) return true
+  if (deletedAtomicActivityIdSet.value.has(String(node?.atomic_activity_id))) return true
+  const parentIds = Array.isArray(node?.parent_activity_node_ids) ? node.parent_activity_node_ids : []
+  if (parentIds.some((id) => activityIds.has(String(id)))) return true
+  const pathIds = flattenedPathIds(node?.path_ids)
+  return pathIds.some((id) => activityIds.has(String(id)))
+}
+
+function edgeEndpointDeleted(edge) {
+  return graphEndpointDeleted(edge?.source_id) || graphEndpointDeleted(edge?.target_id)
+}
+
+function graphEndpointDeleted(graphId) {
+  const id = String(graphId || '')
+  if (id.startsWith('state_node:')) {
+    return deletedStateIdSet.value.has(String(graphIdNumber(id)))
+  }
+  if (id.startsWith('activity_node:')) {
+    return deletedActivityNodeIdSet.value.has(String(graphIdNumber(id)))
+  }
+  if (id.startsWith('atomic_activity:')) {
+    return deletedAtomicActivityIdSet.value.has(String(graphIdNumber(id)))
+  }
+  return false
+}
+
+const isStateTransitionView = computed(() => viewMode.value === 'implementation')
+const isStateTransitionCanvas = computed(() => isStateTransitionView.value && !fullGraphDebugEnabled.value)
+const stateTransitionRealizersByStateId = computed(() => {
+  const outputMap = new Map()
+  for (const edge of stateTransitionEdges.value) {
+    if (edge.type !== 'ACTIVITY_TO_STATE' || edge.binding_role !== 'output') continue
+    const stateNodeId = graphStateNodeKey(edge.target_id)
+    if (!stateNodeId) continue
+    const activity = graphActivityById.value.get(edge.source_id) || fallbackActivityGraphNode(edge.source_id)
+    const item = {
+      edge,
+      activity,
+      activityId: edge.source_id,
+      binding: edgeBinding(edge),
+    }
+    if (!outputMap.has(stateNodeId)) outputMap.set(stateNodeId, [])
+    outputMap.get(stateNodeId).push(item)
+  }
+  return outputMap
+})
+const stateTransitionOutputsByActivityId = computed(() => {
+  const outputMap = new Map()
+  for (const edge of stateTransitionEdges.value) {
+    if (edge.type !== 'ACTIVITY_TO_STATE' || edge.binding_role !== 'output') continue
+    if (!outputMap.has(edge.source_id)) outputMap.set(edge.source_id, new Set())
+    outputMap.get(edge.source_id).add(edge.target_id)
+  }
+  return outputMap
+})
+const stateTransitionPreconditionsByActivityId = computed(() => {
+  const preconditionMap = new Map()
+  for (const edge of stateTransitionEdges.value) {
+    if (edge.type !== 'STATE_TO_ACTIVITY') continue
+    if (!['input', 'context_input'].includes(edge.binding_role)) continue
+    const stateNodeId = graphStateNodeKey(edge.source_id)
+    if (!stateNodeId) continue
+    if (!preconditionMap.has(edge.target_id)) preconditionMap.set(edge.target_id, [])
+    preconditionMap.get(edge.target_id).push({
+      edge,
+      binding: edgeBinding(edge),
+      stateNodeId,
+      state: stateById.value.get(stateNodeId) || fallbackStateGraphNode(edge.source_id),
+    })
+  }
+  return preconditionMap
+})
+const stateTransitionConsumersByStateId = computed(() => {
+  const consumerMap = new Map()
+  for (const edge of stateTransitionEdges.value) {
+    if (edge.type !== 'STATE_TO_ACTIVITY') continue
+    if (!['input', 'context_input'].includes(edge.binding_role)) continue
+    const stateNodeId = graphStateNodeKey(edge.source_id)
+    if (!stateNodeId) continue
+    consumerMap.set(stateNodeId, (consumerMap.get(stateNodeId) || 0) + 1)
+  }
+  return consumerMap
+})
+const stateTransitionByStateId = computed(() => {
+  const transitions = new Map()
+  for (const node of visibleStateNodes.value) {
+    const stateNodeId = stateNodeKey(node.state_node_id)
+    if (!stateNodeId) continue
+    const realizers = uniqueTransitionRealizers(stateTransitionRealizersByStateId.value.get(stateNodeId) || [])
+    const consumerCount = stateTransitionConsumersByStateId.value.get(stateNodeId) || 0
+    const isInitialSource = isInitialTransitionSourceState(node, realizers, consumerCount)
+    const preconditionKeys = new Set()
+    const warnings = []
+    for (const realizer of realizers) {
+      for (const item of stateTransitionPreconditionsByActivityId.value.get(realizer.activityId) || []) {
+        preconditionKeys.add(String(item.stateNodeId))
+      }
+      if ((stateTransitionOutputsByActivityId.value.get(realizer.activityId)?.size || 0) > 1) {
+        addTransitionWarning(warnings, '多目标')
+      }
+      if (realizer.activity?.atomic_activity_id && !realizer.binding?.op_rule_id && !realizer.edge?.op_rule_id) {
+        addTransitionWarning(warnings, '缺规则')
+      }
+    }
+    if (isAtomicStateNode(node) && !realizers.length && !isInitialSource) {
+      addTransitionWarning(warnings, '待补达成活动')
+    }
+    if (realizers.length > 1) {
+      addTransitionWarning(warnings, '多活动')
+    }
+    if (!isAtomicStateNode(node) && realizers.length) {
+      addTransitionWarning(warnings, '聚合目标')
+    }
+    transitions.set(stateNodeId, {
+      stateNodeId,
+      realizers,
+      realizerIds: realizers.map((item) => item.activityId),
+      realizerLabel: transitionRealizerLabel(realizers, { isInitialSource }),
+      preconditionCount: preconditionKeys.size,
+      consumerCount,
+      isInitialSource,
+      warnings,
+    })
+  }
+  return transitions
+})
+const selectedStateTransition = computed(() =>
+  selectedStateId.value ? stateTransitionByStateId.value.get(stateNodeKey(selectedStateId.value)) || null : null,
+)
+const x6BaseVisibleStateNodes = computed(() =>
+  visibleStateNodes.value
+    .filter(isStateVisibleInX6)
+    .map(nodeWithDraftLayout)
+    .map(nodeWithDraftContainer)
+    .map(nodeWithStateTransition),
+)
+const stateTransitionRelayGroups = computed(() => buildStateTransitionRelayGroups())
+const stateTransitionVisualPlan = computed(() => {
+  const fallback = buildStateTransitionVisualPlan(x6BaseVisibleStateNodes.value, stateTransitionRelayGroups.value)
+  const autoLayout = stateTransitionAutoLayout.value
+  if (!isStateTransitionCanvas.value || !autoLayout) return fallback
+  return {
+    ...fallback,
+    statePositions: mergeLayoutPositions(fallback.statePositions, autoLayout.statePositions),
+    relayPositions: mergeLayoutPositions(fallback.relayPositions, autoLayout.relayPositions),
+    edgeRoutes: autoLayout.edgeRoutes || new Map(),
+    diagnostics: autoLayout.diagnostics || null,
+  }
+})
+const stateTransitionEdgeRoutes = computed(() => stateTransitionVisualPlan.value.edgeRoutes || new Map())
+const relationEdgeRoutes = computed(() => relationAutoLayout.value?.edgeRoutes || new Map())
+const stateTransitionRelayNodes = computed(() => {
+  if (!isStateTransitionCanvas.value) return []
+  const plan = stateTransitionVisualPlan.value
+  return stateTransitionRelayGroups.value.map((group, index) => {
+    const position = plan.relayPositions.get(group.relayId) || transitionRelayFallbackPosition(index)
+    const activity = graphActivityById.value.get(group.activityId) || fallbackActivityGraphNode(group.activityId)
+    return {
+      ...(activity || {}),
+      id: group.relayId,
+      name: group.label,
+      code: activity?.code || group.activityId,
+      level: activity?.level || 3,
+      activity_type: 'transition_relay',
+      solver_participation: false,
+      parent_id: null,
+      parent_graph_id: null,
+      parent_activity_node_ids: [],
+      child_activity_node_ids: [],
+      _network_editor_transition_relay: true,
+      transitionRelayActivityGraphId: group.activityId,
+      transitionRelayInputStateIds: group.inputStateIds,
+      transitionRelayOutputStateIds: group.outputStateIds,
+      metadata_json: {
+        ...(activity?.metadata_json || {}),
+        _network_editor_transition_relay: {
+          activityGraphId: group.activityId,
+          inputStateIds: group.inputStateIds,
+          outputStateIds: group.outputStateIds,
+        },
+        _network_editor_layout: position,
+      },
+    }
+  })
+})
+const x6BaseVisibleActivityNodes = computed(() =>
+  [
+    ...visibleActivityNodes.value
+    .filter(isActivityVisibleInX6)
+    .filter(isActivityVisibleInStateTransitionCanvas)
+    .map(nodeWithDraftLayout)
+    .map(nodeWithDraftContainer),
+    ...stateTransitionRelayNodes.value,
+  ]
+)
+const x6VisibleEdges = computed(() =>
+  isStateTransitionCanvas.value
+    ? stateTransitionBackboneEdges.value
+    : visibleEdges.value,
+)
 const renderedEdges = computed(() => buildRenderedEdges(visibleEdges.value))
-const x6RenderedEdges = computed(() => renderedEdges.value.map((edge) => ({
+const x6ResolvedEdges = computed(() => buildX6ResolvedEdges(x6VisibleEdges.value))
+const x6CollapsedRelationBadges = computed(() => buildX6CollapsedRelationBadges(x6ResolvedEdges.value))
+const x6FlowBaseEdges = computed(() => buildRenderedEdges(x6ResolvedEdges.value))
+const selectedFlowGraphId = computed(() => {
+  if (selectionFocus.value === 'activity' && selectedActivityGraphId.value) return String(selectedActivityGraphId.value)
+  if (selectionFocus.value === 'state' && selectedStateId.value) return selectedStateGraphId()
+  if (selectedStateId.value) return selectedStateGraphId()
+  if (selectedActivityGraphId.value) return String(selectedActivityGraphId.value)
+  return ''
+})
+const activeFlowGraphId = computed(() => selectedFlowGraphId.value || hoveredFlowGraphId.value)
+const activeFlowMode = computed(() => selectedFlowGraphId.value ? 'selected' : 'hover')
+const x6FlowFocus = computed(() =>
+  buildFlowFocus(x6FlowBaseEdges.value, activeFlowGraphId.value, activeFlowMode.value),
+)
+const x6VisibleStateNodes = computed(() =>
+  x6BaseVisibleStateNodes.value
+    .map((node) => nodeWithCollapsedRelationBadges(node))
+    .map((node) => nodeWithFlowState(node)),
+)
+const x6VisibleActivityNodes = computed(() =>
+  x6BaseVisibleActivityNodes.value
+    .map((node) => nodeWithCollapsedRelationBadges(node))
+    .map((node) => nodeWithFlowState(node)),
+)
+const x6RenderedEdges = computed(() => x6FlowBaseEdges.value.map((edge) => ({
   ...edge,
   displayLabel: edgeDisplayLabel(edge),
+  flow: edgeFlowMetadata(edge),
   title: edgeTitle(edge),
+  autoRoute: isTransitionRelayEdge(edge)
+    ? stateTransitionEdgeRoutes.value.get(String(edge.id)) || null
+    : relationEdgeRoutes.value.get(String(edge.id)) || null,
+  autoRouteHint: edge.isCollapsedProxy || edge.aggregate
+    ? { kind: 'short', laneOffset: Number(edge.renderLaneOffset || 0) }
+    : null,
 })))
 const incidentGraphIds = computed(() => {
   const ids = new Set()
@@ -2425,7 +3156,11 @@ const incidentGraphIds = computed(() => {
   return ids
 })
 const rawUnplacedStateNodes = computed(() =>
-  visibleStateNodes.value.filter((node) => node.is_active !== false && !incidentGraphIds.value.has(node.id)),
+  visibleStateNodes.value.filter((node) =>
+    node.is_active !== false &&
+    isStateVisibleInX6(node) &&
+    !incidentGraphIds.value.has(node.id),
+  ),
 )
 const rawUnplacedActivityNodes = computed(() =>
   visibleActivityNodes.value.filter((node) => node.is_active !== false && !incidentGraphIds.value.has(node.id)),
@@ -2540,9 +3275,12 @@ const draftStateResourceNodes = computed(() =>
     .filter(Boolean),
 )
 const allStateNodes = computed(() => [
-  ...stateNodes.value,
+  ...stateNodes.value.filter((node) => !deletedStateIdSet.value.has(String(node.id))),
   ...draftStateResourceNodes.value,
 ])
+const stateReferenceOptions = computed(() =>
+  allStateNodes.value.filter((node) => node.is_active !== false),
+)
 const stateSelectOptions = computed(() =>
   allStateNodes.value.filter((node) => node.is_active !== false),
 )
@@ -2553,8 +3291,35 @@ const draftActivityResourceNodes = computed(() =>
     .filter(Boolean),
 )
 const allActivityNodes = computed(() => [
-  ...activityNodes.value,
+  ...activityNodes.value.filter((node) => !deletedActivityNodeIdSet.value.has(String(node.id))),
   ...draftActivityResourceNodes.value,
+])
+const draftAtomicActivityReferenceOptions = computed(() =>
+  draftChanges.value
+    .filter((change) => change.entity_type === 'atomic_activity' && change.operation === 'create')
+    .map((change) => {
+      const payload = change.payload || {}
+      const clientId = change.client_id
+      if (!clientId || !payload.name) return null
+      return {
+        id: draftAtomicActivityId(clientId),
+        draft_client_id: clientId,
+        is_draft: true,
+        machine_type_id: payload.machine_type_id || machineTypeId.value,
+        code: payload.code || null,
+        name: payload.name,
+        description: payload.description || '',
+        activity_category: payload.activity_category || 'normal',
+        sort_order: payload.sort_order || 0,
+        is_active: payload.is_active !== false,
+        metadata_json: payload.metadata_json || {},
+      }
+    })
+    .filter(Boolean),
+)
+const atomicActivityReferenceOptions = computed(() => [
+  ...activeAtomicActivities.value,
+  ...draftAtomicActivityReferenceOptions.value,
 ])
 const stateTree = computed(() => buildHierarchyTree(allStateNodes.value))
 const activityTree = computed(() => buildActivityResourceTree())
@@ -2595,10 +3360,57 @@ const activityChildrenByParent = computed(() => {
   return groups
 })
 const activityNodeById = computed(() => new Map(allActivityNodes.value.map((item) => [item.id, item])))
-const graphActivityById = computed(() => new Map(visibleActivityNodes.value.map((item) => [item.id, item])))
+const graphActivityById = computed(() => {
+  const result = new Map()
+  for (const item of allAtomicActivityGraphNodes.value) {
+    if (item?.id) result.set(item.id, item)
+  }
+  for (const item of visibleActivityNodes.value) {
+    if (item?.id) result.set(item.id, item)
+  }
+  return result
+})
 const baseGraphStateById = computed(() => new Map(baseVisibleStateNodes.value.map((item) => [item.state_node_id, item])))
 const graphStateById = computed(() => new Map(visibleStateNodes.value.map((item) => [item.state_node_id, item])))
-const bindingById = computed(() => new Map(bindings.value.map((item) => [item.id, item])))
+const draftUpdatedBindingById = computed(() => {
+  const updates = new Map()
+  for (const change of draftChanges.value) {
+    if (
+      change.entity_type !== 'activity_state_binding' ||
+      change.operation !== 'update' ||
+      change.entity_id === null ||
+      change.entity_id === undefined
+    ) {
+      continue
+    }
+    const bindingId = Number(change.entity_id)
+    if (!Number.isFinite(bindingId) || deletedBindingIdSet.value.has(bindingId)) continue
+    const base = bindings.value.find((item) => Number(item.id) === bindingId)
+    if (!base) continue
+    updates.set(bindingId, {
+      ...base,
+      ...change.payload,
+      id: base.id,
+      binding_type: base.binding_type,
+      coverage_policy: base.coverage_policy,
+      coverage_status: base.coverage_status,
+    })
+  }
+  return updates
+})
+const bindingById = computed(() => new Map(bindings.value.map((item) => [
+  item.id,
+  draftUpdatedBindingById.value.get(Number(item.id)) || item,
+])))
+const activityPackageRefById = computed(() => {
+  const refs = new Map()
+  for (const packageRefs of atomicRefsByPackage.value.values()) {
+    for (const ref of packageRefs || []) {
+      refs.set(ref.id, ref)
+    }
+  }
+  return refs
+})
 const statePackageCoverageById = computed(() => {
   const coverage = new Map()
   for (const node of visibleStateNodes.value) {
@@ -2680,7 +3492,8 @@ const activityNodeMetricsById = computed(() => {
   for (const edge of visibleEdges.value) {
     const activityId = edge.type === 'STATE_TO_ACTIVITY' ? edge.target_id : edge.source_id
     const stateId = edge.type === 'STATE_TO_ACTIVITY' ? edge.source_id : edge.target_id
-    if (!graphActivityById.value.has(activityId) || !String(stateId).startsWith('state_node:')) continue
+    const activity = graphActivityById.value.get(activityId)
+    if (!activity || !supportsGraphActivityBinding(activity) || !String(stateId).startsWith('state_node:')) continue
     const item = ensure(activityId)
     if (edge.type === 'STATE_TO_ACTIVITY') {
       if (edge.binding_role === 'context_input' || edge.is_inherited || edge.source_kind === 'inherited_context_binding') {
@@ -2699,7 +3512,7 @@ const activityNodeMetricsById = computed(() => {
       ? `atomic_activity:${binding.atomic_activity_id}`
       : `activity_node:${binding.activity_node_id}`
     const activity = graphActivityById.value.get(activityId)
-    if (state && activity && state.level !== activity.level) {
+    if (state && activity && supportsGraphActivityBinding(activity) && state.level !== activity.level) {
       const item = ensure(activityId)
       item.crossLevel = true
       item.crossLevelBindingIds.add(binding.id || `${activityId}:${binding.state_node_id}:${binding.binding_role}`)
@@ -2714,24 +3527,6 @@ const activityNodeMetricsById = computed(() => {
     const item = ensure(node.id)
     item.childCount = descendants.length
     item.maxDescendantDepth = Math.max(...descendants.map((candidate) => candidate.level || 0), 0)
-    for (const binding of bindings.value) {
-      if (binding.activity_node_id === node.activity_node_id && binding.binding_role === 'declared_output') {
-        for (const stateId of binding.covered_leaf_state_ids || []) {
-          item.declaredOutputLeafIds.add(stateId)
-        }
-      }
-    }
-    const descendantActivityIds = new Set(activityDescendantNodeIds(node.activity_node_id))
-    const descendantAtomicIds = atomicIdsUnderActivityNode(node.activity_node_id)
-    for (const binding of bindings.value) {
-      if (binding.binding_role !== 'output') continue
-      const isDescendantAtomic = binding.atomic_activity_id && descendantAtomicIds.has(binding.atomic_activity_id)
-      const isLegacyDescendant = binding.activity_node_id && descendantActivityIds.has(binding.activity_node_id)
-      if (!isDescendantAtomic && !isLegacyDescendant) continue
-      for (const stateId of binding.covered_leaf_state_ids || []) {
-        item.implementedOutputLeafIds.add(stateId)
-      }
-    }
   }
 
   const result = new Map()
@@ -2755,6 +3550,40 @@ const activityNodeMetricsById = computed(() => {
 })
 const selectedBindingActivity = computed(() => graphActivityById.value.get(bindingForm.value.activity_graph_id) || null)
 const activitySelectOptions = computed(() => visibleActivityNodes.value)
+const transitionRealizerOptions = computed(() =>
+  allAtomicActivityGraphNodes.value.filter((node) => supportsGraphActivityBinding(node)),
+)
+const selectedTransitionRealizers = computed(() => selectedStateTransition.value?.realizers || [])
+const selectedTransitionPreconditions = computed(() => {
+  const rows = []
+  const seen = new Set()
+  for (const realizer of selectedTransitionRealizers.value) {
+    for (const item of stateTransitionPreconditionsByActivityId.value.get(realizer.activityId) || []) {
+      const key = `${item.stateNodeId}:${realizer.activityId}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      rows.push({
+        ...item,
+        activity: realizer.activity,
+        activityId: realizer.activityId,
+      })
+    }
+  }
+  return rows
+})
+const selectedTransitionSingleRealizer = computed(() =>
+  selectedTransitionRealizers.value.length === 1 ? selectedTransitionRealizers.value[0].activity : null,
+)
+const canAddTransitionRealizer = computed(() =>
+  canMutate.value &&
+  !!selectedStateId.value &&
+  !!transitionRealizerActivityId.value,
+)
+const canAddTransitionPrecondition = computed(() =>
+  canMutate.value &&
+  !!selectedTransitionSingleRealizer.value &&
+  !!transitionPreconditionStateId.value,
+)
 const activityScopeOptions = computed(() => allActivityNodes.value.filter((node) => node.level <= 2))
 const opRuleOptions = computed(() => {
   const atomicId = selectedBindingActivity.value?.atomic_activity_id
@@ -2763,12 +3592,7 @@ const opRuleOptions = computed(() => {
 })
 const roleOptions = computed(() => {
   const activity = selectedBindingActivity.value
-  if (activity?.activity_type === 'virtual') {
-    return [
-      { label: '上下文输入', value: 'context_input' },
-      { label: '声明输出', value: 'declared_output' },
-    ]
-  }
+  if (!activity?.atomic_activity_id) return []
   return [
     { label: '输入', value: 'input' },
     { label: '输出', value: 'output' },
@@ -2808,9 +3632,9 @@ const bindingFormCoverageSummary = computed(() => {
   const total = bindingFormLeafStateIds.value.length
   if (!bindingFormShowsCoverageSelector.value) return ''
   if (bindingForm.value.coverage_mode === 'partial') {
-    return `已选择 ${bindingFormCoveredLeafStateIds.value.length} / ${total} 个叶子状态`
+    return `已选择 ${bindingFormCoveredLeafStateIds.value.length} / ${total} 个原子状态`
   }
-  return `将覆盖该状态包当前 ${total} 个启用叶子状态`
+  return `将覆盖该状态包当前 ${total} 个启用原子状态`
 })
 const canCreateBinding = computed(() =>
   canMutate.value &&
@@ -2821,12 +3645,6 @@ const canCreateBinding = computed(() =>
   bindingFormCoverageSelectionValid.value,
 )
 const canUpdateBinding = computed(() => !!selectedBinding.value && canCreateBinding.value)
-const canQuickConnect = computed(() =>
-  canMutate.value &&
-  !!selectedStateId.value &&
-  !!selectedActivityGraphId.value &&
-  supportsGraphActivityBinding(selectedGraphActivity.value),
-)
 const canOpenBatchBinding = computed(() =>
   canMutate.value &&
   !!selectedGraphActivity.value &&
@@ -2835,15 +3653,15 @@ const canOpenBatchBinding = computed(() =>
 const batchBindingActivity = computed(() => selectedGraphActivity.value)
 const batchBindingRoles = computed(() => {
   const activity = batchBindingActivity.value
-  return activity?.activity_type === 'virtual'
-    ? { input: 'context_input', output: 'declared_output' }
-    : { input: 'input', output: 'output' }
+  return activity?.atomic_activity_id
+    ? { input: 'input', output: 'output' }
+    : { input: '', output: '' }
 })
 const batchInputRoleLabel = computed(() =>
-  batchBindingRoles.value.input === 'context_input' ? '上下文输入' : '输入状态',
+  batchBindingRoles.value.input === 'context_input' ? '历史上下文输入' : '输入状态',
 )
 const batchOutputRoleLabel = computed(() =>
-  batchBindingRoles.value.output === 'declared_output' ? '声明输出' : '产出状态',
+  batchBindingRoles.value.output === 'declared_output' ? '历史声明输出' : '产出状态',
 )
 const batchOpRuleOptions = computed(() => {
   const atomicId = batchBindingActivity.value?.atomic_activity_id
@@ -2877,8 +3695,8 @@ const atomicOutputCoverageRows = computed(() => {
           label: nodeLabel(stateById.value.get(id)),
         })),
         summary: coverage.coverage_mode === 'partial'
-        ? `产出 ${selectedCount} / ${leafIds.length} 个叶子状态`
-        : `产出当前 ${leafIds.length} 个启用叶子状态`,
+        ? `产出 ${selectedCount} / ${leafIds.length} 个原子状态`
+        : `产出当前 ${leafIds.length} 个启用原子状态`,
       }
     })
 })
@@ -2892,39 +3710,47 @@ const atomicOutputCoverageSelectionValid = computed(() =>
 const canSaveAtomicActivity = computed(() =>
   !savingAtomic.value && (!!atomicEditId.value || atomicOutputCoverageSelectionValid.value),
 )
-const inputEdgeLabel = computed(() =>
-  selectedGraphActivity.value?.activity_type === 'virtual' ? '状态 -> 上下文' : '状态 -> 输入',
-)
-const outputEdgeLabel = computed(() =>
-  selectedGraphActivity.value?.activity_type === 'virtual' ? '活动 -> 声明输出' : '活动 -> 产出',
+const canCreateAtomicReference = computed(() =>
+  !savingAtomic.value &&
+  !atomicEditId.value &&
+  !!atomicForm.value.package_id &&
+  !!atomicForm.value.reference_atomic_activity_id,
 )
 const dragHintLabel = computed(() => {
   if (canvasDrag.value) {
     return canvasDrag.value.type === 'state'
-      ? '释放到活动输入端口，创建输入或上下文绑定'
-      : '释放到状态输出端口，创建产出或声明输出绑定'
+      ? '松开后可在右侧编辑栏确认活动的输入绑定'
+      : '松开后可在右侧编辑栏确认目标状态的产出绑定'
   }
   if (!machineTypeId.value) return '先选择设备类型。'
-  if (!isEditMode.value) return '预览模式可查看、定位和展开；点击“进入编辑”后才能连接状态与活动。'
+  if (!isEditMode.value) return '预览模式可查看、定位和展开；点击“进入编辑”后可在右侧编辑栏调整状态与活动绑定。'
   if (!selectedStateId.value && !selectedActivityGraphId.value) {
-    return '先选一个状态，再选一个虚拟/原子活动；也可按 Ctrl/Shift/Cmd 多选状态后创建活动。'
+    return '先选一个状态或活动；状态转移绑定请在右侧编辑栏维护。'
   }
   if (selectedStateId.value && !selectedActivityGraphId.value) {
-    return '已选状态：再选一个活动，然后点“状态 -> 输入/上下文”，或从状态右端口拖到活动。'
+    return '已选状态：可在右侧编辑栏绑定实现活动、前置状态或普通活动关系。'
   }
   if (!selectedStateId.value && selectedActivityGraphId.value) {
-    return '已选活动：再选一个状态，然后点快捷连接，或从活动右端口拖到状态。'
+    return '已选活动：可在右侧编辑栏查看和维护相关状态绑定。'
   }
   if (!supportsGraphActivityBinding(selectedGraphActivity.value)) {
-    return '当前活动不能直接绑定，请选择虚拟活动或原子活动。'
+    return '当前活动不能直接绑定状态；请选择原子活动，虚拟活动仅作为管理包。'
   }
-  return `已选状态和活动：点击“${inputEdgeLabel.value}”或“${outputEdgeLabel.value}”加入编辑草稿。`
+  return '已选状态和活动：在右侧编辑栏选择角色后创建绑定。'
 })
 const canCreateReference = computed(() =>
   canMutate.value &&
   !!referenceForm.value.state_node_id &&
   !!referenceForm.value.parent_state_node_id &&
   referenceForm.value.state_node_id !== referenceForm.value.parent_state_node_id,
+)
+const canCreateStateReferenceFromDrawer = computed(() =>
+  canMutate.value &&
+  !savingState.value &&
+  !stateEditId.value &&
+  !!stateForm.value.reference_state_node_id &&
+  !!stateForm.value.parent_id &&
+  stateForm.value.reference_state_node_id !== stateForm.value.parent_id,
 )
 const selectedStateLabel = computed(() => {
   const node = stateById.value.get(selectedStateId.value) || graphStateById.value.get(selectedStateId.value)
@@ -3018,9 +3844,14 @@ const focusedActivityCanvas = computed(() => {
     node,
     parentId: node.parent_id || null,
     breadcrumb: activityBreadcrumb(node.id),
-    contextStates: boundaryStatesForActivity(node.id, ['context_input']),
-    outputStates: boundaryStatesForActivity(node.id, ['declared_output']),
-    metrics: activityNodeMetrics(graphNode),
+    contextStates: [],
+    outputStates: [],
+    metrics: {
+      ...activityNodeMetrics(graphNode),
+      declaredOutputCount: 0,
+      implementedOutputCount: 0,
+      missingOutputCount: 0,
+    },
   }
 })
 const selectedEditableLabel = computed(() => {
@@ -3089,7 +3920,6 @@ const solverReadinessDetail = computed(() => {
     `建模提示 ${modelingIssues}`,
   ]
   if (graphSummary.value.coverage_gap_count) parts.push(`覆盖缺口 ${graphSummary.value.coverage_gap_count}`)
-  if (graphSummary.value.partial_virtual_activity_count) parts.push(`部分实现虚拟活动 ${graphSummary.value.partial_virtual_activity_count}`)
   return parts.join(' · ')
 })
 const solverReadinessButtonType = computed(() => (solverReadinessType.value === 'danger' ? 'danger' : 'primary'))
@@ -3331,6 +4161,149 @@ function stateIdSet(ids) {
   return new Set((ids || []).map((id) => String(id)))
 }
 
+function stateNodeKey(value) {
+  if (value === null || value === undefined || value === '') return null
+  return String(value)
+}
+
+function graphStateNodeKey(graphId) {
+  const id = String(graphId || '')
+  if (!id.startsWith('state_node:')) return null
+  const rawId = id.slice('state_node:'.length)
+  const [stateNodeId] = rawId.split(':')
+  return stateNodeKey(stateNodeId || rawId)
+}
+
+function isAtomicStateNode(node) {
+  if (!node) return false
+  return node.is_leaf === true || !!node.feature_key || node.state_kind === 'atomic'
+}
+
+function isAtomicStateLibraryObject(node) {
+  if (!isAtomicStateNode(node)) return false
+  if (node.is_reference_instance || node.reference_id || node.draft_entity_type === 'state_node_reference') return false
+  if (node.parent_id || node.parent_graph_id || node.primary_parent_graph_id) return false
+  return Number(node.level || 0) <= 1
+}
+
+function stateNodeByComparableId(stateNodeId) {
+  if (stateNodeId === null || stateNodeId === undefined || stateNodeId === '') return null
+  if (stateById.value.has(stateNodeId)) return stateById.value.get(stateNodeId)
+  const numericId = Number(stateNodeId)
+  if (Number.isFinite(numericId) && stateById.value.has(numericId)) return stateById.value.get(numericId)
+  return allStateNodes.value.find((node) => sameStateId(node.id, stateNodeId)) || null
+}
+
+function stateFactOperatorKey(operator) {
+  return String(operator || 'eq').trim().toLowerCase() || 'eq'
+}
+
+function isEqualityStateOperator(operator) {
+  return ['eq', '=', '==', 'equals'].includes(stateFactOperatorKey(operator))
+}
+
+function stateFactValueKey(value) {
+  if (value === null || value === undefined) return ''
+  return String(value).trim().toLowerCase()
+}
+
+function oppositeFactValueKey(state) {
+  const targetValue = stateFactValueKey(state?.target_value)
+  if (!targetValue) return null
+  const featureKey = String(state?.feature_key || '').trim()
+  const allowedValues = [...new Set(
+    normalizeAllowedValues(stateFeatureDefByKey.value.get(featureKey)?.allowed_values)
+      .map(stateFactValueKey)
+      .filter(Boolean),
+  )]
+  if (allowedValues.length === 2 && allowedValues.includes(targetValue)) {
+    return allowedValues.find((value) => value !== targetValue) || null
+  }
+  if (targetValue === 'true') return 'false'
+  if (targetValue === 'false') return 'true'
+  return null
+}
+
+function reflexivePreconditionStateForTarget(stateNodeId) {
+  const target = stateNodeByComparableId(stateNodeId)
+  if (!target || !isAtomicStateNode(target) || !target.feature_key || !isEqualityStateOperator(target.operator)) {
+    return null
+  }
+  const featureKey = String(target.feature_key || '').trim()
+  const operatorKey = stateFactOperatorKey(target.operator)
+  const oppositeValue = oppositeFactValueKey(target)
+  if (!featureKey || !oppositeValue) return null
+  const candidates = stateSelectOptions.value.filter((candidate) =>
+    candidate &&
+    !sameStateId(candidate.id, target.id) &&
+    candidate.is_active !== false &&
+    isAtomicStateNode(candidate) &&
+    String(candidate.feature_key || '').trim() === featureKey &&
+    stateFactOperatorKey(candidate.operator) === operatorKey &&
+    stateFactValueKey(candidate.target_value) === oppositeValue,
+  )
+  return candidates.length === 1 ? candidates[0] : null
+}
+
+function reflexivePreconditionStateIdForTarget(stateNodeId) {
+  return reflexivePreconditionStateForTarget(stateNodeId)?.id || null
+}
+
+function addReflexivePreconditionsToAtomicForm() {
+  if (atomicEditId.value) return
+  const selectedOutputStateIds = normalisedStateIds(atomicForm.value.output_state_ids)
+  if (!selectedOutputStateIds.length) return
+  const selectedInputStateIds = normalisedStateIds(atomicForm.value.input_state_ids)
+  const selectedInputSet = stateIdSet(selectedInputStateIds)
+  const additions = []
+  for (const outputStateId of selectedOutputStateIds) {
+    const reflexiveStateId = reflexivePreconditionStateIdForTarget(outputStateId)
+    if (!reflexiveStateId || selectedInputSet.has(String(reflexiveStateId))) continue
+    selectedInputSet.add(String(reflexiveStateId))
+    additions.push(reflexiveStateId)
+  }
+  if (additions.length) {
+    atomicForm.value.input_state_ids = [...selectedInputStateIds, ...additions]
+  }
+}
+
+function addTransitionWarning(warnings, label, type = 'warning') {
+  if (!warnings.some((item) => item.label === label)) warnings.push({ label, type })
+}
+
+function uniqueTransitionRealizers(realizers) {
+  const seen = new Set()
+  const result = []
+  for (const item of realizers || []) {
+    if (!item?.activityId || seen.has(item.activityId)) continue
+    seen.add(item.activityId)
+    result.push(item)
+  }
+  return result
+}
+
+function isInitialTransitionSourceState(node, realizers, consumerCount) {
+  return isAtomicStateNode(node) &&
+    !realizers.length &&
+    Number(consumerCount || 0) > 0 &&
+    String(node?.target_value || '').toLowerCase() === 'false'
+}
+
+function transitionRealizerLabel(realizers, options = {}) {
+  if (options.isInitialSource) return '起始条件'
+  if (!realizers.length) return '待补达成活动'
+  if (realizers.length > 1) return `${realizers.length} 个达成活动`
+  const activity = realizers[0].activity
+  return activity ? nodeLabel(activity) : '达成活动'
+}
+
+function nodeWithStateTransition(node) {
+  const stateNodeId = stateNodeKey(node?.state_node_id)
+  if (!stateNodeId || !isStateTransitionCanvas.value) return node
+  const transition = stateTransitionByStateId.value.get(stateNodeId)
+  return transition ? { ...node, stateTransition: transition } : node
+}
+
 function stateHasCoverageChoice(stateNodeId) {
   if (!stateNodeId) return false
   return displayStateChildren(stateNodeId, { activeOnly: true }).length > 0 &&
@@ -3378,6 +4351,7 @@ function sanitizeAtomicOutputCoverages() {
 
 function onAtomicOutputStatesChange() {
   sanitizeAtomicOutputCoverages()
+  addReflexivePreconditionsToAtomicForm()
 }
 
 function onAtomicOutputCoverageModeChange(stateId) {
@@ -3407,8 +4381,11 @@ function defaultStateForm(parent = null) {
     name: '',
     description: '',
     parent_id: parent?.id || null,
+    reference_state_node_id: null,
     level,
     state_kind: 'atomic',
+    state_object_name: '',
+    dimension_template_key: '',
     feature_key: '',
     target_value: '',
     sort_order: nextSortOrder(stateNodes.value.filter((node) => node.parent_id === (parent?.id || null))),
@@ -3427,6 +4404,99 @@ function normalizeAllowedValues(values) {
     }
   }
   return []
+}
+
+function isDimensionTemplateKey(featureKey) {
+  const key = String(featureKey || '')
+  return key.includes('_dim_') && !key.includes('__')
+}
+
+function isDimensionTemplateFeatureDef(item) {
+  return !!item?.feature_key && isDimensionTemplateKey(item.feature_key)
+}
+
+function normalizeStateObjectToken(value) {
+  const parts = []
+  let ascii = ''
+  const flushAscii = () => {
+    const trimmed = ascii.replace(/^_+|_+$/g, '')
+    if (trimmed) parts.push(trimmed)
+    ascii = ''
+  }
+  for (const rawChar of String(value || '').trim().toLowerCase()) {
+    if (/^[a-z0-9]$/.test(rawChar)) {
+      ascii += rawChar
+      continue
+    }
+    if (rawChar === '_' || /^\s$/.test(rawChar) || /^[\p{P}\p{S}]$/u.test(rawChar)) {
+      if (ascii && !ascii.endsWith('_')) ascii += '_'
+      continue
+    }
+    flushAscii()
+    parts.push(`u${rawChar.codePointAt(0).toString(16)}`)
+  }
+  flushAscii()
+  return parts.join('_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || 'object'
+}
+
+function buildConcreteStateFeatureKey(templateKey, stateObjectName) {
+  if (!templateKey || !stateObjectName) return ''
+  const prefix = `${templateKey}__`
+  const maxObjectLength = Math.max(1, 64 - prefix.length)
+  const objectToken = normalizeStateObjectToken(stateObjectName)
+    .slice(0, maxObjectLength)
+    .replace(/^_+|_+$/g, '') || 'object'
+  return `${prefix}${objectToken}`
+}
+
+function inferStateObjectName(stateName, targetValue = '', allowedValues = []) {
+  let value = String(stateName || '').trim()
+  if (!value) return ''
+  const suffixes = [
+    targetValue,
+    ...allowedValues,
+    '已安装',
+    '未安装',
+    '已拆除',
+    '未拆除',
+    '已连接',
+    '未连接',
+    '已调测',
+    '待调测',
+    '已完成',
+    '未完成',
+    '完成',
+  ]
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)
+  for (const suffix of suffixes) {
+    if (value.endsWith(suffix) && value.length > suffix.length) {
+      value = value.slice(0, -suffix.length).trim()
+      break
+    }
+  }
+  return value || String(stateName || '').trim()
+}
+
+function stateObjectNameForNode(node) {
+  const metadataName = String(node?.metadata_json?.state_object_name || '').trim()
+  if (metadataName) return metadataName
+  const templateKey = dimensionTemplateKeyForState(node)
+  const allowedValues = normalizeAllowedValues(stateFeatureDefByKey.value.get(templateKey)?.allowed_values)
+  return inferStateObjectName(node?.name, node?.target_value, allowedValues)
+}
+
+function dimensionTemplateKeyForState(node) {
+  const metadataKey = node?.metadata_json?.dimension_template_key
+  if (metadataKey) return String(metadataKey)
+  const featureKey = String(node?.feature_key || '')
+  const splitAt = featureKey.indexOf('__')
+  if (splitAt > 0) {
+    const candidate = featureKey.slice(0, splitAt)
+    if (isDimensionTemplateKey(candidate)) return candidate
+  }
+  return ''
 }
 
 function stateFeatureLabel(item) {
@@ -3455,8 +4525,6 @@ function defaultActivityForm(parent = null) {
     activity_category: 'normal',
     sort_order: nextSortOrder(activityNodes.value.filter((node) => String(node.parent_id || '') === String(parentId || ''))),
     is_active: true,
-    context_state_ids: [],
-    output_state_ids: [],
   }
 }
 
@@ -3466,6 +4534,7 @@ function defaultAtomicForm(packageId = null) {
     name: '',
     description: '',
     package_id: packageId,
+    reference_atomic_activity_id: null,
     activity_category: 'normal',
     sort_order: nextSortOrder(atomicActivities.value),
     is_active: true,
@@ -3473,6 +4542,7 @@ function defaultAtomicForm(packageId = null) {
     output_state_ids: [],
     output_coverages: {},
     duration_min: 30,
+    skip_auto_rule: false,
   }
 }
 
@@ -3517,7 +4587,7 @@ function buildActivityResourceTree() {
     }
   }
   indexPackages(tree)
-  const atomicById = new Map(atomicActivities.value.map((item) => [item.id, item]))
+  const atomicById = new Map(activeAtomicActivities.value.map((item) => [item.id, item]))
   for (const [packageId, refs] of atomicRefsByPackage.value.entries()) {
     const packageNode = packageNodeById.get(packageId)
     if (!packageNode) continue
@@ -3555,12 +4625,44 @@ function buildActivityResourceTree() {
     if (!packageNode) continue
     packageNode.children = [...(packageNode.children || []), child]
   }
+  const draftAtomicRefChildren = draftChanges.value
+    .filter((change) => change.entity_type === 'activity_package_atomic_ref' && change.operation === 'create')
+    .map((change) => {
+      const payload = change.payload || {}
+      const packageNode = packageNodeById.get(payload.package_id)
+      const atomic = atomicActivityByReferenceId(payload.atomic_activity_id)
+      if (!packageNode || !atomic) return null
+      return {
+        ...atomic,
+        id: `atomic_ref:${change.client_id}`,
+        raw_id: payload.atomic_activity_id,
+        atomic_activity_id: payload.atomic_activity_id,
+        draft_client_id: change.client_id,
+        is_draft: true,
+        resource_type: 'atomic_activity',
+        package_id: payload.package_id,
+        parent_id: payload.package_id,
+        level: 3,
+        sort_order: payload.sort_order ?? atomic.sort_order ?? 0,
+        reference_id: null,
+        children: [],
+        pathLabel: `${packageNode.pathLabel || nodeLabel(packageNode)} / ${nodeLabel(atomic)}`,
+        displayLabel: `引用 ${nodeLabel(atomic)}`,
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
+  for (const child of draftAtomicRefChildren) {
+    const packageNode = packageNodeById.get(child.package_id)
+    if (!packageNode) continue
+    packageNode.children = [...(packageNode.children || []), child]
+  }
   return tree
 }
 
 function nodeLabel(node) {
   if (!node) return '-'
-  return `${node.code} ${node.name}`.trim()
+  return [node.code, node.name].filter((item) => item !== null && item !== undefined && String(item).trim()).join(' ')
 }
 
 function machineTypeOptionLabel(item) {
@@ -3579,6 +4681,16 @@ function readRecentMachineTypeIds() {
     return Array.isArray(parsed) ? parsed.map((id) => String(id)).slice(0, MACHINE_TYPE_RECENT_LIMIT) : []
   } catch (_) {
     return []
+  }
+}
+
+function readNetworkEditorFullGraphDebugFlag() {
+  try {
+    const params = new URLSearchParams(window.location.search || '')
+    return params.get('networkEditorFullGraph') === '1' ||
+      window.localStorage?.getItem('network-editor-full-graph') === '1'
+  } catch (_) {
+    return false
   }
 }
 
@@ -3717,12 +4829,12 @@ function issueDetailHint(issue) {
   const hints = []
   if (details.binding_id) hints.push(`绑定 #${details.binding_id}`)
   if (details.coverage_status) hints.push(`覆盖状态：${coverageStatusLabel(details.coverage_status)}`)
-  if (Number.isFinite(Number(details.covered_leaf_count))) hints.push(`覆盖叶子：${details.covered_leaf_count}`)
+  if (Number.isFinite(Number(details.covered_leaf_count))) hints.push(`覆盖原子状态：${details.covered_leaf_count}`)
   if (Number.isFinite(Number(details.cross_level_binding_count))) {
     hints.push(`跨层级绑定：${details.cross_level_binding_count}`)
   }
   if (Array.isArray(details.missing_leaf_state_ids) && details.missing_leaf_state_ids.length) {
-    hints.push(`缺失叶子：${details.missing_leaf_state_ids.length}`)
+    hints.push(`缺失原子状态：${details.missing_leaf_state_ids.length}`)
   }
   if (Array.isArray(details.op_rule_ids) && details.op_rule_ids.length) {
     hints.push(`规则：${details.op_rule_ids.join(', ')}`)
@@ -3972,13 +5084,13 @@ function atomicIdsUnderActivityNode(activityNodeId) {
 }
 
 function supportsGraphActivityBinding(activity) {
-  return !!activity && (!!activity.atomic_activity_id || activity.activity_type === 'virtual')
+  return !!activity?.atomic_activity_id
 }
 
 function bindingRoleText(role) {
   return {
-    context_input: '上下文输入',
-    declared_output: '声明输出',
+    context_input: '历史上下文输入',
+    declared_output: '历史声明输出',
     input: '输入',
     output: '产出',
   }[role] || role || '-'
@@ -3987,7 +5099,7 @@ function bindingRoleText(role) {
 function bindingRoleAllowedForActivity(activity, role) {
   if (!supportsGraphActivityBinding(activity) || !role) return false
   if (activity.atomic_activity_id) return ['input', 'output'].includes(role)
-  return ['context_input', 'declared_output'].includes(role)
+  return false
 }
 
 function activeOpRulesForAtomicActivity(atomicActivityId) {
@@ -4010,6 +5122,7 @@ function atomicRuleSelectionWarning(activity, quick = false) {
 }
 
 function canResolveOpRuleForActivity(activity, opRuleId = null) {
+  if (!supportsGraphActivityBinding(activity)) return false
   if (!activity?.atomic_activity_id) return true
   const rules = activeOpRulesForAtomicActivity(activity.atomic_activity_id)
   if (opRuleId) return rules.some((item) => item.id === opRuleId)
@@ -4121,6 +5234,20 @@ function draftAtomicActivityClientId(value) {
   return isDraftAtomicActivityId(value) ? value.slice(DRAFT_ATOMIC_ACTIVITY_ID_PREFIX.length) : null
 }
 
+function atomicActivityDraftClientIdFromRef(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value) && value._draft_ref) {
+    return value._draft_ref
+  }
+  const raw = String(value || '')
+  if (isDraftAtomicActivityId(raw)) return draftAtomicActivityClientId(raw)
+  const graphPrefix = 'atomic_activity:'
+  if (raw.startsWith(graphPrefix)) {
+    const graphId = raw.slice(graphPrefix.length)
+    if (isDraftAtomicActivityId(graphId)) return draftAtomicActivityClientId(graphId)
+  }
+  return null
+}
+
 function draftStateResourceNode(change) {
   const payload = change?.payload || {}
   const clientId = change?.client_id
@@ -4192,12 +5319,29 @@ function draftAtomicActivityResourceNode(change, packageNodeById = new Map()) {
     activity_category: payload.activity_category || 'normal',
     sort_order: payload.sort_order || 0,
     is_active: payload.is_active !== false,
-    metadata_json: payload.metadata_json || {},
+    metadata_json: payload.package_ref_metadata_json || payload.metadata_json || {},
     reference_id: null,
     children: [],
     pathLabel: packageNode ? `${packageNode.pathLabel || nodeLabel(packageNode)} / ${nodeLabel(payload)}` : nodeLabel(payload),
     displayLabel: `Draft ${nodeLabel(payload)}`,
   }
+}
+
+function flattenedPathIds(pathIds) {
+  if (!Array.isArray(pathIds)) return []
+  return pathIds.some((item) => Array.isArray(item))
+    ? (pathIds[0] || [])
+    : pathIds
+}
+
+function childPathIds(parentGraphNode, parentId, childId) {
+  if (!parentId) return [childId]
+  const parentPath = flattenedPathIds(parentGraphNode?.path_ids)
+  return [
+    ...parentPath,
+    ...(String(parentPath[parentPath.length - 1] || '') === String(parentId) ? [] : [parentId]),
+    childId,
+  ]
 }
 
 function draftStateGraphNode(change, graphByStateId = baseGraphStateById.value) {
@@ -4207,22 +5351,13 @@ function draftStateGraphNode(change, graphByStateId = baseGraphStateById.value) 
   const stateNodeId = draftStateId(clientId)
   const parentId = payload.parent_id || null
   const parentGraphNode = parentId ? graphByStateId.get(parentId) : null
-  const parentPathIds = Array.isArray(parentGraphNode?.path_ids) ? parentGraphNode.path_ids : []
-  const parentPath = parentPathIds.some((item) => Array.isArray(item))
-    ? (parentPathIds[0] || [])
-    : parentPathIds
-  const pathIds = parentId
-    ? [
-      ...parentPath,
-      ...(String(parentPath[parentPath.length - 1] || '') === String(parentId) ? [] : [parentId]),
-      stateNodeId,
-    ]
-    : [stateNodeId]
+  const pathIds = childPathIds(parentGraphNode, parentId, stateNodeId)
   const isAggregate = payload.state_kind === 'aggregate' || !payload.feature_key
   return {
     id: `state_node:${stateNodeId}`,
     state_node_id: stateNodeId,
     draft_client_id: clientId,
+    draft_entity_type: 'state_node',
     is_draft: true,
     machine_type_id: payload.machine_type_id || machineTypeId.value,
     parent_id: parentId,
@@ -4246,6 +5381,55 @@ function draftStateGraphNode(change, graphByStateId = baseGraphStateById.value) 
   }
 }
 
+function draftStateReferenceGraphNode(change, graphByStateId = baseGraphStateById.value) {
+  const payload = change?.payload || {}
+  const clientId = change?.client_id
+  const stateNodeId = payload.state_node_id
+  const parentId = payload.parent_state_node_id || null
+  if (!clientId || !stateNodeId || !parentId) return null
+  const source = stateById.value.get(stateNodeId)
+  const sourceGraphNode = graphByStateId.get(stateNodeId) || baseVisibleStateNodes.value.find((node) =>
+    String(node.state_node_id || '') === String(stateNodeId),
+  )
+  if (!source && !sourceGraphNode) return null
+  const parentGraphNode = graphByStateId.get(parentId) || baseVisibleStateNodes.value.find((node) =>
+    String(node.state_node_id || '') === String(parentId),
+  )
+  const parentLevel = Number(parentGraphNode?.level ?? stateById.value.get(parentId)?.level ?? 0)
+  return {
+    ...(sourceGraphNode || {}),
+    ...(source || {}),
+    id: `state_node:${stateNodeId}:draft-ref:${clientId}`,
+    state_node_id: stateNodeId,
+    draft_client_id: clientId,
+    draft_entity_type: 'state_node_reference',
+    is_draft: true,
+    is_reference_instance: true,
+    machine_type_id: source?.machine_type_id || sourceGraphNode?.machine_type_id || machineTypeId.value,
+    parent_id: parentId,
+    parent_state_node_id: parentId,
+    primary_parent_graph_id: parentGraphNode?.id || `state_node:${parentId}`,
+    reference_id: null,
+    reference_ids: [],
+    reference_parent_ids: [parentId],
+    path_ids: childPathIds(parentGraphNode, parentId, stateNodeId),
+    level: parentLevel ? parentLevel + 1 : (sourceGraphNode?.level || source?.level || 1),
+    code: source?.code || sourceGraphNode?.code || null,
+    name: source?.name || sourceGraphNode?.name || '',
+    feature_key: source?.feature_key ?? sourceGraphNode?.feature_key ?? null,
+    operator: source?.operator || sourceGraphNode?.operator || 'eq',
+    target_value: source?.target_value ?? sourceGraphNode?.target_value ?? null,
+    state_kind: source?.state_kind || sourceGraphNode?.state_kind || (source?.feature_key ? 'atomic' : 'aggregate'),
+    sort_order: payload.sort_order || source?.sort_order || sourceGraphNode?.sort_order || 0,
+    is_active: payload.is_active !== false && source?.is_active !== false && sourceGraphNode?.is_active !== false,
+    is_leaf: sourceGraphNode?.is_leaf ?? !!source?.feature_key,
+    leaf_state_ids: sourceGraphNode?.leaf_state_ids || (source?.feature_key ? [stateNodeId] : []),
+    leaf_count: sourceGraphNode?.leaf_count ?? (source?.feature_key ? 1 : 0),
+    child_ids: sourceGraphNode?.child_ids || [],
+    metadata_json: payload.metadata_json || {},
+  }
+}
+
 function draftActivityGraphNode(change, graphByActivityId) {
   const payload = change?.payload || {}
   const clientId = change?.client_id
@@ -4253,10 +5437,7 @@ function draftActivityGraphNode(change, graphByActivityId) {
   const activityNodeId = draftActivityId(clientId)
   const parentId = payload.parent_id || null
   const parentGraphNode = parentId ? graphByActivityId.get(parentId) : null
-  const parentPathIds = Array.isArray(parentGraphNode?.path_ids) ? parentGraphNode.path_ids : []
-  const parentPath = parentPathIds.some((item) => Array.isArray(item))
-    ? (parentPathIds[0] || [])
-    : parentPathIds
+  const parentPath = flattenedPathIds(parentGraphNode?.path_ids)
   const pathIds = parentId
     ? [
       ...parentPath,
@@ -4336,7 +5517,54 @@ function draftAtomicActivityGraphNode(change, graphByActivityId) {
     sort_order: payload.sort_order || 0,
     is_active: payload.is_active !== false,
     path_ids: pathIds,
+    metadata_json: payload.package_ref_metadata_json || payload.metadata_json || {},
+  }
+}
+
+function draftActivityPackageAtomicRefGraphNode(change, graphByActivityId) {
+  const payload = change?.payload || {}
+  const clientId = change?.client_id
+  const atomicActivityId = payload.atomic_activity_id
+  const packageId = payload.package_id || null
+  if (!clientId || !atomicActivityId || !packageId) return null
+  const atomic = atomicActivityByReferenceId(atomicActivityId)
+  if (!atomic) return null
+  const packageGraphNode = graphByActivityId.get(packageId) || baseVisibleActivityNodes.value.find((node) =>
+    String(node.activity_node_id || '') === String(packageId),
+  )
+  const packagePath = flattenedPathIds(packageGraphNode?.path_ids)
+  const parentActivityIds = [
+    ...packagePath,
+    ...(String(packagePath[packagePath.length - 1] || '') === String(packageId) ? [] : [packageId]),
+  ]
+  return {
+    ...atomic,
+    id: `atomic_activity:${atomicActivityId}:draft-ref:${clientId}`,
+    activity_node_id: null,
+    atomic_activity_id: atomicActivityId,
+    draft_client_id: clientId,
+    draft_entity_type: 'activity_package_atomic_ref',
+    is_draft: true,
+    machine_type_id: atomic.machine_type_id || machineTypeId.value,
+    parent_id: null,
+    parent_graph_id: packageGraphNode?.id || `activity_node:${packageId}`,
+    parent_activity_node_ids: parentActivityIds,
+    child_activity_node_ids: [],
+    package_ref_ids: [],
+    reference_id: null,
+    reference_ids: [],
+    level: packageGraphNode ? Number(packageGraphNode.level || 0) + 1 : 3,
+    code: atomic.code || null,
+    name: atomic.name,
+    description: atomic.description || '',
+    activity_type: 'executable',
+    activity_category: atomic.activity_category || 'normal',
+    solver_participation: true,
+    sort_order: payload.sort_order || atomic.sort_order || 0,
+    is_active: payload.is_active !== false && atomic.is_active !== false,
+    path_ids: [[...parentActivityIds, atomicActivityId]],
     metadata_json: payload.metadata_json || {},
+    atomic_metadata_json: atomic.metadata_json || {},
   }
 }
 
@@ -4371,6 +5599,7 @@ function bindingPayloadEdge(payload, { idPrefix, sourceKind, isDraft = false, is
     type,
     binding_id: null,
     binding_role: payload.binding_role,
+    op_rule_id: payload.op_rule_id || null,
     source_kind: sourceKind,
     coverage_status: 'draft',
     is_draft: isDraft,
@@ -4380,10 +5609,16 @@ function bindingPayloadEdge(payload, { idPrefix, sourceKind, isDraft = false, is
 
 function graphIdForBindingState(stateNodeId) {
   if (!stateNodeId) return null
-  const match = visibleStateNodes.value.find((node) =>
+  const candidates = visibleStateNodes.value.filter((node) =>
     String(node.state_node_id || '') === String(stateNodeId),
   )
-  return match?.id || `state_node:${stateNodeId}`
+  const visibleCandidates = candidates.filter(isStateVisibleInX6)
+  const referenceCandidate = visibleCandidates.find((node) =>
+    node.is_reference_instance || node.reference_id || node.draft_entity_type === 'state_node_reference',
+  )
+  const directCandidate = visibleCandidates.find((node) => !isAtomicStateLibraryObject(node))
+  const fallbackCandidate = candidates.find((node) => !isAtomicStateLibraryObject(node)) || candidates[0]
+  return referenceCandidate?.id || directCandidate?.id || fallbackCandidate?.id || `state_node:${stateNodeId}`
 }
 
 function graphIdForBindingActivity(payload) {
@@ -4418,9 +5653,12 @@ function resetImpactRequestState() {
 
 function updateDraftStateLayout(node, pos) {
   if (!node?.is_draft || !node.draft_client_id) return false
+  const entityType = node.draft_entity_type === 'state_node_reference'
+    ? 'state_node_reference'
+    : 'state_node'
   const draftIndex = draftChanges.value.findIndex((change) =>
     change.client_id === node.draft_client_id &&
-    change.entity_type === 'state_node' &&
+    change.entity_type === entityType &&
     change.operation === 'create',
   )
   if (draftIndex < 0) return false
@@ -4437,7 +5675,11 @@ function updateDraftStateLayout(node, pos) {
 
 function updateDraftActivityLayout(node, pos) {
   if (!node?.is_draft || !node.draft_client_id) return false
-  const entityType = node.atomic_activity_id ? 'atomic_activity' : 'activity_node'
+  const entityType = node.draft_entity_type === 'activity_package_atomic_ref'
+    ? 'activity_package_atomic_ref'
+    : node.atomic_activity_id
+    ? 'atomic_activity'
+    : 'activity_node'
   const draftIndex = draftChanges.value.findIndex((change) =>
     change.client_id === node.draft_client_id &&
     change.entity_type === entityType &&
@@ -4445,10 +5687,14 @@ function updateDraftActivityLayout(node, pos) {
   )
   if (draftIndex < 0) return false
   const existing = draftChanges.value[draftIndex]
+  const metadataField = entityType === 'atomic_activity' && existing.payload?.package_id
+    ? 'package_ref_metadata_json'
+    : 'metadata_json'
+  const currentMetadata = existing.payload?.[metadataField] || existing.payload?.metadata_json
   draftChanges.value.splice(draftIndex, 1, {
     ...existing,
     payload: mergeDraftPayload(existing.payload, {
-      metadata_json: metadataWithLayout(existing.payload?.metadata_json, pos),
+      [metadataField]: metadataWithLayout(currentMetadata, pos),
     }),
   })
   invalidateDerivedResults()
@@ -4471,11 +5717,18 @@ function serializeActivityRefForCommit(activityNodeId) {
 }
 
 function serializeAtomicActivityRefForCommit(atomicActivityId) {
-  const clientId = draftAtomicActivityClientId(atomicActivityId)
+  const clientId = atomicActivityDraftClientIdFromRef(atomicActivityId)
   return clientId ? { _draft_ref: clientId } : atomicActivityId
 }
 
 function serializeDraftChangeForCommit(change) {
+  const {
+    draft_kind: _draftKind,
+    draft_batch_id: _draftBatchId,
+    draft_batch_label: _draftBatchLabel,
+    ...publicChange
+  } = change
+  change = publicChange
   if (!change.payload) {
     return change
   }
@@ -4486,6 +5739,32 @@ function serializeDraftChangeForCommit(change) {
         ...change.payload,
         parent_id: serializeStateRefForCommit(change.payload.parent_id),
       },
+    }
+  }
+  if (change.entity_type === 'state_node_reference') {
+    const payload = { ...change.payload }
+    if (Object.prototype.hasOwnProperty.call(payload, 'state_node_id')) {
+      payload.state_node_id = serializeStateRefForCommit(payload.state_node_id)
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'parent_state_node_id')) {
+      payload.parent_state_node_id = serializeStateRefForCommit(payload.parent_state_node_id)
+    }
+    return {
+      ...change,
+      payload,
+    }
+  }
+  if (change.entity_type === 'state_package_fork') {
+    const payload = { ...change.payload }
+    if (payload.added_state?.mode === 'reuse') {
+      payload.added_state = {
+        ...payload.added_state,
+        state_node_id: serializeStateRefForCommit(payload.added_state.state_node_id),
+      }
+    }
+    return {
+      ...change,
+      payload,
     }
   }
   if (change.entity_type === 'activity_node' && Object.prototype.hasOwnProperty.call(change.payload, 'parent_id')) {
@@ -4504,6 +5783,19 @@ function serializeDraftChangeForCommit(change) {
         ...change.payload,
         package_id: serializeActivityRefForCommit(change.payload.package_id),
       },
+    }
+  }
+  if (change.entity_type === 'activity_package_atomic_ref') {
+    const payload = { ...change.payload }
+    if (Object.prototype.hasOwnProperty.call(payload, 'package_id')) {
+      payload.package_id = serializeActivityRefForCommit(payload.package_id)
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'atomic_activity_id')) {
+      payload.atomic_activity_id = serializeAtomicActivityRefForCommit(payload.atomic_activity_id)
+    }
+    return {
+      ...change,
+      payload,
     }
   }
   if (change.entity_type === 'activity_state_binding') {
@@ -4543,8 +5835,33 @@ function serializeDraftChangeForCommit(change) {
   }
 }
 
-function queueDraftChange({ entityType, operation, entityId = null, payload = {}, label = '' }) {
+function queueDraftChange({
+  entityType,
+  operation,
+  entityId = null,
+  payload = {},
+  label = '',
+  draftKind = null,
+  draftBatchId = null,
+  draftBatchLabel = '',
+}) {
   if (!requireEditMode('加入编辑草稿')) return null
+  if (operation === 'delete' && entityId) {
+    const existingDelete = draftChanges.value.find((change) =>
+      change.entity_type === entityType &&
+      change.operation === 'delete' &&
+      String(change.entity_id) === String(entityId),
+    )
+    if (existingDelete) return existingDelete.client_id
+    draftChanges.value = draftChanges.value.filter((change) =>
+      !(
+        change.entity_type === entityType &&
+        change.operation === 'update' &&
+        String(change.entity_id) === String(entityId)
+      ),
+    )
+    clearDraftLayoutForEntity(entityType, entityId)
+  }
   if (operation === 'update' && entityId) {
     const existingIndex = draftChanges.value.findIndex((change) =>
       change.entity_type === entityType &&
@@ -4553,11 +5870,24 @@ function queueDraftChange({ entityType, operation, entityId = null, payload = {}
     )
     if (existingIndex >= 0) {
       const existing = draftChanges.value[existingIndex]
-      draftChanges.value.splice(existingIndex, 1, {
+      const nextDraftKind = existing.draft_kind === 'layout' && draftKind === 'layout' ? 'layout' : null
+      const nextChange = {
         ...existing,
         payload: mergeDraftPayload(existing.payload, payload),
         label: existing.label || label,
-      })
+      }
+      if (nextDraftKind) {
+        nextChange.draft_kind = nextDraftKind
+        if (draftBatchId) nextChange.draft_batch_id = draftBatchId
+        else delete nextChange.draft_batch_id
+        if (draftBatchLabel) nextChange.draft_batch_label = draftBatchLabel
+        else delete nextChange.draft_batch_label
+      } else {
+        delete nextChange.draft_kind
+        delete nextChange.draft_batch_id
+        delete nextChange.draft_batch_label
+      }
+      draftChanges.value.splice(existingIndex, 1, nextChange)
       invalidateDerivedResults()
       return existing.client_id
     }
@@ -4571,18 +5901,284 @@ function queueDraftChange({ entityType, operation, entityId = null, payload = {}
     entity_id: entityId,
     payload,
     label,
+    ...(draftKind ? { draft_kind: draftKind } : {}),
+    ...(draftBatchId ? { draft_batch_id: draftBatchId } : {}),
+    ...(draftBatchLabel ? { draft_batch_label: draftBatchLabel } : {}),
   })
   invalidateDerivedResults()
   return clientId
 }
 
-function upsertDraftUpdate({ entityType, entityId, payload, label }) {
-  queueDraftChange({ entityType, operation: 'update', entityId, payload, label })
+function undoDraftChange(clientId) {
+  const ids = dependentDraftClientIds(clientId)
+  undoDraftChangesByIds(ids)
+}
+
+function undoDraftDisplayChange(change) {
+  const seedIds = new Set(change?.client_ids || [change?.client_id].filter(Boolean))
+  const ids = new Set()
+  for (const clientId of seedIds) {
+    for (const id of dependentDraftClientIds(clientId)) ids.add(id)
+  }
+  undoDraftChangesByIds(ids, seedIds.size > 1 ? `已撤回 ${ids.size} 条布局草稿` : '')
+}
+
+function undoDraftChangesByIds(ids, successMessage = '') {
+  if (!ids.size) return
+  const removedChanges = draftChanges.value.filter((change) => ids.has(change.client_id))
+  draftChanges.value = draftChanges.value.filter((change) => !ids.has(change.client_id))
+  clearDraftLayoutForChanges(removedChanges)
+  clearSelectionsForRemovedDrafts(ids)
+  invalidateDerivedResults()
+  ElMessage.success(successMessage || (ids.size > 1 ? `已撤回 ${ids.size} 条相关草稿` : '已撤回草稿'))
+}
+
+function dependentDraftClientIds(clientId) {
+  const ids = new Set()
+  if (!clientId) return ids
+  ids.add(clientId)
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const change of draftChanges.value) {
+      if (!change?.client_id || ids.has(change.client_id)) continue
+      if (!draftChangeReferencesClientIds(change, ids)) continue
+      ids.add(change.client_id)
+      changed = true
+    }
+  }
+  return ids
+}
+
+function draftChangeReferencesClientIds(change, clientIds) {
+  return draftValueReferencesClientIds(change?.payload, clientIds) ||
+    draftValueReferencesClientIds(change?.entity_id, clientIds)
+}
+
+function draftValueReferencesClientIds(value, clientIds) {
+  if (value === null || value === undefined) return false
+  if (typeof value === 'string') {
+    for (const clientId of clientIds) {
+      if (
+        value === clientId ||
+        value === draftStateId(clientId) ||
+        value === draftActivityId(clientId) ||
+        value === draftAtomicActivityId(clientId)
+      ) {
+        return true
+      }
+    }
+    return false
+  }
+  if (Array.isArray(value)) return value.some((item) => draftValueReferencesClientIds(item, clientIds))
+  if (typeof value === 'object') {
+    if (value._draft_ref && clientIds.has(value._draft_ref)) return true
+    return Object.values(value).some((item) => draftValueReferencesClientIds(item, clientIds))
+  }
+  return false
+}
+
+function clearSelectionsForRemovedDrafts(clientIds) {
+  for (const clientId of clientIds) {
+    if (String(selectedStateId.value || '') === draftStateId(clientId)) selectedStateId.value = null
+    if (String(bindingForm.value.state_node_id || '') === draftStateId(clientId)) bindingForm.value.state_node_id = null
+    const draftActivityGraphIds = [
+      `activity_node:${draftActivityId(clientId)}`,
+      `atomic_activity:${draftAtomicActivityId(clientId)}`,
+    ]
+    if (draftActivityGraphIds.includes(String(selectedActivityGraphId.value || ''))) selectedActivityGraphId.value = null
+    if (draftActivityGraphIds.includes(String(bindingForm.value.activity_graph_id || ''))) bindingForm.value.activity_graph_id = null
+  }
+  if (!selectedStateId.value && !selectedActivityGraphId.value) selectionFocus.value = ''
+  selectedBinding.value = null
+}
+
+function clearDraftLayoutForEntity(entityType, entityId) {
+  const graphIds = []
+  if (entityType === 'state_node') graphIds.push(`state_node:${entityId}`)
+  if (entityType === 'activity_node') graphIds.push(`activity_node:${entityId}`)
+  if (entityType === 'atomic_activity') graphIds.push(`atomic_activity:${entityId}`)
+  if (!graphIds.length) return
+  const nextLayout = { ...layoutDraft.value }
+  const nextContainer = { ...containerDraft.value }
+  for (const graphId of graphIds) {
+    delete nextLayout[graphId]
+    delete nextContainer[`${graphId}:container`]
+  }
+  layoutDraft.value = nextLayout
+  containerDraft.value = nextContainer
+}
+
+function clearDraftLayoutForChanges(changes) {
+  const graphIds = []
+  for (const change of changes) {
+    if (!change || change.draft_kind !== 'layout') continue
+    if (change.entity_type === 'state_node') graphIds.push(`state_node:${change.entity_id}`)
+    if (change.entity_type === 'activity_node') graphIds.push(`activity_node:${change.entity_id}`)
+    if (change.entity_type === 'atomic_activity') graphIds.push(`atomic_activity:${change.entity_id}`)
+    if (change.entity_type === 'state_node_reference') {
+      const ref = stateReferenceById.value.get(Number(change.entity_id))
+      if (ref) graphIds.push(`state_node:${ref.state_node_id}:ref:${ref.id}`)
+    }
+    if (change.entity_type === 'activity_package_atomic_ref') {
+      const ref = atomicRefById.value.get(Number(change.entity_id))
+      if (ref) graphIds.push(`atomic_activity:${ref.atomic_activity_id}`)
+    }
+  }
+  if (!graphIds.length) return
+  const nextLayout = { ...layoutDraft.value }
+  const nextContainer = { ...containerDraft.value }
+  for (const graphId of graphIds) {
+    delete nextLayout[graphId]
+    delete nextContainer[`${graphId}:container`]
+  }
+  layoutDraft.value = nextLayout
+  containerDraft.value = nextContainer
+}
+
+function nextDraftBatch(label = '布局调整') {
+  draftBatchSequence.value += 1
+  return {
+    id: `draft-batch-${draftBatchSequence.value}`,
+    label,
+  }
+}
+
+function withDraftBatch(label, action) {
+  const previousBatch = activeDraftBatch
+  activeDraftBatch = nextDraftBatch(label)
+  try {
+    return action(activeDraftBatch)
+  } finally {
+    activeDraftBatch = previousBatch
+  }
+}
+
+function captureSubmittedLayoutOverlay() {
+  return {
+    layout: { ...layoutDraft.value },
+    container: { ...containerDraft.value },
+  }
+}
+
+function clearSubmittedLayoutOverlay() {
+  submittedLayoutOverlay.value = { layout: {}, container: {} }
+}
+
+function upsertDraftUpdate({ entityType, entityId, payload, label }, {
+  draftKind = null,
+  draftBatchId = null,
+  draftBatchLabel = '',
+} = {}) {
+  const batch = draftKind === 'layout' ? activeDraftBatch : null
+  queueDraftChange({
+    entityType,
+    operation: 'update',
+    entityId,
+    payload,
+    label,
+    draftKind,
+    draftBatchId: draftBatchId || batch?.id || null,
+    draftBatchLabel: draftBatchLabel || batch?.label || '',
+  })
 }
 
 function invalidateDerivedResults() {
   validationResult.value = null
   solverPrecheck.value = null
+}
+
+function handleCreateCommand(command) {
+  if (command === 'state') {
+    openCreateState()
+    return
+  }
+  if (command === 'atomic') {
+    openCreateAtomicActivity()
+  }
+}
+
+async function handleToolbarCommand(command) {
+  if (command === 'auto-arrange') {
+    await autoArrangeCanvas()
+    return
+  }
+  if (command === 'refresh') {
+    refreshWorkspace()
+    return
+  }
+  if (command === 'impact') {
+    loadImpact({ immediate: true })
+  }
+}
+
+function toggleResourcePane() {
+  resourcePaneCollapsed.value = !resourcePaneCollapsed.value
+  refreshCanvasLayout()
+}
+
+function togglePropertiesPane() {
+  propertiesPaneCollapsed.value = !propertiesPaneCollapsed.value
+  refreshCanvasLayout()
+}
+
+function toggleValidationPanel() {
+  validationPanelExpanded.value = !validationPanelExpanded.value
+  refreshCanvasLayout()
+}
+
+function startPaneResize(kind, event) {
+  event.preventDefault()
+  event.stopPropagation()
+  paneResize.value = {
+    kind,
+    pointerX: event.clientX,
+    startWidth: kind === 'resource' ? resourcePaneWidth.value : propertiesPaneWidth.value,
+  }
+  event.currentTarget?.setPointerCapture?.(event.pointerId)
+  document.body.classList.add('network-editor-pane-resizing')
+  window.addEventListener('pointermove', onPaneResizeMove)
+  window.addEventListener('pointerup', endPaneResize)
+}
+
+function onPaneResizeMove(event) {
+  const resize = paneResize.value
+  if (!resize) return
+  const delta = event.clientX - resize.pointerX
+  if (resize.kind === 'resource') {
+    resourcePaneWidth.value = clampPaneWidth(
+      resize.startWidth + delta,
+      RESOURCE_PANE_MIN_WIDTH,
+      RESOURCE_PANE_MAX_WIDTH,
+    )
+  } else {
+    propertiesPaneWidth.value = clampPaneWidth(
+      resize.startWidth - delta,
+      PROPERTIES_PANE_MIN_WIDTH,
+      PROPERTIES_PANE_MAX_WIDTH,
+    )
+  }
+  refreshCanvasLayout()
+}
+
+function endPaneResize() {
+  paneResize.value = null
+  document.body.classList.remove('network-editor-pane-resizing')
+  window.removeEventListener('pointermove', onPaneResizeMove)
+  window.removeEventListener('pointerup', endPaneResize)
+  refreshCanvasLayout()
+}
+
+function clampPaneWidth(width, min, max) {
+  const value = Number(width)
+  if (!Number.isFinite(value)) return min
+  return Math.round(Math.min(max, Math.max(min, value)))
+}
+
+function refreshCanvasLayout() {
+  nextTick(() => {
+    window.dispatchEvent(new Event('resize'))
+  })
 }
 
 function startEditSession() {
@@ -4592,15 +6188,20 @@ function startEditSession() {
   editBaselineRevision.value = graph.value?.revision || null
   draftChanges.value = []
   draftSequence.value = 0
+  draftBatchSequence.value = 0
+  clearSubmittedLayoutOverlay()
   pendingBindingPreview.value = null
   layoutDraft.value = {}
   containerDraft.value = {}
   pendingStateLayout.value = null
+  pendingActivityLayout.value = null
+  pendingAtomicActivityLayout.value = null
   resetCollapsedStateContainers()
   resetCollapsedActivityContainers()
   resetStateActivityCreationSelection()
   batchBindingDialogVisible.value = false
   batchBindingForm.value = { input_state_ids: [], output_state_ids: [], op_rule_id: null }
+  ensureTransitionRulesForState(selectedStateId.value)
   ElMessage.success('已进入编辑模式')
 }
 
@@ -4621,11 +6222,15 @@ async function cancelEditSession() {
   }
   draftChanges.value = []
   draftSequence.value = 0
+  draftBatchSequence.value = 0
+  clearSubmittedLayoutOverlay()
   pendingBindingPreview.value = null
   editBaselineRevision.value = null
   layoutDraft.value = {}
   containerDraft.value = {}
   pendingStateLayout.value = null
+  pendingActivityLayout.value = null
+  pendingAtomicActivityLayout.value = null
   resetCollapsedStateContainers()
   resetCollapsedActivityContainers()
   resetStateActivityCreationSelection()
@@ -4640,6 +6245,12 @@ async function submitDraftChanges() {
   if (!machineTypeId.value || !hasDraftChanges.value) return
   draftSubmitting.value = true
   try {
+    const pureLayoutSubmit = draftChanges.value.length > 0 &&
+      draftChanges.value.every((change) => change?.draft_kind === 'layout')
+    const preserveSubmittedLayout = draftChanges.value.some((change) => change?.draft_kind === 'layout')
+    const preserveSubmittedAutoLayout = preserveSubmittedLayout &&
+      (stateTransitionAutoLayout.value || relationAutoLayout.value)
+    const submittedLayoutSnapshot = preserveSubmittedLayout ? captureSubmittedLayoutOverlay() : null
     const buildCommitPayload = (allowWarnings) => ({
       changes: draftChanges.value.map(serializeDraftChangeForCommit),
       base_revision: editBaselineRevision.value,
@@ -4690,13 +6301,28 @@ async function submitDraftChanges() {
       response = await commitNetworkEditorDraft(machineTypeId.value, buildCommitPayload(true))
     }
     validationResult.value = response.validation || null
+    editBaselineRevision.value = response.revision || null
+    if (pureLayoutSubmit) {
+      if (graph.value) graph.value = { ...graph.value, revision: response.revision || graph.value.revision }
+    } else {
+      await loadAll({ preserveAutoLayout: !!preserveSubmittedAutoLayout })
+    }
+    if (submittedLayoutSnapshot && !pureLayoutSubmit) {
+      submittedLayoutOverlay.value = submittedLayoutSnapshot
+    } else {
+      clearSubmittedLayoutOverlay()
+    }
     draftChanges.value = []
     draftSequence.value = 0
+    draftBatchSequence.value = 0
     pendingBindingPreview.value = null
-    editBaselineRevision.value = response.revision || null
-    layoutDraft.value = {}
-    containerDraft.value = {}
+    if (!pureLayoutSubmit) {
+      layoutDraft.value = {}
+      containerDraft.value = {}
+    }
     pendingStateLayout.value = null
+    pendingActivityLayout.value = null
+    pendingAtomicActivityLayout.value = null
     resetCollapsedStateContainers()
     resetCollapsedActivityContainers()
     resetStateActivityCreationSelection()
@@ -4705,7 +6331,6 @@ async function submitDraftChanges() {
     batchBindingForm.value = { input_state_ids: [], output_state_ids: [], op_rule_id: null }
     editorMode.value = 'preview'
     ElMessage.success(`统一提交成功，已应用 ${response.applied_change_count || 0} 项变更`)
-    await loadAll()
   } catch (error) {
     notifyOperationError('统一提交失败，草稿已保留', error)
   } finally {
@@ -4730,6 +6355,8 @@ async function refreshWorkspace() {
     }
     draftChanges.value = []
     draftSequence.value = 0
+    draftBatchSequence.value = 0
+    clearSubmittedLayoutOverlay()
     pendingBindingPreview.value = null
     editBaselineRevision.value = null
     layoutDraft.value = {}
@@ -4739,6 +6366,10 @@ async function refreshWorkspace() {
     resetCollapsedActivityContainers()
     resetStateActivityCreationSelection()
     editorMode.value = 'preview'
+  } else {
+    clearSubmittedLayoutOverlay()
+    layoutDraft.value = {}
+    containerDraft.value = {}
   }
   await loadAll()
 }
@@ -4778,8 +6409,11 @@ function openEditState(node) {
     code: node.code || '',
     name: node.name || '',
     parent_id: node.parent_id || null,
+    reference_state_node_id: null,
     level: node.level,
     state_kind: node.state_kind || (node.feature_key ? 'atomic' : 'aggregate'),
+    state_object_name: stateObjectNameForNode(node),
+    dimension_template_key: dimensionTemplateKeyForState(node),
     feature_key: node.feature_key || '',
     target_value: node.target_value || '',
     sort_order: node.sort_order || 0,
@@ -4807,8 +6441,47 @@ function childStateLayoutFromGraphState(node) {
   const index = visibleStateNodes.value.findIndex((item) => item.id === node.id)
   const parentPosition = nodePosition(node, Math.max(index, 0), 'state')
   return {
-    x: Math.round(Math.min(Math.max(8, parentPosition.x + 28), canvasWidth - nodeWidth)),
+    x: Math.round(Math.max(8, parentPosition.x + 28)),
     y: Math.round(parentPosition.y + rowHeight),
+  }
+}
+
+function childStateLayoutFromParentId(parentId) {
+  if (!parentId) return null
+  const parentGraphNode = visibleStateNodes.value.find((node) =>
+    String(node.state_node_id || '') === String(parentId),
+  )
+  if (parentGraphNode) return childStateLayoutFromGraphState(parentGraphNode)
+  const parent = stateById.value.get(parentId)
+  if (!parent) return null
+  const parentPosition = metadataLayout(parent)
+  if (!parentPosition) return null
+  return {
+    x: Math.round(Math.max(8, parentPosition.x + 28)),
+    y: Math.round(parentPosition.y + rowHeight),
+  }
+}
+
+function childActivityLayoutFromPackageId(packageId) {
+  if (!packageId) return null
+  const packageGraphNode = visibleActivityNodes.value.find((node) =>
+    String(node.activity_node_id || '') === String(packageId),
+  )
+  if (packageGraphNode) {
+    const index = visibleActivityNodes.value.findIndex((item) => item.id === packageGraphNode.id)
+    const parentPosition = nodePosition(packageGraphNode, Math.max(index, 0), 'activity')
+    return {
+      x: Math.round(Math.max(8, parentPosition.x + 36)),
+      y: Math.round(parentPosition.y + rowHeight),
+    }
+  }
+  const packageNode = activityNodeById.value.get(packageId)
+  if (!packageNode) return null
+  const packagePosition = metadataLayout(packageNode)
+  if (!packagePosition) return null
+  return {
+    x: Math.round(Math.max(8, packagePosition.x + 36)),
+    y: Math.round(packagePosition.y + rowHeight),
   }
 }
 
@@ -4823,6 +6496,31 @@ function openCreateStateInside(node) {
 
 function closeContextMenu() {
   contextMenu.value = null
+  blankCanvasMenu.value = null
+}
+
+function menuPointFromEvent(event) {
+  const canvas = event?.currentTarget?.closest?.('.canvas') ||
+    event?.target?.closest?.('.canvas') ||
+    document.querySelector('[data-testid="network-editor-canvas"]')
+  const rect = canvas?.getBoundingClientRect?.()
+  if (!rect) return { x: 8, y: 8 }
+  return {
+    x: Math.max(8, event.clientX - rect.left + (canvas.scrollLeft || 0)),
+    y: Math.max(8, event.clientY - rect.top + (canvas.scrollTop || 0)),
+  }
+}
+
+function openX6BlankContextMenu(payload) {
+  if (!machineTypeId.value) return
+  contextMenu.value = null
+  const menuPoint = menuPointFromEvent(payload?.event)
+  blankCanvasMenu.value = {
+    canvasX: finiteNumber(payload?.x) ?? defaultStateX + nodeWidth / 2,
+    canvasY: finiteNumber(payload?.y) ?? topPadding,
+    menuX: Math.round(menuPoint.x),
+    menuY: Math.round(menuPoint.y),
+  }
 }
 
 function mergeStateIds(currentIds, nextIds) {
@@ -4874,19 +6572,6 @@ function stageSelectedStatesAsOutput() {
 
 function resetStateActivityCreationSelection() {
   clearStateMultiSelection(true)
-}
-
-function createVirtualActivityFromStateSelection() {
-  if (!requireEditMode('从多选状态创建虚拟活动')) return
-  if (!canCreateActivityFromStateSelection.value) {
-    ElMessage.warning('请先把多选状态设为前置或产出')
-    return
-  }
-  openCreateActivityNode(null, {
-    contextStateIds: stagedInputStateIds.value,
-    outputStateIds: stagedOutputStateIds.value,
-  })
-  resetStateActivityCreationSelection()
 }
 
 function createAtomicActivityFromStateSelection() {
@@ -4983,18 +6668,33 @@ function createContextActivityInside() {
   openCreateActivityInside(node)
 }
 
+async function deleteContextNode() {
+  const menu = contextMenu.value
+  if (!menu?.node) return
+  if (menu.kind === 'state') {
+    selectGraphState(menu.node)
+  } else if (menu.kind === 'activity') {
+    selectGraphActivity(menu.node)
+  }
+  closeContextMenu()
+  await deleteSelected()
+}
+
 function onStateKindChange() {
   if (stateForm.value.state_kind === 'aggregate') {
+    stateForm.value.state_object_name = ''
+    stateForm.value.dimension_template_key = ''
     stateForm.value.feature_key = ''
     stateForm.value.target_value = ''
     return
   }
-  if (stateForm.value.feature_key && !stateForm.value.target_value) {
-    stateForm.value.target_value = defaultTargetValueForFeature(stateForm.value.feature_key)
+  if (stateForm.value.dimension_template_key && !stateForm.value.target_value) {
+    stateForm.value.target_value = defaultTargetValueForFeature(stateForm.value.dimension_template_key)
   }
 }
 
-function onStateFeatureChange(featureKey) {
+function onStateDimensionTemplateChange(featureKey) {
+  stateForm.value.feature_key = ''
   const options = normalizeAllowedValues(stateFeatureDefByKey.value.get(featureKey)?.allowed_values)
   if (!options.length) {
     stateForm.value.target_value = ''
@@ -5015,25 +6715,86 @@ function normalizeStateText(value) {
   return String(value || '').trim().toLowerCase()
 }
 
+function searchableAtomicStates() {
+  return allStateNodes.value.filter((node) =>
+    node.is_active !== false &&
+    node.state_kind !== 'aggregate' &&
+    !!node.feature_key &&
+    !!node.name,
+  )
+}
+
+function queryAtomicStateNameSuggestions(queryString, callback) {
+  if (stateForm.value.state_kind === 'aggregate') {
+    callback([])
+    return
+  }
+  const query = normalizeStateText(queryString)
+  const seen = new Set()
+  const suggestions = searchableAtomicStates()
+    .filter((node) => !query || normalizeStateText(node.name).includes(query))
+    .filter((node) => {
+      const key = normalizeStateText(node.name)
+      if (!key || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+    .slice(0, 20)
+    .map((node) => ({
+      value: node.name,
+      name: node.name,
+      state_node_id: node.id,
+      state_object_name: stateObjectNameForNode(node),
+      dimension_template_key: dimensionTemplateKeyForState(node),
+      target_value: node.target_value || '',
+    }))
+  callback(suggestions)
+}
+
+function onAtomicStateNameSuggestionSelect(item) {
+  if (!item || stateForm.value.state_kind === 'aggregate') return
+  stateForm.value.name = item.name || item.value || ''
+  stateForm.value.state_object_name = item.state_object_name ||
+    inferStateObjectName(stateForm.value.name, item.target_value, [])
+  if (item.dimension_template_key) {
+    stateForm.value.dimension_template_key = item.dimension_template_key
+    stateForm.value.target_value = item.target_value || ''
+  }
+  stateForm.value.feature_key = ''
+  const candidate = stateById.value.get(item.state_node_id)
+  if (candidate && !stateEditId.value) {
+    stateForm.value.reference_state_node_id = candidate.id
+  }
+}
+
+function isExactAtomicStateMatch(node, payload) {
+  if (!node || node.state_kind === 'aggregate' || !node.feature_key) return false
+  return normalizeStateText(node.name) === normalizeStateText(payload.name) &&
+    dimensionTemplateKeyForState(node) === payload.metadata_json?.dimension_template_key &&
+    String(node.target_value || '') === String(payload.target_value || '')
+}
+
+function findExactAtomicStateMatch(payload) {
+  if (payload.state_kind === 'aggregate') return null
+  return allStateNodes.value.find((node) =>
+    node.id !== stateEditId.value &&
+    isExactAtomicStateMatch(node, payload),
+  ) || null
+}
+
 function stateDuplicateReasons(node, payload) {
   const reasons = []
   const code = normalizeStateText(payload.code)
   const name = normalizeStateText(payload.name)
-  const featureKey = normalizeStateText(payload.feature_key)
-  const targetValue = normalizeStateText(payload.target_value)
   const nodeCode = normalizeStateText(node.code)
   const nodeName = normalizeStateText(node.name)
-  const nodeFeatureKey = normalizeStateText(node.feature_key)
-  const nodeTargetValue = normalizeStateText(node.target_value)
   if (code && nodeCode === code) reasons.push('code')
   if (name && nodeName === name) reasons.push('name')
   if (
-    payload.state_kind !== 'aggregate' &&
-    featureKey &&
-    targetValue &&
-    nodeFeatureKey === featureKey &&
-    normalizeStateText(node.operator || 'eq') === normalizeStateText(payload.operator || 'eq') &&
-    nodeTargetValue === targetValue
+    payload.feature_key &&
+    node.feature_key === payload.feature_key &&
+    String(node.target_value || '') === String(payload.target_value || '')
   ) {
     reasons.push('fact')
   }
@@ -5046,24 +6807,31 @@ function stateDuplicateReasons(node, payload) {
 function findDuplicateStateCandidates(payload) {
   const parentId = payload.parent_id || null
   const descendantsOfNewParent = new Set(parentId ? stateDescendantNodeIds(parentId, { activeOnly: false }) : [])
-  return stateNodes.value
+  const sortValue = (id) => {
+    const numeric = Number(id)
+    return Number.isFinite(numeric) ? numeric : Number.MAX_SAFE_INTEGER
+  }
+  return allStateNodes.value
     .filter((node) => node.id !== stateEditId.value && node.id !== parentId && !descendantsOfNewParent.has(node.id))
     .map((node) => {
       const reasons = stateDuplicateReasons(node, payload)
       if (!reasons.length) return null
       const score = reasons.reduce((value, reason) => {
         if (reason === 'code') return value + 100
-        if (reason === 'fact') return value + 80
         if (reason === 'name') return value + 60
         return value + 10
       }, 0)
       return { ...node, duplicate_reasons: reasons, duplicate_score: score }
     })
     .filter(Boolean)
-    .sort((a, b) => b.duplicate_score - a.duplicate_score || Number(a.id || 0) - Number(b.id || 0))
+    .sort((a, b) =>
+      b.duplicate_score - a.duplicate_score ||
+      sortValue(a.id) - sortValue(b.id) ||
+      String(a.id || '').localeCompare(String(b.id || '')),
+    )
 }
 
-function isCertainDuplicateStateCandidate(candidate) {
+function isBlockingDuplicateStateCandidate(candidate) {
   return (candidate?.duplicate_reasons || []).some((reason) =>
     ['code', 'name', 'fact'].includes(reason),
   )
@@ -5073,32 +6841,124 @@ function duplicateCandidateReasonLabel(candidate) {
   const labels = {
     code: '编码完全相同',
     name: '名称完全相同',
-    fact: '原子状态特征和值完全相同',
+    fact: '状态事实完全相同',
     similar_name: '名称相似',
+    exact_state_object: '状态名称/维度/目标值完全一致',
   }
   return (candidate.duplicate_reasons || []).map((reason) => labels[reason] || reason).join(' / ')
+}
+
+function duplicateStateRejectMessage(candidate) {
+  const reasons = candidate?.duplicate_reasons || []
+  const reasonLabel = reasons.includes('code') && reasons.includes('name')
+    ? '同名/同编码'
+    : reasons.includes('code')
+    ? '同编码'
+    : reasons.includes('fact')
+    ? '同事实'
+    : '同名'
+  const label = [candidate?.code, candidate?.name].filter(Boolean).join(' ') || nodeLabel(candidate)
+  return `已存在${reasonLabel}状态「${label}」，请引用「${label}」状态。`
+}
+
+function rejectBlockingDuplicateState(candidate) {
+  if (candidate?.id && stateById.value.has(candidate.id)) {
+    stateForm.value.reference_state_node_id = candidate.id
+  }
+  ElMessage.warning(duplicateStateRejectMessage(candidate))
+  duplicateStateDialogVisible.value = false
+  duplicateStateCandidates.value = []
+  duplicateStateSelectedId.value = null
+  pendingStatePayload.value = null
+}
+
+function atomicActivityDuplicateReasons(activity, payload) {
+  const reasons = []
+  const code = normalizeStateText(payload.code)
+  const name = normalizeStateText(payload.name)
+  const activityCode = normalizeStateText(activity.code)
+  const activityName = normalizeStateText(activity.name)
+  if (code && activityCode === code) reasons.push('code')
+  if (name && activityName === name) reasons.push('name')
+  return reasons
+}
+
+function findBlockingDuplicateAtomicActivity(payload) {
+  return atomicActivityReferenceOptions.value
+    .map((activity) => {
+      const reasons = atomicActivityDuplicateReasons(activity, payload)
+      if (!reasons.length) return null
+      const score = reasons.reduce((value, reason) => {
+        if (reason === 'code') return value + 100
+        if (reason === 'name') return value + 60
+        return value
+      }, 0)
+      return { ...activity, duplicate_reasons: reasons, duplicate_score: score }
+    })
+    .filter(Boolean)
+    .sort((a, b) =>
+      b.duplicate_score - a.duplicate_score ||
+      String(a.id || '').localeCompare(String(b.id || '')),
+    )[0] || null
+}
+
+function atomicActivityByReferenceId(atomicActivityId) {
+  return atomicActivityReferenceOptions.value.find((item) =>
+    String(item.id || '') === String(atomicActivityId || ''),
+  ) || null
+}
+
+function atomicActivityRejectMessage(candidate) {
+  const reasons = candidate?.duplicate_reasons || []
+  const reasonLabel = reasons.includes('code') && reasons.includes('name')
+    ? '同名/同编码'
+    : reasons.includes('code')
+    ? '同编码'
+    : '同名'
+  const label = [candidate?.code, candidate?.name].filter(Boolean).join(' ') || nodeLabel(candidate)
+  return `已存在${reasonLabel}原子活动「${label}」，请引用该原子活动到活动包。`
+}
+
+function handleBlockingDuplicateAtomicActivity(candidate) {
+  atomicForm.value.reference_atomic_activity_id = candidate.id
+  ElMessage.warning(atomicActivityRejectMessage(candidate))
+}
+
+function activityPackageHasAtomicRef(packageId, atomicActivityId) {
+  if (!packageId || !atomicActivityId) return false
+  const committed = (atomicRefsByPackage.value.get(packageId) || []).some((ref) =>
+    ref.is_active !== false &&
+    String(ref.atomic_activity_id || '') === String(atomicActivityId),
+  )
+  if (committed) return true
+  return draftChanges.value.some((change) =>
+    change.entity_type === 'activity_package_atomic_ref' &&
+    change.operation === 'create' &&
+    String(change.payload?.package_id || '') === String(packageId) &&
+    String(change.payload?.atomic_activity_id || '') === String(atomicActivityId),
+  )
 }
 
 function stateHasMembership(stateId, parentId) {
   if (!stateId || !parentId) return false
   const state = stateById.value.get(stateId)
-  if (state?.parent_id === parentId) return true
+  if (sameStateId(state?.parent_id, parentId)) return true
   if (stateReferences.value.some((ref) =>
     ref.is_active !== false &&
-    ref.state_node_id === stateId &&
-    ref.parent_state_node_id === parentId,
+    sameStateId(ref.state_node_id, stateId) &&
+    sameStateId(ref.parent_state_node_id, parentId),
   )) {
     return true
   }
   return draftChanges.value.some((change) =>
     change.entity_type === 'state_node_reference' &&
     change.operation === 'create' &&
-    Number(change.payload?.state_node_id) === Number(stateId) &&
-    Number(change.payload?.parent_state_node_id) === Number(parentId),
+    sameStateId(change.payload?.state_node_id, stateId) &&
+    sameStateId(change.payload?.parent_state_node_id, parentId),
   )
 }
 
-function queueStatePayload(payload) {
+function queueStatePayload(payload, options = {}) {
   const { machine_type_id: _stateMachineTypeId, ...stateUpdatePayload } = payload
   const editingStateId = stateEditId.value
   const clientId = queueDraftChange({
@@ -5112,14 +6972,15 @@ function queueStatePayload(payload) {
   if (editingStateId) {
     selectedStateId.value = editingStateId
     selectionFocus.value = 'state'
-  } else if (clientId) {
+  } else if (clientId && options.select !== false) {
     selectedStateId.value = draftStateId(clientId)
     selectionFocus.value = 'state'
     expandStateContainerForDraftChild(payload.parent_id)
   }
   ElMessage.success(stateEditId.value ? '状态更新已加入草稿' : '状态创建已加入草稿')
   stateEditId.value = null
-  pendingStateLayout.value = null
+  if (options.clearPendingLayout !== false) pendingStateLayout.value = null
+  return clientId
 }
 
 function openDuplicateStateDialog(payload, candidates) {
@@ -5246,6 +7107,7 @@ function queueStateReuseReference(candidate, payload) {
     ElMessage.success('该状态已在当前状态包中，无需重复加入')
     return
   }
+  const referenceLayout = pendingStateLayout.value || childStateLayoutFromParentId(parentId)
   queueDraftChange({
     entityType: 'state_node_reference',
     operation: 'create',
@@ -5260,7 +7122,7 @@ function queueStateReuseReference(candidate, payload) {
           requested_name: payload.name,
           matched_reasons: candidate.duplicate_reasons || [],
         },
-        ...(pendingStateLayout.value ? { _network_editor_layout: pendingStateLayout.value } : {}),
+        ...(referenceLayout ? { _network_editor_layout: referenceLayout } : {}),
       },
     },
     label: `复用状态：${nodeLabel(candidate)} → ${nodeLabel(stateById.value.get(parentId))}`,
@@ -5273,7 +7135,135 @@ function queueStateReuseReference(candidate, payload) {
   ElMessage.success('状态复用已加入草稿')
 }
 
+function isAtomicStatePayload(payload) {
+  return !!payload && payload.state_kind !== 'aggregate' && !!payload.feature_key && payload.target_value != null
+}
+
+function atomicLibraryStatePayload(payload) {
+  return {
+    ...payload,
+    parent_id: null,
+    level: 1,
+    metadata_json: metadataWithoutLayout(payload.metadata_json),
+  }
+}
+
+function statePayloadLayout(payload) {
+  return payload?.metadata_json?._network_editor_layout || null
+}
+
+function atomicStateFactMatches(node, payload) {
+  return isAtomicStateNode(node) &&
+    String(node.feature_key || '') === String(payload.feature_key || '') &&
+    stateFactOperatorKey(node.operator) === stateFactOperatorKey(payload.operator) &&
+    stateFactValueKey(node.target_value) === stateFactValueKey(payload.target_value)
+}
+
+function findAtomicStateFactMatch(payload) {
+  if (!isAtomicStatePayload(payload)) return null
+  return allStateNodes.value.find((node) => atomicStateFactMatches(node, payload)) || null
+}
+
+function oppositeTargetValueForPayload(payload) {
+  const templateKey = payload?.metadata_json?.dimension_template_key
+  const values = normalizeAllowedValues(stateFeatureDefByKey.value.get(templateKey)?.allowed_values)
+  const current = stateFactValueKey(payload?.target_value)
+  if (values.length !== 2 || !current) return null
+  return values.find((value) => stateFactValueKey(value) !== current) || null
+}
+
+function oppositeAtomicStatePayload(payload) {
+  const oppositeValue = oppositeTargetValueForPayload(payload)
+  const stateObjectName = payload?.metadata_json?.state_object_name
+  if (!oppositeValue || !stateObjectName) return null
+  const baseMetadata = metadataWithoutLayout(payload.metadata_json) || {}
+  return {
+    ...atomicLibraryStatePayload(payload),
+    code: null,
+    name: `${stateObjectName} ${oppositeValue}`,
+    target_value: oppositeValue,
+    sort_order: Number(payload.sort_order || 0) + 1,
+    metadata_json: {
+      ...baseMetadata,
+      _network_editor_auto_opposite: {
+        source_target_value: payload.target_value,
+        source_state_name: payload.name,
+      },
+    },
+  }
+}
+
+function queueStateReferenceDraft({ stateNodeId, parentId, sortOrder = 0, layout = null, source = 'atomic_state_library_create' }) {
+  if (!stateNodeId || !parentId) return null
+  if (!isDraftStateId(stateNodeId) && stateHasMembership(stateNodeId, parentId)) return null
+  const clientId = queueDraftChange({
+    entityType: 'state_node_reference',
+    operation: 'create',
+    payload: {
+      state_node_id: stateNodeId,
+      parent_state_node_id: parentId,
+      sort_order: sortOrder || 0,
+      is_active: true,
+      metadata_json: {
+        _network_editor_reuse: { source },
+        ...(layout ? { _network_editor_layout: layout } : {}),
+      },
+    },
+    label: `状态包成员引用：${stateNodeId}`,
+  })
+  selectedStateId.value = stateNodeId
+  selectionFocus.value = 'state'
+  expandStateContainerForDraftChild(parentId)
+  return clientId
+}
+
+function queueOppositeAtomicStateIfNeeded(payload) {
+  const oppositePayload = oppositeAtomicStatePayload(payload)
+  if (!oppositePayload || findAtomicStateFactMatch(oppositePayload)) return null
+  return queueDraftChange({
+    entityType: 'state_node',
+    operation: 'create',
+    payload: oppositePayload,
+    label: `自动补齐相反状态：${oppositePayload.name}`,
+  })
+}
+
+function queueAtomicStateLibraryCreate(payload, { allowPackageDecision = true } = {}) {
+  const parentId = payload.parent_id || null
+  if (parentId && allowPackageDecision && statePackageChangeNeedsDecision(parentId)) {
+    openPackageChangeDialog({
+      mode: 'create',
+      sourceStateNodeId: parentId,
+      payload,
+    })
+    return
+  }
+  const referenceLayout = statePayloadLayout(payload) || pendingStateLayout.value || childStateLayoutFromParentId(parentId)
+  const libraryPayload = atomicLibraryStatePayload(payload)
+  const clientId = queueStatePayload(libraryPayload, {
+    select: !parentId,
+    clearPendingLayout: false,
+  })
+  const stateNodeId = clientId ? draftStateId(clientId) : null
+  if (parentId && stateNodeId) {
+    queueStateReferenceDraft({
+      stateNodeId,
+      parentId,
+      sortOrder: payload.sort_order || 0,
+      layout: referenceLayout,
+    })
+  }
+  queueOppositeAtomicStateIfNeeded(payload)
+  stateDrawerVisible.value = false
+  stateEditId.value = null
+  pendingStateLayout.value = null
+}
+
 function handleStateCreatePayload(payload) {
+  if (!stateEditId.value && isAtomicStatePayload(payload)) {
+    queueAtomicStateLibraryCreate(payload)
+    return
+  }
   if (!stateEditId.value && statePackageChangeNeedsDecision(payload.parent_id)) {
     openPackageChangeDialog({
       mode: 'create',
@@ -5337,6 +7327,8 @@ function confirmPackageChangeDecision() {
         queueStateReferenceRemoval(change.row)
       } else if (change.mode === 'reuse') {
         queueStateReuseReference(change.candidate, change.payload)
+      } else if (isAtomicStatePayload(change.payload)) {
+        queueAtomicStateLibraryCreate(change.payload, { allowPackageDecision: false })
       } else {
         queueStatePayload(change.payload)
       }
@@ -5422,22 +7414,50 @@ async function saveQuickState() {
   const name = stateForm.value.name.trim()
   if (!name) return ElMessage.warning('请填写状态名称')
   const isAtomic = stateForm.value.state_kind !== 'aggregate'
-  const featureKey = stateForm.value.feature_key.trim()
+  const templateKey = stateForm.value.dimension_template_key?.trim()
+  const templateDef = templateKey ? stateFeatureDefByKey.value.get(templateKey) : null
+  const templateValues = normalizeAllowedValues(templateDef?.allowed_values)
   const targetValue = stateForm.value.target_value.trim()
+  const stateObjectName = isAtomic
+    ? (stateForm.value.state_object_name?.trim() || inferStateObjectName(name, targetValue, templateValues))
+    : ''
+  const featureKey = isAtomic ? buildConcreteStateFeatureKey(templateKey, stateObjectName) : ''
+  if (isAtomic && !templateKey) {
+    return ElMessage.warning('请先选择状态维度模板')
+  }
+  if (isAtomic && (!templateDef || !isDimensionTemplateFeatureDef(templateDef))) {
+    return ElMessage.warning('请选择当前机型已配置的状态维度模板')
+  }
+  if (isAtomic && templateValues.length !== 2) {
+    return ElMessage.warning('状态维度模板需要配置两个允许值')
+  }
+  if (isAtomic && !stateObjectName) {
+    return ElMessage.warning('原子状态需要填写状态对象')
+  }
   if (isAtomic && !featureKey) {
     return ElMessage.warning('原子状态需要选择状态维度')
   }
   if (isAtomic && !targetValue) {
     return ElMessage.warning('原子状态需要选择目标值')
   }
-  if (isAtomic && stateTargetOptions.value.length && !stateTargetOptions.value.includes(targetValue)) {
+  if (isAtomic && !templateValues.includes(targetValue)) {
     return ElMessage.warning('目标值必须从所选状态维度的允许值中选择')
   }
   savingState.value = true
   try {
-    const metadata = !stateEditId.value && pendingStateLayout.value
-      ? metadataWithLayout(null, pendingStateLayout.value)
+    const baseMetadata = stateEditId.value
+      ? { ...(stateById.value.get(stateEditId.value)?.metadata_json || {}) }
       : null
+    const atomicMetadata = isAtomic
+        ? {
+            ...(baseMetadata || {}),
+            dimension_template_key: templateKey,
+            state_object_name: stateObjectName,
+          }
+      : baseMetadata
+    const metadata = !stateEditId.value && pendingStateLayout.value
+      ? metadataWithLayout(atomicMetadata, pendingStateLayout.value)
+      : atomicMetadata
     const payload = {
       machine_type_id: machineTypeId.value,
       parent_id: stateForm.value.parent_id || null,
@@ -5450,7 +7470,7 @@ async function saveQuickState() {
       state_kind: isAtomic ? 'atomic' : 'aggregate',
       sort_order: stateForm.value.sort_order,
       is_active: stateForm.value.is_active,
-      metadata_json: metadata,
+      metadata_json: metadata || null,
     }
     const parentMoveWarning = sharedPackageParentMoveWarning(payload)
     if (parentMoveWarning) {
@@ -5458,11 +7478,22 @@ async function saveQuickState() {
       return
     }
     if (!stateEditId.value) {
+      const exactMatch = findExactAtomicStateMatch(payload)
+      if (exactMatch) {
+        handleStateReuse(
+          {
+            ...exactMatch,
+            duplicate_reasons: ['exact_state_object'],
+          },
+          payload,
+        )
+        return
+      }
       const duplicateCandidates = findDuplicateStateCandidates(payload)
       if (duplicateCandidates.length) {
-        if (duplicateCandidates.length === 1 && isCertainDuplicateStateCandidate(duplicateCandidates[0])) {
-          ElMessage.info(`已发现相同状态，将复用：${nodeLabel(duplicateCandidates[0])}`)
-          handleStateReuse(duplicateCandidates[0], payload)
+        const blockingDuplicate = duplicateCandidates.find(isBlockingDuplicateStateCandidate)
+        if (blockingDuplicate) {
+          rejectBlockingDuplicateState(blockingDuplicate)
           return
         }
         openDuplicateStateDialog(payload, duplicateCandidates)
@@ -5518,7 +7549,14 @@ function statePackageAtCanvasPoint(point) {
 
 function newStateLayoutFromCanvasPoint(point) {
   return {
-    x: Math.round(Math.min(Math.max(8, point.x - nodeWidth / 2), canvasWidth - nodeWidth)),
+    x: Math.round(Math.max(8, point.x - nodeWidth / 2)),
+    y: Math.round(Math.max(8, point.y - 28)),
+  }
+}
+
+function newActivityLayoutFromCanvasPoint(point) {
+  return {
+    x: Math.round(Math.max(8, point.x - nodeWidth / 2)),
     y: Math.round(Math.max(8, point.y - 28)),
   }
 }
@@ -5539,13 +7577,51 @@ function handleCanvasBlankDoubleClick(event) {
 function handleX6SelectState(payload) {
   const node = payload?.node || payload
   if (!node) return
+  if (payload?.event?.type === 'contextmenu') {
+    openX6StateContextMenu(node, payload.event)
+    return
+  }
   selectGraphState(node, payload?.event || null)
 }
 
 function handleX6SelectActivity(payload) {
   const node = payload?.node || payload
   if (!node) return
+  if (payload?.event?.type === 'contextmenu') {
+    openX6ActivityContextMenu(node, payload.event)
+    return
+  }
   selectGraphActivity(node)
+}
+
+function handleX6NodeHoverChange(payload) {
+  if (!payload?.graphId) {
+    hoveredFlowGraphId.value = null
+    return
+  }
+  hoveredFlowGraphId.value = String(payload.graphId)
+}
+
+function openX6StateContextMenu(node, event) {
+  selectGraphState(node, event)
+  const point = menuPointFromEvent(event)
+  contextMenu.value = {
+    kind: 'state',
+    node,
+    x: Math.round(point.x),
+    y: Math.round(point.y),
+  }
+}
+
+function openX6ActivityContextMenu(node, event) {
+  selectGraphActivity(node)
+  const point = menuPointFromEvent(event)
+  contextMenu.value = {
+    kind: 'activity',
+    node,
+    x: Math.round(point.x),
+    y: Math.round(point.y),
+  }
 }
 
 function handleX6EditActivity(node) {
@@ -5561,30 +7637,246 @@ function handleX6EditActivity(node) {
   }
 }
 
+function handleX6ProxyEdgeClick(payload) {
+  const edge = payload?.edge
+  if (!edge?.isCollapsedProxy) return
+  const preferred = edge.proxyTargetId || edge.target_id || edge.proxySourceId || edge.source_id
+  selectProxyEndpoint(preferred, payload?.event || null)
+}
+
+async function handleX6ProxyEdgeDoubleClick(payload) {
+  const edge = payload?.edge
+  if (!edge?.isCollapsedProxy) return
+  const endpoints = [edge.proxySourceId || edge.source_id, edge.proxyTargetId || edge.target_id].filter(Boolean)
+  for (const endpoint of endpoints) {
+    await expandProxyEndpoint(endpoint)
+  }
+}
+
+function selectProxyEndpoint(graphId, event = null) {
+  const id = String(graphId || '')
+  if (id.startsWith('state_node:')) {
+    const node = graphStateById.value.get(graphIdNumber(id))
+    if (node) selectGraphState(node, event)
+    return
+  }
+  const activity = graphActivityById.value.get(id)
+  if (activity) selectGraphActivity(activity)
+}
+
+async function expandProxyEndpoint(graphId) {
+  const id = String(graphId || '')
+  if (id.startsWith('state_node:')) {
+    const node = graphStateById.value.get(graphIdNumber(id))
+    if (node && !isGraphStateExpanded(node)) await toggleGraphStateExpansion(node)
+    return
+  }
+  const activity = graphActivityById.value.get(id)
+  if (activity && activity.activity_type === 'virtual' && !isGraphActivityExpanded(activity)) {
+    await toggleGraphActivityExpansion(activity)
+  }
+}
+
 function handleX6LayoutChange(payload) {
-  if (!canMutate.value || !payload?.node || !payload?.position) return
-  const position = {
-    x: Math.round(payload.position.x),
-    y: Math.round(payload.position.y),
+  if (!canMutate.value) return
+  const updates = normalizeLayoutChangeUpdates(payload)
+  if (!updates.length) return
+  stateTransitionAutoLayout.value = null
+  relationAutoLayout.value = null
+  const nextLayout = { ...layoutDraft.value }
+  for (const update of updates) {
+    nextLayout[layoutKey(update.node)] = update.position
   }
-  layoutDraft.value = {
-    ...layoutDraft.value,
-    [layoutKey(payload.node)]: position,
+  layoutDraft.value = nextLayout
+
+  let changedCount = 0
+  withDraftBatch('布局调整', () => {
+    for (const update of updates) {
+      if (applyNodeLayoutChange(update.node, update.kind, update.position, { silent: true })) {
+        changedCount += 1
+      }
+    }
+  })
+  if (changedCount > 1) {
+    ElMessage.success(`布局调整已加入草稿：${changedCount} 个节点`)
+  } else if (changedCount === 1) {
+    ElMessage.success('布局调整已加入草稿')
+  } else {
+    ElMessage.warning('当前节点暂时不能保存布局')
   }
-  queueNodeLayoutChange(payload.node, payload.kind, position)
+}
+
+function normalizeLayoutChangeUpdates(payload) {
+  const rawUpdates = Array.isArray(payload?.updates) && payload.updates.length
+    ? payload.updates
+    : [payload]
+  const updates = rawUpdates
+    .filter((item) => item?.node && item?.kind && item?.position)
+    .map((item) => ({
+      node: item.node,
+      kind: item.kind,
+      position: {
+        x: Math.round(item.position.x),
+        y: Math.round(item.position.y),
+      },
+    }))
+  return appendHiddenDescendantLayoutUpdates(payload, updates)
+}
+
+function appendHiddenDescendantLayoutUpdates(payload, updates) {
+  const dx = finiteNumber(payload?.delta?.x)
+  const dy = finiteNumber(payload?.delta?.y)
+  if (!payload?.node || !payload?.kind || dx === null || dy === null) return updates
+  if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return updates
+
+  const seen = new Set(updates.map((update) => layoutKey(update.node)).filter(Boolean))
+  const result = [...updates]
+  for (const node of layoutMoveDescendants(payload.node, payload.kind)) {
+    const key = layoutKey(node)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    const index = payload.kind === 'state'
+      ? visibleStateNodes.value.findIndex((item) => item.id === node.id)
+      : visibleActivityNodes.value.findIndex((item) => item.id === node.id)
+    const current = nodePosition(node, Math.max(index, 0), payload.kind)
+    result.push({
+      node,
+      kind: payload.kind,
+      position: {
+        x: Math.round(Math.max(0, current.x + dx)),
+        y: Math.round(Math.max(8, current.y + dy)),
+      },
+    })
+  }
+  return result
+}
+
+function layoutMoveDescendants(node, kind) {
+  if (kind === 'state') return stateLayoutMoveDescendants(node)
+  if (kind === 'activity') return activityLayoutMoveDescendants(node)
+  return []
+}
+
+function stateLayoutMoveDescendants(node) {
+  const stateNodeId = node?.state_node_id || graphIdNumber(node?.id)
+  if (!stateNodeId) return []
+  const descendants = new Map()
+  for (const candidate of visibleStateNodes.value) {
+    if (candidate.id !== node.id && statePathContains(candidate, stateNodeId)) {
+      descendants.set(layoutKey(candidate), candidate)
+    }
+  }
+  for (const stateId of stateDescendantNodeIds(stateNodeId, { activeOnly: false })) {
+    const fallback = fallbackStateGraphNode(`state_node:${stateId}`)
+    if (fallback && fallback.id !== node.id) descendants.set(layoutKey(fallback), fallback)
+  }
+  return [...descendants.values()]
+}
+
+function activityLayoutMoveDescendants(node) {
+  const activityNodeId = node?.activity_node_id || graphIdNumber(node?.id)
+  if (!activityNodeId) return []
+  const descendants = new Map()
+  for (const candidate of visibleActivityNodes.value) {
+    if (candidate.id !== node.id && activityPathContains(candidate, activityNodeId)) {
+      descendants.set(layoutKey(candidate), candidate)
+    }
+  }
+  for (const activityId of activityDescendantNodeIds(activityNodeId)) {
+    if (String(activityId) === String(activityNodeId)) continue
+    const fallback = fallbackActivityGraphNode(`activity_node:${activityId}`)
+    if (fallback && fallback.id !== node.id) descendants.set(layoutKey(fallback), fallback)
+  }
+  for (const packageId of activityDescendantNodeIds(activityNodeId)) {
+    for (const ref of atomicRefsByPackage.value.get(packageId) || []) {
+      if (ref.is_active === false || !ref.atomic_activity_id) continue
+      const fallback = activityPackageAtomicRefGraphNode(ref, packageId)
+      if (fallback && fallback.id !== node.id) descendants.set(layoutKey(fallback), fallback)
+    }
+  }
+  return [...descendants.values()]
+}
+
+function activityPackageAtomicRefGraphNode(ref, packageId) {
+  const atomic = atomicActivities.value.find((item) => String(item.id) === String(ref.atomic_activity_id))
+  if (!atomic) return null
+  const packageNode = activityNodeById.value.get(packageId)
+  const packagePath = Array.isArray(packageNode?.path_ids) ? packageNode.path_ids : []
+  const flattenedPath = packagePath.some((item) => Array.isArray(item))
+    ? (packagePath[0] || [])
+    : packagePath
+  const parentActivityIds = [
+    ...flattenedPath,
+    ...(String(flattenedPath[flattenedPath.length - 1] || '') === String(packageId) ? [] : [packageId]),
+  ]
+  return {
+    ...atomic,
+    id: `atomic_activity:${ref.atomic_activity_id}`,
+    activity_node_id: null,
+    atomic_activity_id: ref.atomic_activity_id,
+    parent_id: null,
+    parent_graph_id: `activity_node:${packageId}`,
+    parent_activity_node_ids: parentActivityIds,
+    child_activity_node_ids: [],
+    level: Number(packageNode?.level || 2) + 1,
+    activity_type: 'executable',
+    solver_participation: true,
+    path_ids: [[...parentActivityIds, ref.atomic_activity_id]],
+    metadata_json: ref.metadata_json || atomic.metadata_json || {},
+    atomic_metadata_json: atomic.metadata_json || {},
+    reference_id: ref.id,
+    reference_ids: [ref.id],
+    package_ref_ids: [ref.id],
+  }
+}
+
+function atomicActivityOptionGraphNode(atomic) {
+  if (!atomic?.id) return null
+  const graphId = `atomic_activity:${atomic.id}`
+  const projected = visibleActivityNodes.value.find((node) =>
+    String(node.id || '') === graphId ||
+    String(node.atomic_activity_id || '') === String(atomic.id),
+  )
+  if (projected) return projected
+
+  let referenced = null
+  for (const [packageId, refs] of atomicRefsByPackage.value.entries()) {
+    const ref = (refs || []).find((item) =>
+      item.is_active !== false &&
+      String(item.atomic_activity_id || '') === String(atomic.id),
+    )
+    if (!ref) continue
+    referenced = activityPackageAtomicRefGraphNode(ref, packageId)
+    if (referenced) break
+  }
+  if (referenced) return referenced
+
+  return {
+    ...atomic,
+    id: graphId,
+    activity_node_id: null,
+    atomic_activity_id: atomic.id,
+    parent_id: null,
+    parent_graph_id: null,
+    parent_activity_node_ids: [],
+    child_activity_node_ids: [],
+    package_ref_ids: [],
+    reference_id: null,
+    reference_ids: [],
+    level: 3,
+    activity_type: 'executable',
+    solver_participation: true,
+    path_ids: [[atomic.id]],
+    metadata_json: atomic.metadata_json || {},
+    atomic_metadata_json: atomic.metadata_json || {},
+  }
 }
 
 function handleX6ContainerResize(payload) {
   if (!canMutate.value || !payload?.node || !payload?.size) return
-  const size = {
-    width: Math.round(payload.size.width),
-    height: Math.round(payload.size.height),
-  }
-  containerDraft.value = {
-    ...containerDraft.value,
-    [containerKey(payload.node)]: size,
-  }
-  queueContainerResizeChange(payload.node, payload.kind, size)
+  withDraftBatch('容器尺寸调整', () => {
+    queueContainerResizeChange(payload.node, payload.kind, payload.size)
+  })
 }
 
 function handleX6BlankDoubleClick(payload) {
@@ -5612,6 +7904,36 @@ function handleX6BlankDoubleClick(payload) {
   openCreateState(parent || null, { layout: newStateLayoutFromCanvasPoint(point) })
 }
 
+function blankCanvasPoint() {
+  return {
+    x: finiteNumber(blankCanvasMenu.value?.canvasX) ?? defaultStateX + nodeWidth / 2,
+    y: finiteNumber(blankCanvasMenu.value?.canvasY) ?? topPadding,
+  }
+}
+
+function createBlankState() {
+  if (!requireEditMode('画布右键添加状态')) return
+  const point = blankCanvasPoint()
+  const container = statePackageAtCanvasPoint(point)
+  const parent = container ? stateById.value.get(container.stateNodeId) : selectedAggregateState()
+  if (parent) {
+    selectedStateId.value = parent.id
+    selectionFocus.value = 'state'
+  }
+  closeContextMenu()
+  openCreateState(parent || null, { layout: newStateLayoutFromCanvasPoint(point) })
+}
+
+function createBlankAtomicActivity() {
+  if (!requireEditMode('画布右键添加原子活动')) return
+  const point = blankCanvasPoint()
+  closeContextMenu()
+  openCreateAtomicActivity(null, {
+    layout: newActivityLayoutFromCanvasPoint(point),
+    useSelectedPackage: false,
+  })
+}
+
 function handleStatePackageContainerDoubleClick(container, event) {
   if (!machineTypeId.value) return
   if (!requireEditMode('状态包容器内新建状态')) return
@@ -5627,15 +7949,14 @@ function handleStatePackageContainerDoubleClick(container, event) {
 function openCreateActivityNode(parent = null, options = {}) {
   if (!requireEditMode('新建虚拟活动')) return
   activityEditId.value = null
-  const selectedParent = parent || selectedLevelOneActivity()
+  pendingActivityLayout.value = options.layout || null
+  const selectedParent = parent || (options.useSelectedParent === false ? null : selectedLevelOneActivity())
   const selectedParentId = selectedParent?.id || null
   activityForm.value = {
     ...defaultActivityForm(selectedParent),
     sort_order: nextSortOrder(allActivityNodes.value.filter((node) =>
       String(node.parent_id || '') === String(selectedParentId || ''),
     )),
-    context_state_ids: normalisedStateIds(options.contextStateIds),
-    output_state_ids: normalisedStateIds(options.outputStateIds),
   }
   if (activityForm.value.level === 2 && !activityForm.value.parent_id && activityParentOptions.value.length) {
     activityForm.value.parent_id = activityParentOptions.value[0].id
@@ -5647,14 +7968,14 @@ function openCreateActivityChild(node) {
   if (!requireEditMode('新建子活动')) return
   if (!node || node.resource_type === 'atomic_activity') return
   if (node.level === 1) {
-    openCreateActivityNode(activityNodeById.value.get(node.id) || node)
+    ElMessage.info('虚拟活动包不再从网络编辑器中新建；请直接添加原子活动或在活动能力页维护活动包。')
     return
   }
   if (node.level === 2) {
     openCreateAtomicActivity(node)
     return
   }
-  ElMessage.warning('旧版可执行活动不能继续添加内部活动')
+  ElMessage.warning('旧执行活动不能继续添加内部活动')
 }
 
 function openCreateActivityInside(node) {
@@ -5662,7 +7983,7 @@ function openCreateActivityInside(node) {
   const source = activityNodeById.value.get(node.activity_node_id)
   if (!source) return
   if (source.level === 1) {
-    openCreateActivityNode(source)
+    ElMessage.info('虚拟活动包不再从网络编辑器中新建；请直接添加原子活动或在活动能力页维护活动包。')
     return
   }
   if (source.level === 2) {
@@ -5676,6 +7997,7 @@ function openEditActivityNode(node) {
   if (!requireEditMode('编辑虚拟活动')) return
   if (!node) return
   activityEditId.value = node.id
+  pendingActivityLayout.value = null
   activityForm.value = {
     code: node.code || '',
     name: node.name || '',
@@ -5724,7 +8046,9 @@ async function saveQuickActivityNode() {
       activity_category: activityForm.value.activity_category,
       sort_order: activityForm.value.sort_order,
       is_active: activityForm.value.is_active,
-      metadata_json: null,
+      metadata_json: !activityEditId.value && pendingActivityLayout.value
+        ? metadataWithLayout(null, pendingActivityLayout.value)
+        : null,
     }
     const { machine_type_id: _activityMachineTypeId, ...activityUpdatePayload } = payload
     const activityDraftId = queueDraftChange({
@@ -5735,33 +8059,10 @@ async function saveQuickActivityNode() {
       label: `${activityEditId.value ? '更新虚拟活动' : '新建虚拟活动'}：${name}`,
     })
     if (!activityEditId.value && activityDraftId) {
-      const boundaryBindings = [
-        ...(activityForm.value.context_state_ids || []).map((stateNodeId) => ({
-          stateNodeId,
-          role: 'context_input',
-        })),
-        ...(activityForm.value.output_state_ids || []).map((stateNodeId) => ({
-          stateNodeId,
-          role: 'declared_output',
-        })),
-      ]
-      for (const item of boundaryBindings) {
-        queueDraftChange({
-          entityType: 'activity_state_binding',
-          operation: 'create',
-          payload: {
-            machine_type_id: machineTypeId.value,
-            activity_node_id: { _draft_ref: activityDraftId },
-            state_node_id: item.stateNodeId,
-            binding_role: item.role,
-            is_active: true,
-          },
-          label: `新虚拟活动绑定：${item.role} / ${nodeLabel(stateById.value.get(item.stateNodeId))}`,
-        })
-      }
       expandActivityContainerForDraftChild(payload.parent_id)
     }
     activityDrawerVisible.value = false
+    pendingActivityLayout.value = null
     if (activityEditId.value) {
       selectedActivityGraphId.value = `activity_node:${activityEditId.value}`
       selectionFocus.value = 'activity'
@@ -5784,11 +8085,13 @@ async function saveQuickActivityNode() {
 function openCreateAtomicActivity(packageNode = null, options = {}) {
   if (!requireEditMode('新建原子活动')) return
   atomicEditId.value = null
+  pendingAtomicActivityLayout.value = options.layout || null
   const packageId = typeof packageNode === 'object' ? packageNode?.id : packageNode
   atomicForm.value = {
-    ...defaultAtomicForm(packageId || selectedLevelTwoActivity()?.id || null),
+    ...defaultAtomicForm(packageId || (options.useSelectedPackage === false ? null : selectedLevelTwoActivity()?.id) || null),
     input_state_ids: normalisedStateIds(options.inputStateIds),
     output_state_ids: normalisedStateIds(options.outputStateIds),
+    skip_auto_rule: !!options.skipAutoRule,
   }
   onAtomicOutputStatesChange()
   atomicDrawerVisible.value = true
@@ -5799,11 +8102,13 @@ function openEditAtomicActivity(activity) {
   if (!activity) return
   const packageId = selectedGraphActivity.value?.parent_activity_node_ids?.[0] || null
   atomicEditId.value = activity.id
+  pendingAtomicActivityLayout.value = null
   atomicForm.value = {
     code: activity.code || '',
     name: activity.name || '',
     description: activity.description || '',
     package_id: packageId,
+    reference_atomic_activity_id: null,
     activity_category: activity.activity_category || 'normal',
     sort_order: activity.sort_order || 0,
     is_active: activity.is_active,
@@ -5848,6 +8153,14 @@ async function deleteSelected() {
       cancelButtonText: '取消',
     })
     if (kind === 'state') {
+      const graphState = selectedStateGraphNode.value
+      if (graphState?.is_draft && graphState.draft_client_id) {
+        undoDraftChange(graphState.draft_client_id)
+        selectedStateId.value = null
+        selectedBinding.value = null
+        selectionFocus.value = ''
+        return
+      }
       queueDraftChange({
         entityType: 'state_node',
         operation: 'delete',
@@ -5857,6 +8170,13 @@ async function deleteSelected() {
       selectedStateId.value = null
     } else {
       const graphActivity = selectedGraphActivity.value
+      if (graphActivity?.is_draft && graphActivity.draft_client_id) {
+        undoDraftChange(graphActivity.draft_client_id)
+        selectedActivityGraphId.value = null
+        selectedBinding.value = null
+        selectionFocus.value = ''
+        return
+      }
       if (graphActivity?.atomic_activity_id) {
         queueDraftChange({
           entityType: 'atomic_activity',
@@ -5882,6 +8202,53 @@ async function deleteSelected() {
   }
 }
 
+function createAtomicActivityReferenceFromForm() {
+  if (!requireEditMode('引用已有原子活动')) return
+  const packageId = atomicForm.value.package_id
+  const atomicActivityId = atomicForm.value.reference_atomic_activity_id
+  const atomic = atomicActivityByReferenceId(atomicActivityId)
+  const packageNode = activityNodeById.value.get(packageId)
+  if (!packageId) {
+    ElMessage.warning('请先选择所属活动包')
+    return
+  }
+  if (!atomic) {
+    ElMessage.warning('请选择要引用的原子活动')
+    return
+  }
+  if (activityPackageHasAtomicRef(packageId, atomicActivityId)) {
+    ElMessage.warning(`活动包「${nodeLabel(packageNode)}」已引用「${nodeLabel(atomic)}」`)
+    return
+  }
+  const referenceLayout = pendingAtomicActivityLayout.value || childActivityLayoutFromPackageId(packageId)
+  const clientId = queueDraftChange({
+    entityType: 'activity_package_atomic_ref',
+    operation: 'create',
+    payload: {
+      package_id: packageId,
+      atomic_activity_id: atomicActivityId,
+      sort_order: atomicForm.value.sort_order || 0,
+      is_active: true,
+      metadata_json: {
+        _network_editor_reuse: {
+          source: 'duplicate_atomic_activity_detection',
+          requested_name: atomicForm.value.name || atomic.name,
+        },
+        ...(referenceLayout ? { _network_editor_layout: referenceLayout } : {}),
+      },
+    },
+    label: `引用原子活动：${nodeLabel(atomic)} → ${nodeLabel(packageNode)}`,
+  })
+  expandActivityContainerForDraftChild(packageId)
+  if (clientId) {
+    selectedActivityGraphId.value = `atomic_activity:${atomicActivityId}:draft-ref:${clientId}`
+    selectionFocus.value = 'activity'
+  }
+  atomicDrawerVisible.value = false
+  pendingAtomicActivityLayout.value = null
+  ElMessage.success('原子活动引用已加入草稿')
+}
+
 async function saveQuickAtomicActivity() {
   if (!requireEditMode('保存原子活动')) return
   const code = atomicForm.value.code?.trim() || null
@@ -5900,9 +8267,11 @@ async function saveQuickAtomicActivity() {
   const shouldAutoWire = !atomicEditId.value && (!!selectedInputStateIds.length || !!selectedOutputStateIds.length)
   const preconditions = shouldAutoWire ? rulePreconditionsForStateIds(selectedInputStateIds) : []
   const effects = shouldAutoWire ? ruleEffectsForStateIds(selectedOutputEffectStateIds) : []
-  const shouldCreateRule = shouldAutoWire && effects.length > 0
+  const shouldCreateRule = shouldAutoWire && effects.length > 0 && !atomicForm.value.skip_auto_rule
   const pendingRuleReason = shouldAutoWire && !shouldCreateRule
-    ? '产出状态缺少可生成规则效果的原子状态事实'
+    ? atomicForm.value.skip_auto_rule
+      ? '状态转移视图仅创建达成关系，规则待补'
+      : '产出状态缺少可生成规则效果的原子状态事实'
     : ''
   savingAtomic.value = true
   try {
@@ -5914,13 +8283,28 @@ async function saveQuickAtomicActivity() {
       activity_category: atomicForm.value.activity_category,
       sort_order: atomicForm.value.sort_order,
       is_active: atomicForm.value.is_active,
-      metadata_json: pendingRuleReason
-        ? { _network_editor_pending_rule: { reason: pendingRuleReason } }
-        : null,
+      metadata_json: !atomicEditId.value && pendingAtomicActivityLayout.value
+        ? metadataWithLayout(
+          pendingRuleReason ? { _network_editor_pending_rule: { reason: pendingRuleReason } } : null,
+          pendingAtomicActivityLayout.value,
+        )
+        : pendingRuleReason
+          ? { _network_editor_pending_rule: { reason: pendingRuleReason } }
+          : null,
     }
     const { machine_type_id: _atomicMachineTypeId, ...atomicUpdatePayload } = payload
     if (!atomicEditId.value && atomicForm.value.package_id) {
       payload.package_id = atomicForm.value.package_id
+      if (pendingAtomicActivityLayout.value) {
+        payload.package_ref_metadata_json = metadataWithLayout(null, pendingAtomicActivityLayout.value)
+      }
+    }
+    if (!atomicEditId.value) {
+      const duplicateAtomic = findBlockingDuplicateAtomicActivity(payload)
+      if (duplicateAtomic) {
+        handleBlockingDuplicateAtomicActivity(duplicateAtomic)
+        return
+      }
     }
     const atomicDraftId = queueDraftChange({
       entityType: 'atomic_activity',
@@ -5984,6 +8368,7 @@ async function saveQuickAtomicActivity() {
       expandActivityContainerForDraftChild(payload.package_id)
     }
     atomicDrawerVisible.value = false
+    pendingAtomicActivityLayout.value = null
     if (atomicEditId.value) {
       selectedActivityGraphId.value = `atomic_activity:${atomicEditId.value}`
       selectionFocus.value = 'activity'
@@ -6041,12 +8426,21 @@ function metadataContainer(node) {
 
 function containerDimensions(node, baseWidth, baseHeight) {
   const draft = containerDraft.value[containerKey(node)]
+  const submitted = submittedLayoutOverlay.value.container[containerKey(node)]
   const saved = metadataContainer(node)
-  const size = draft || saved || {}
+  const size = draft || submitted || saved || {}
   return {
     width: Math.max(baseWidth, Number(size.width || 0)),
     height: Math.max(baseHeight, Number(size.height || 0)),
   }
+}
+
+function containerSizeFromDraftOrMetadata(node) {
+  const draft = containerDraft.value[containerKey(node)]
+  if (draft) return draft
+  const submitted = submittedLayoutOverlay.value.container[containerKey(node)]
+  if (submitted) return submitted
+  return metadataContainer(node)
 }
 
 function defaultNodePosition(index, kind) {
@@ -6059,6 +8453,8 @@ function defaultNodePosition(index, kind) {
 function nodePosition(node, index = 0, kind = 'state') {
   const draft = layoutDraft.value[layoutKey(node)]
   if (draft) return draft
+  const submitted = submittedLayoutOverlay.value.layout[layoutKey(node)]
+  if (submitted) return submitted
   return metadataLayout(node) || defaultNodePosition(index, kind)
 }
 
@@ -6080,12 +8476,33 @@ function metadataWithLayout(metadata, pos) {
   }
 }
 
+function metadataWithoutLayout(metadata) {
+  if (!metadata) return metadata
+  const { _network_editor_layout: _layout, ...rest } = metadata
+  return Object.keys(rest).length ? rest : null
+}
+
 function nodeWithDraftLayout(node) {
   const draft = layoutDraft.value[layoutKey(node)]
-  if (!draft) return node
+  const submitted = submittedLayoutOverlay.value.layout[layoutKey(node)]
+  const layout = draft || submitted
+  if (!layout) return node
   return {
     ...node,
-    metadata_json: metadataWithLayout(node.metadata_json, draft),
+    _network_editor_has_layout_draft: true,
+    metadata_json: metadataWithLayout(node.metadata_json, layout),
+  }
+}
+
+function nodeWithDraftContainer(node) {
+  const draft = containerDraft.value[containerKey(node)]
+  const submitted = submittedLayoutOverlay.value.container[containerKey(node)]
+  const size = draft || submitted
+  if (!size) return node
+  return {
+    ...node,
+    _network_editor_has_container_draft: true,
+    metadata_json: metadataWithContainer(node.metadata_json, size),
   }
 }
 
@@ -6160,8 +8577,26 @@ function layoutUpdateForNode(node, pos, kind) {
   }
 
   if (node.atomic_activity_id) {
+    if (node.is_draft && node.draft_entity_type === 'activity_package_atomic_ref') return null
     const source = atomicActivities.value.find((item) => item.id === node.atomic_activity_id)
     if (!source) return null
+    if (node.reference_id) {
+      const ref = activityPackageRefById.value.get(node.reference_id)
+      if (ref) {
+        const payload = {
+          atomic_activity_id: ref.atomic_activity_id,
+          sort_order: ref.sort_order || 0,
+          is_active: ref.is_active,
+          metadata_json: metadataWithLayout(ref.metadata_json, pos),
+        }
+        return {
+          entityType: 'activity_package_atomic_ref',
+          entityId: ref.id,
+          label: `调整原子活动位置：${nodeLabel(source)}`,
+          payload,
+        }
+      }
+    }
     return {
       entityType: 'atomic_activity',
       entityId: source.id,
@@ -6241,21 +8676,94 @@ function containerUpdateForNode(node, size, kind) {
   return null
 }
 
+function boundsForNodePosition(pos) {
+  return {
+    left: pos.x,
+    top: pos.y,
+    right: pos.x + nodeWidth,
+    bottom: pos.y + 56,
+  }
+}
+
+function boundsForPositions(positions) {
+  if (!positions.length) return null
+  return {
+    left: Math.min(...positions.map((pos) => pos.x)),
+    top: Math.min(...positions.map((pos) => pos.y)),
+    right: Math.max(...positions.map((pos) => pos.x + nodeWidth)),
+    bottom: Math.max(...positions.map((pos) => pos.y + 56)),
+  }
+}
+
+function queueAncestorContainerExpansionForBounds(node, kind, bounds) {
+  const updates = expandAncestorContainersForBounds(node, kind, bounds, new Map())
+  if (!updates.length) return 0
+  const nextContainer = { ...containerDraft.value }
+  let changedCount = 0
+  for (const item of updates) {
+    nextContainer[containerKey(item.node)] = item.size
+    const update = containerUpdateForNode(item.node, item.size, item.kind)
+    if (update) {
+      upsertDraftUpdate(update, { draftKind: 'layout' })
+      changedCount += 1
+    }
+  }
+  containerDraft.value = nextContainer
+  return changedCount
+}
+
+function queueLayoutDraftForNode(node, kind, pos) {
+  const update = layoutUpdateForNode(node, pos, kind)
+  if (update) {
+    upsertDraftUpdate(update, { draftKind: 'layout' })
+    return true
+  }
+  if (kind === 'activity') return updateDraftActivityLayout(node, pos)
+  return updateDraftStateLayout(node, pos)
+}
+
+function applyNodeLayoutChange(node, kind, pos, { silent = false } = {}) {
+  const update = layoutUpdateForNode(node, pos, kind)
+  if (update) {
+    upsertDraftUpdate(update, { draftKind: 'layout' })
+    queueAncestorContainerExpansionForBounds(node, kind, boundsForNodePosition(pos))
+    if (!silent) ElMessage.success('布局调整已加入草稿')
+    return true
+  }
+  if (kind === 'activity' && updateDraftActivityLayout(node, pos)) {
+    queueAncestorContainerExpansionForBounds(node, kind, boundsForNodePosition(pos))
+    if (!silent) ElMessage.success('布局调整已加入草稿')
+    return true
+  }
+  if (kind === 'state' && updateDraftStateLayout(node, pos)) {
+    queueAncestorContainerExpansionForBounds(node, kind, boundsForNodePosition(pos))
+    if (!silent) ElMessage.success('布局调整已加入草稿')
+    return true
+  }
+  if (!silent) ElMessage.warning('当前节点暂时不能保存布局')
+  return false
+}
+
 function queueNodeLayoutChange(node, kind, pos) {
   const update = layoutUpdateForNode(node, pos, kind)
   if (!update) {
     if (kind === 'activity' && updateDraftActivityLayout(node, pos)) {
+      queueAncestorContainerExpansionForBounds(node, kind, boundsForNodePosition(pos))
       ElMessage.success('布局调整已加入草稿')
       return
     }
     if (kind === 'state' && updateDraftStateLayout(node, pos)) {
-      ElMessage.success('甯冨眬璋冩暣宸插姞鍏ヨ崏绋?')
+      queueAncestorContainerExpansionForBounds(node, kind, boundsForNodePosition(pos))
+      ElMessage.success('布局调整已加入草稿')
       return
     }
     ElMessage.warning('当前节点暂不能保存布局')
     return
   }
-  upsertDraftUpdate(update)
+  withDraftBatch('布局调整', () => {
+    upsertDraftUpdate(update, { draftKind: 'layout' })
+    queueAncestorContainerExpansionForBounds(node, kind, boundsForNodePosition(pos))
+  })
   ElMessage.success('布局调整已加入草稿')
 }
 
@@ -6288,6 +8796,152 @@ function containerMemberNodes(container, kind) {
       activityPathContains(node, container.activityNodeId)
     ),
   )
+}
+
+function currentContainerForNode(node, kind) {
+  if (!node) return null
+  if (kind === 'state') {
+    return statePackageContainers.value.find((container) =>
+      container.graphId === node.id ||
+      (
+        String(container.stateNodeId || '') === String(node.state_node_id || '') &&
+        String(container.referenceId || '') === String(node.reference_id || '')
+      ),
+    ) || null
+  }
+  return virtualActivityContainers.value.find((container) =>
+    container.id === node.id ||
+    String(container.activityNodeId || '') === String(node.activity_node_id || ''),
+  ) || null
+}
+
+function childBoundsForContainer(node, kind) {
+  const container = currentContainerForNode(node, kind)
+  if (!container) return null
+  const members = containerMemberNodes(container, kind)
+  if (!members.length) return null
+  return nodeBounds(members, kind)
+}
+
+function minimumContainerSizeForChildren(node, kind) {
+  const container = currentContainerForNode(node, kind)
+  const bounds = childBoundsForContainer(node, kind)
+  if (!container || !bounds) {
+    return { width: 246, height: 78 }
+  }
+  return {
+    width: Math.max(246, Math.ceil(bounds.right - container.left + 22)),
+    height: Math.max(78, Math.ceil(bounds.bottom - container.top + 10)),
+  }
+}
+
+function currentContainerSizeForResize(node, kind, fallback = null) {
+  const container = currentContainerForNode(node, kind)
+  const persisted = containerSizeFromDraftOrMetadata(node)
+  return {
+    width: Math.round(fallback?.width ?? persisted?.width ?? container?.width ?? 246),
+    height: Math.round(fallback?.height ?? persisted?.height ?? container?.height ?? 78),
+  }
+}
+
+function resolveSafeContainerResize(node, kind, requestedSize, options = {}) {
+  const current = currentContainerSizeForResize(node, kind, options.currentSize)
+  const minimum = minimumContainerSizeForChildren(node, kind)
+  const requested = {
+    width: Math.max(246, Math.round(requestedSize?.width ?? current.width)),
+    height: Math.max(78, Math.round(requestedSize?.height ?? current.height)),
+  }
+  const widthAllowed = requested.width >= minimum.width
+  const heightAllowed = requested.height >= minimum.height
+  const size = {
+    width: widthAllowed ? requested.width : Math.max(current.width, minimum.width),
+    height: heightAllowed ? requested.height : Math.max(current.height, minimum.height),
+  }
+  const axesChanged = {
+    width: size.width !== current.width,
+    height: size.height !== current.height,
+  }
+  const container = currentContainerForNode(node, kind)
+  const bounds = container
+    ? {
+        left: container.left,
+        top: container.top,
+        right: container.left + size.width,
+        bottom: container.top + size.height,
+      }
+    : null
+  return {
+    size,
+    bounds,
+    widthAllowed,
+    heightAllowed,
+    changed: axesChanged.width || axesChanged.height,
+  }
+}
+
+function ancestorContainersForNode(node, kind) {
+  if (!node) return []
+  if (kind === 'state') {
+    return statePackageContainers.value
+      .filter((container) =>
+        container.graphId !== node.id &&
+        String(container.stateNodeId || '') !== String(node.state_node_id || '') &&
+        statePathContains(node, container.stateNodeId),
+      )
+      .map((container) => ({ container, node: containerNodeForResize(container, kind) }))
+      .filter((item) => item.node)
+      .sort((a, b) => Number(b.node.level || 0) - Number(a.node.level || 0))
+  }
+  return virtualActivityContainers.value
+    .filter((container) =>
+      container.id !== node.id &&
+      String(container.activityNodeId || '') !== String(node.activity_node_id || '') &&
+      activityPathContains(node, container.activityNodeId),
+    )
+    .map((container) => ({ container, node: containerNodeForResize(container, kind) }))
+    .filter((item) => item.node)
+    .sort((a, b) => Number(b.node.level || 0) - Number(a.node.level || 0))
+}
+
+function expandAncestorContainersForBounds(node, kind, childBounds, draftSizes = new Map()) {
+  const updates = []
+  let bounds = childBounds
+  if (!bounds) return updates
+  for (const { container, node: ancestorNode } of ancestorContainersForNode(node, kind)) {
+    const key = containerKey(ancestorNode)
+    const current = draftSizes.get(key) || currentContainerSizeForResize(ancestorNode, kind)
+    const minimum = minimumContainerSizeForChildren(ancestorNode, kind)
+    const nextSize = {
+      width: Math.max(
+        current.width,
+        minimum.width,
+        Math.ceil(bounds.right - container.left + 22),
+      ),
+      height: Math.max(
+        current.height,
+        minimum.height,
+        Math.ceil(bounds.bottom - container.top + 10),
+      ),
+    }
+    if (nextSize.width === current.width && nextSize.height === current.height) {
+      bounds = {
+        left: container.left,
+        top: container.top,
+        right: container.left + current.width,
+        bottom: container.top + current.height,
+      }
+      continue
+    }
+    draftSizes.set(key, nextSize)
+    updates.push({ node: ancestorNode, kind, size: nextSize })
+    bounds = {
+      left: container.left,
+      top: container.top,
+      right: container.left + nextSize.width,
+      bottom: container.top + nextSize.height,
+    }
+  }
+  return updates
 }
 
 function containerMoveStartPositions(container, kind) {
@@ -6368,17 +9022,19 @@ function endContainerMove() {
   containerMove.value = null
   if (Math.abs(move.dx) < 0.5 && Math.abs(move.dy) < 0.5) return
   let changedCount = 0
-  for (const member of move.members) {
-    const pos = layoutDraft.value[layoutKey(member.node)] || {
-      x: member.x + move.dx,
-      y: member.y + move.dy,
+  withDraftBatch('容器移动', () => {
+    for (const member of move.members) {
+      const pos = layoutDraft.value[layoutKey(member.node)] || {
+        x: member.x + move.dx,
+        y: member.y + move.dy,
+      }
+      const update = layoutUpdateForNode(member.node, pos, move.kind)
+      if (update) {
+        upsertDraftUpdate(update, { draftKind: 'layout' })
+        changedCount += 1
+      }
     }
-    const update = layoutUpdateForNode(member.node, pos, move.kind)
-    if (update) {
-      upsertDraftUpdate(update)
-      changedCount += 1
-    }
-  }
+  })
   if (changedCount) {
     ElMessage.success(`容器移动已加入草稿：${changedCount} 个节点`)
   } else {
@@ -6386,54 +9042,380 @@ function endContainerMove() {
   }
 }
 
-function queueContainerResizeChange(node, kind, size) {
-  const update = containerUpdateForNode(node, size, kind)
-  if (!update) {
-    ElMessage.warning('当前容器暂不能保存尺寸')
-    return
-  }
-  upsertDraftUpdate(update)
-  ElMessage.success('容器尺寸调整已加入草稿')
-}
+function queueContainerResizeChange(node, kind, requestedSize, options = {}) {
+  const resolved = resolveSafeContainerResize(node, kind, requestedSize, options)
+  const draftSizes = new Map([[containerKey(node), resolved.size]])
+  const resizeUpdates = resolved.changed
+    ? [{ node, kind, size: resolved.size }]
+    : []
+  resizeUpdates.push(...expandAncestorContainersForBounds(node, kind, resolved.bounds, draftSizes))
 
-function autoArrangePosition(index, node, kind) {
-  const level = Math.max(1, Number(node.level || 1))
-  const y = topPadding + index * rowHeight
-  if (kind === 'state') {
-    return {
-      x: Math.min(defaultStateX + (level - 1) * 30, 300),
-      y,
+  const nextContainer = { ...containerDraft.value, [containerKey(node)]: resolved.size }
+  for (const item of resizeUpdates) {
+    nextContainer[containerKey(item.node)] = item.size
+  }
+  containerDraft.value = nextContainer
+
+  let changedCount = 0
+  for (const item of resizeUpdates) {
+    const update = containerUpdateForNode(item.node, item.size, item.kind)
+    if (update) {
+      upsertDraftUpdate(update, { draftKind: 'layout' })
+      changedCount += 1
     }
   }
+  if (options.silent) return changedCount
+  if (changedCount) {
+    ElMessage.success(changedCount > 1
+      ? `容器尺寸调整已加入草稿：${changedCount} 个容器`
+      : '容器尺寸调整已加入草稿')
+    return changedCount
+  }
+  if (!resolved.widthAllowed && !resolved.heightAllowed) {
+    ElMessage.warning('当前尺寸不能覆盖容器内节点')
+  } else {
+    ElMessage.info('容器尺寸未发生变化')
+  }
+  return 0
+}
+
+function statePackageDirectChildren(container) {
+  return visibleStateNodes.value
+    .filter((node) =>
+      node.id !== container.graphId &&
+      (
+        node.primary_parent_graph_id === container.graphId ||
+        String(node.parent_id || '') === String(container.stateNodeId || '')
+      ),
+    )
+    .sort((a, b) => {
+      const sortDelta = Number(a.sort_order || 0) - Number(b.sort_order || 0)
+      if (sortDelta) return sortDelta
+      return String(a.code || a.id).localeCompare(String(b.code || b.id))
+    })
+}
+
+function layoutStatePackageChildrenByWidth(container, nextLayout) {
+  const children = statePackageDirectChildren(container)
+  if (!children.length) return null
+  const containerNode = containerNodeForResize(container, 'state')
+  const containerPos = containerNode ? nextLayout[layoutKey(containerNode)] : null
+  const containerLeft = Math.round(containerPos?.x ?? container.left)
+  const containerTop = Math.round(containerPos?.y ?? container.top)
+  const gapX = 24
+  const gapY = 24
+  const paddingX = 22
+  const headerOffsetY = 92
+  const availableWidth = Math.max(nodeWidth, Number(container.width || 246) - paddingX * 2)
+  const columnCount = Math.max(1, Math.floor((availableWidth + gapX) / (nodeWidth + gapX)))
+  const positions = []
+  let changedCount = 0
+
+  children.forEach((node, index) => {
+    const row = Math.floor(index / columnCount)
+    const column = index % columnCount
+    const pos = {
+      x: Math.round(containerLeft + paddingX + column * (nodeWidth + gapX)),
+      y: Math.round(containerTop + headerOffsetY + row * (56 + gapY)),
+    }
+    nextLayout[layoutKey(node)] = pos
+    positions.push(pos)
+    if (queueLayoutDraftForNode(node, 'state', pos)) changedCount += 1
+  })
+
   return {
-    x: Math.min(420 + (level - 1) * 58, canvasWidth - nodeWidth),
-    y,
+    node: containerNode,
+    container,
+    containerTop,
+    bounds: boundsForPositions(positions),
+    changedCount,
   }
 }
 
-function autoArrangeCanvas() {
+async function autoArrangeCanvas() {
   if (!requireEditMode('自动整理画布')) return
-  const nextLayout = { ...layoutDraft.value }
-  let changedCount = 0
-  const arrange = (nodes, kind) => {
-    nodes.forEach((node, index) => {
-      const pos = autoArrangePosition(index, node, kind)
-      nextLayout[layoutKey(node)] = pos
-      const update = layoutUpdateForNode(node, pos, kind)
-      if (update) {
-        upsertDraftUpdate(update)
-        changedCount += 1
-      }
-    })
+  if (isStateTransitionCanvas.value && stateTransitionRelayGroups.value.length) {
+    await autoArrangeStateTransitionCanvas()
+    return
   }
-  arrange(visibleStateNodes.value, 'state')
-  arrange(visibleActivityNodes.value, 'activity')
-  layoutDraft.value = nextLayout
-  if (changedCount) {
-    ElMessage.success(`自动整理已加入草稿：${changedCount} 个节点`)
+  await autoArrangeRelationCanvas()
+}
+
+function expandedStateContainerIdsForAutoLayout(nodes = x6BaseVisibleStateNodes.value) {
+  return (nodes || [])
+    .filter((node) => isExpandedStateContainerForAutoLayout(node, nodes))
+    .map((node) => String(node.id))
+}
+
+function expandedActivityContainerIdsForAutoLayout(nodes = x6BaseVisibleActivityNodes.value) {
+  return (nodes || [])
+    .filter((node) => isExpandedActivityContainerForAutoLayout(node, nodes))
+    .map((node) => String(node.id))
+}
+
+function isExpandedStateContainerForAutoLayout(node, nodes) {
+  if (!node?.state_node_id || node.is_leaf) return false
+  if (Number(stateDepth.value) !== 0 || !selectedStateRootIds.value.length) return false
+  const stateNodeId = String(node.state_node_id)
+  const rootIds = selectedStateRootIds.value.map((id) => String(id || ''))
+  const isRoot = rootIds.some((rootId) => rootId === stateNodeId)
+  const isNestedUnderRoot = rootIds.some((rootId) =>
+    rootId !== stateNodeId && statePathContains(node, rootId),
+  )
+  if (!isRoot && !isNestedUnderRoot) return false
+  return (nodes || []).some((candidate) =>
+    candidate.id !== node.id &&
+    candidate.state_node_id !== node.state_node_id &&
+    statePathContains(candidate, node.state_node_id),
+  )
+}
+
+function isExpandedActivityContainerForAutoLayout(node, nodes) {
+  if (!node?.activity_node_id || node.activity_type !== 'virtual') return false
+  if (Number(activityDepth.value) !== 0) return false
+  return (nodes || []).some((candidate) =>
+    candidate.id !== node.id &&
+    activityPathContains(candidate, node.activity_node_id),
+  )
+}
+
+async function autoArrangeStateTransitionCanvas() {
+  let plan = null
+  let usedFallback = false
+  try {
+    plan = await layoutNestedContainerGraph({
+      stateNodes: x6BaseVisibleStateNodes.value,
+      activityNodes: stateTransitionRelayNodes.value,
+      relayNodes: stateTransitionRelayNodes.value,
+      edges: x6ResolvedEdges.value,
+      expandedStateContainerIds: expandedStateContainerIdsForAutoLayout(),
+      expandedActivityContainerIds: [],
+      baseX: transitionLayoutBaseX,
+      baseY: transitionLayoutBaseY,
+    })
+    if (!plan?.diagnostics?.nodeCount) {
+      plan = buildStateTransitionVisualPlan(x6BaseVisibleStateNodes.value, stateTransitionRelayGroups.value)
+      usedFallback = true
+    }
+    stateTransitionAutoLayout.value = plan
+  } catch (error) {
+    console.warn('Network Editor ELK layout failed; falling back to local transition layout.', error)
+    stateTransitionAutoLayout.value = null
+    usedFallback = true
+    plan = buildStateTransitionVisualPlan(x6BaseVisibleStateNodes.value, stateTransitionRelayGroups.value)
+    ElMessage.warning('自动排布引擎暂不可用，已使用基础排布')
+  }
+  applyStateTransitionAutoArrangePlan(plan, usedFallback)
+}
+
+async function autoArrangeRelationCanvas() {
+  let plan = null
+  let usedFallback = false
+  try {
+    plan = await layoutNestedContainerGraph({
+      stateNodes: x6BaseVisibleStateNodes.value,
+      activityNodes: x6BaseVisibleActivityNodes.value,
+      edges: x6ResolvedEdges.value,
+      expandedStateContainerIds: expandedStateContainerIdsForAutoLayout(),
+      expandedActivityContainerIds: expandedActivityContainerIdsForAutoLayout(),
+      baseX: transitionLayoutBaseX,
+      baseY: transitionLayoutBaseY,
+    })
+    if (!plan?.diagnostics?.nodeCount) {
+      plan = null
+      usedFallback = true
+    }
+    relationAutoLayout.value = plan
+  } catch (error) {
+    console.warn('Network Editor relation layout failed; falling back to container layout.', error)
+    relationAutoLayout.value = null
+    usedFallback = true
+  }
+
+  let changedCount = 0
+  let containerChangedCount = 0
+  withDraftBatch('自动整理', () => {
+    const nextLayout = { ...layoutDraft.value }
+    if (plan) {
+      changedCount += queueAutoLayoutPositions(x6BaseVisibleStateNodes.value, 'state', plan.statePositions, nextLayout)
+      changedCount += queueAutoLayoutPositions(x6BaseVisibleActivityNodes.value, 'activity', plan.activityPositions, nextLayout)
+    } else {
+      const arrangedContainers = statePackageContainers.value
+        .map((container) => layoutStatePackageChildrenByWidth(container, nextLayout, { compact: true }))
+        .filter((result) => result?.node && result?.bounds)
+      changedCount += arrangedContainers.reduce((total, result) => total + result.changedCount, 0)
+    }
+
+    layoutDraft.value = nextLayout
+    containerChangedCount = plan?.containerSizes
+      ? queueAutoLayoutContainerSizes(plan.containerSizes)
+      : compactAutoArrangedContainers(nextLayout)
+  })
+  resetX6ViewportAfterArrange()
+  const totalChanged = changedCount + containerChangedCount
+  if (totalChanged) {
+    ElMessage.success(usedFallback
+      ? `自动整理已使用基础容器排布：${totalChanged} 项`
+      : `自动整理已按关系紧凑排布：${totalChanged} 项`)
   } else {
     ElMessage.info('当前没有可整理节点')
   }
+}
+
+function applyStateTransitionAutoArrangePlan(plan, usedFallback) {
+  let changedCount = 0
+  let containerChangedCount = 0
+  withDraftBatch('自动整理', () => {
+    const nextLayout = { ...layoutDraft.value }
+    changedCount = queueAutoLayoutPositions(x6BaseVisibleStateNodes.value, 'state', plan?.statePositions, nextLayout)
+    layoutDraft.value = nextLayout
+    containerChangedCount = plan?.containerSizes
+      ? queueAutoLayoutContainerSizes(plan.containerSizes)
+      : compactAutoArrangedContainers(nextLayout)
+  })
+  resetX6ViewportAfterArrange()
+  const totalChanged = changedCount + containerChangedCount
+  if (totalChanged) {
+    ElMessage.success(usedFallback
+      ? `状态转移图已按基础排布整理：${totalChanged} 项`
+      : `状态转移图已按关系紧凑排布整理：${totalChanged} 项`)
+  } else {
+    ElMessage.info('当前状态转移图没有可整理的节点')
+  }
+}
+
+function queueAutoLayoutPositions(nodes, kind, positions, nextLayout) {
+  if (!positions?.size) return 0
+  let changedCount = 0
+  for (const node of nodes || []) {
+    const pos = positions.get(String(node.id))
+    if (!pos) continue
+    const rounded = { x: Math.round(pos.x), y: Math.round(pos.y) }
+    nextLayout[layoutKey(node)] = rounded
+    if (queueLayoutDraftForNode(node, kind, rounded)) changedCount += 1
+  }
+  return changedCount
+}
+
+function queueAutoLayoutContainerSizes(containerSizes) {
+  if (!containerSizes?.size) return 0
+  const nextContainer = { ...containerDraft.value }
+  let changedCount = 0
+  const candidates = [
+    ...x6BaseVisibleStateNodes.value.map((node) => ({ node, kind: 'state' })),
+    ...x6BaseVisibleActivityNodes.value.map((node) => ({ node, kind: 'activity' })),
+  ]
+  for (const { node, kind } of candidates) {
+    const size = containerSizes.get(String(node.id))
+    if (!size) continue
+    const rounded = {
+      width: Math.round(size.width),
+      height: Math.round(size.height),
+    }
+    const current = currentContainerSizeForResize(node, kind)
+    if (Math.abs(current.width - rounded.width) < 1 && Math.abs(current.height - rounded.height) < 1) continue
+    nextContainer[containerKey(node)] = rounded
+    const update = containerUpdateForNode(node, rounded, kind)
+    if (update) {
+      upsertDraftUpdate(update, { draftKind: 'layout' })
+      changedCount += 1
+    }
+  }
+  if (changedCount) containerDraft.value = nextContainer
+  return changedCount
+}
+
+function compactAutoArrangedContainers(nextLayout) {
+  const nextContainer = { ...containerDraft.value }
+  const updates = []
+  for (const item of compactContainerCandidates('state', nextLayout)) updates.push(item)
+  for (const item of compactContainerCandidates('activity', nextLayout)) updates.push(item)
+
+  let changedCount = 0
+  for (const item of updates) {
+    const key = containerKey(item.node)
+    const current = currentContainerSizeForResize(item.node, item.kind)
+    if (Math.abs(current.width - item.size.width) < 1 && Math.abs(current.height - item.size.height) < 1) continue
+    nextContainer[key] = item.size
+    const update = containerUpdateForNode(item.node, item.size, item.kind)
+    if (update) {
+      upsertDraftUpdate(update, { draftKind: 'layout' })
+      changedCount += 1
+    }
+  }
+  if (changedCount) containerDraft.value = nextContainer
+  return changedCount
+}
+
+function compactContainerCandidates(kind, nextLayout) {
+  const nodes = kind === 'state' ? visibleStateNodes.value : visibleActivityNodes.value
+  const candidates = nodes
+    .filter((node) => kind === 'state'
+      ? !node.is_leaf && node.state_node_id
+      : node.activity_type === 'virtual' && node.activity_node_id)
+    .map((node) => {
+      const members = compactContainerMembers(node, kind, nextLayout)
+      if (!members.length) return null
+      const bounds = boundsForNodesWithLayout(members, kind, nextLayout)
+      if (!bounds) return null
+      return {
+        node,
+        kind,
+        size: {
+          width: Math.max(246, Math.ceil(bounds.right - bounds.left + 84)),
+          height: Math.max(78, Math.ceil(bounds.bottom - bounds.top + 104)),
+        },
+      }
+    })
+    .filter(Boolean)
+  return candidates.sort((a, b) => Number(b.node.level || 0) - Number(a.node.level || 0))
+}
+
+function compactContainerMembers(node, kind, nextLayout) {
+  const nodes = kind === 'state' ? visibleStateNodes.value : visibleActivityNodes.value
+  if (kind === 'state') {
+    return nodes.filter((candidate) =>
+      candidate.id !== node.id &&
+      candidate.state_node_id !== node.state_node_id &&
+      statePathContains(candidate, node.state_node_id),
+    )
+  }
+  return nodes.filter((candidate) =>
+    candidate.id !== node.id &&
+    activityPathContains(candidate, node.activity_node_id),
+  )
+}
+
+function boundsForNodesWithLayout(nodes, kind, nextLayout) {
+  const positions = (nodes || [])
+    .map((node) => autoLayoutBoundsPosition(node, kind, nextLayout))
+    .filter(Boolean)
+  if (!positions.length) return null
+  return kind === 'state' ? boundsForPositions(positions) : boundsForActivityPositions(positions)
+}
+
+function autoLayoutBoundsPosition(node, kind, nextLayout) {
+  const draft = nextLayout[layoutKey(node)]
+  if (draft) return draft
+  const saved = metadataLayout(node)
+  if (saved) return saved
+  const source = kind === 'state' ? visibleStateNodes.value : visibleActivityNodes.value
+  const index = source.findIndex((item) => item.id === node.id)
+  return defaultNodePosition(Math.max(index, 0), kind)
+}
+
+function boundsForActivityPositions(positions) {
+  if (!positions.length) return null
+  return {
+    left: Math.min(...positions.map((pos) => pos.x)),
+    top: Math.min(...positions.map((pos) => pos.y)),
+    right: Math.max(...positions.map((pos) => pos.x + nodeWidth)),
+    bottom: Math.max(...positions.map((pos) => pos.y + 56)),
+  }
+}
+
+function resetX6ViewportAfterArrange() {
+  x6ViewportResetToken.value += 1
 }
 
 function startContainerResize(container, kind, event) {
@@ -6481,7 +9463,14 @@ function endContainerResize() {
     height: resize.startHeight,
   }
   containerResize.value = null
-  queueContainerResizeChange(resize.node, resize.kind, size)
+  withDraftBatch('容器尺寸调整', () => {
+    queueContainerResizeChange(resize.node, resize.kind, size, {
+      currentSize: {
+        width: resize.startWidth,
+        height: resize.startHeight,
+      },
+    })
+  })
 }
 
 function nodeBounds(nodes, kind) {
@@ -6501,9 +9490,666 @@ function nodeBounds(nodes, kind) {
   return { left, right, top, bottom }
 }
 
+function buildX6ResolvedEdges(edges) {
+  const resolved = []
+  const proxyGroups = new Map()
+  const internalGroups = new Map()
+
+  for (const edge of edges) {
+    const source = resolveX6EdgeEndpoint(edge.source_id)
+    const target = resolveX6EdgeEndpoint(edge.target_id)
+    if (!source || !target) continue
+
+    const sourceChanged = source.id !== edge.source_id
+    const targetChanged = target.id !== edge.target_id
+    if (!sourceChanged && !targetChanged) {
+      resolved.push(edge)
+      continue
+    }
+
+    const groupKey = `${edge.type}:${source.id}->${target.id}`
+    const groupMap = source.id === target.id ? internalGroups : proxyGroups
+    if (!groupMap.has(groupKey)) {
+      groupMap.set(groupKey, {
+        key: groupKey,
+        type: edge.type,
+        source,
+        target,
+        edges: [],
+      })
+    }
+    groupMap.get(groupKey).edges.push({
+      ...edge,
+      hiddenSourceId: sourceChanged ? edge.source_id : null,
+      hiddenTargetId: targetChanged ? edge.target_id : null,
+    })
+  }
+
+  for (const group of proxyGroups.values()) {
+    resolved.push(collapsedProxyEdge(group))
+  }
+  for (const group of internalGroups.values()) {
+    resolved.push(collapsedProxyEdge(group, { internal: true }))
+  }
+  return resolved
+}
+
+function resolveX6EdgeEndpoint(graphId) {
+  const id = String(graphId || '')
+  if (id.startsWith('state_node:')) return resolveX6StateEndpoint(id)
+  if (id.startsWith('activity_node:') || id.startsWith('atomic_activity:') || id.startsWith('transition_relay:')) {
+    return resolveX6ActivityEndpoint(id)
+  }
+  return null
+}
+
+function resolveX6StateEndpoint(graphId) {
+  const visible = x6BaseVisibleStateNodes.value.find((node) => node.id === graphId)
+  if (visible) return { id: graphId, kind: 'state', node: visible, hidden: false }
+  const hidden = visibleStateNodes.value.find((node) => node.id === graphId) || fallbackStateGraphNode(graphId)
+  const proxy = hidden ? nearestVisibleStateProxy(hidden) : null
+  return proxy ? { id: proxy.id, kind: 'state', node: proxy, hidden: true, hiddenId: graphId, hiddenNode: hidden } : null
+}
+
+function resolveX6ActivityEndpoint(graphId) {
+  const visible = x6BaseVisibleActivityNodes.value.find((node) => node.id === graphId)
+  if (visible) return { id: graphId, kind: 'activity', node: visible, hidden: false }
+  const hidden = visibleActivityNodes.value.find((node) => node.id === graphId) || fallbackActivityGraphNode(graphId)
+  const proxy = hidden ? nearestVisibleActivityProxy(hidden) : null
+  return proxy ? { id: proxy.id, kind: 'activity', node: proxy, hidden: true, hiddenId: graphId, hiddenNode: hidden } : null
+}
+
+function fallbackStateGraphNode(graphId) {
+  const stateNodeId = graphIdNumber(graphId)
+  const state = stateById.value.get(stateNodeId)
+  return state ? { ...state, id: graphId, state_node_id: stateNodeId } : null
+}
+
+function fallbackActivityGraphNode(graphId) {
+  if (String(graphId || '').startsWith('activity_node:')) {
+    const activityNodeId = graphIdNumber(graphId)
+    const activity = activityNodeById.value.get(activityNodeId)
+    return activity ? { ...activity, id: graphId, activity_node_id: activityNodeId } : null
+  }
+  if (String(graphId || '').startsWith('atomic_activity:')) {
+    const atomicActivityId = graphIdNumber(graphId)
+    const atomic = atomicActivities.value.find((item) => String(item.id) === String(atomicActivityId))
+    if (!atomic) return null
+    const parentActivityIds = []
+    for (const [activityNodeId, refs] of atomicRefsByPackage.value.entries()) {
+      if ((refs || []).some((ref) =>
+        String(ref.atomic_activity_id) === String(atomicActivityId) &&
+        ref.is_active !== false,
+      )) {
+        const packageNode = activityNodeById.value.get(activityNodeId)
+        const packagePath = Array.isArray(packageNode?.path_ids) ? packageNode.path_ids : []
+        const flattenedPath = packagePath.some((item) => Array.isArray(item))
+          ? (packagePath[0] || [])
+          : packagePath
+        parentActivityIds.push(
+          ...flattenedPath,
+          ...(String(flattenedPath[flattenedPath.length - 1] || '') === String(activityNodeId) ? [] : [activityNodeId]),
+        )
+        break
+      }
+    }
+    return {
+      ...atomic,
+      id: graphId,
+      activity_node_id: null,
+      atomic_activity_id: atomicActivityId,
+      parent_id: null,
+      parent_graph_id: parentActivityIds.length ? `activity_node:${parentActivityIds[parentActivityIds.length - 1]}` : null,
+      parent_activity_node_ids: parentActivityIds,
+      child_activity_node_ids: [],
+      level: parentActivityIds.length ? Number(activityNodeById.value.get(parentActivityIds[parentActivityIds.length - 1])?.level || 2) + 1 : 3,
+      activity_type: 'executable',
+      solver_participation: true,
+      path_ids: parentActivityIds.length ? [[...parentActivityIds, atomicActivityId]] : [[atomicActivityId]],
+      metadata_json: atomic.metadata_json || {},
+    }
+  }
+  return null
+}
+
+function nearestVisibleStateProxy(hiddenNode) {
+  return x6BaseVisibleStateNodes.value
+    .filter((candidate) =>
+      candidate.id !== hiddenNode.id &&
+      candidate.state_node_id &&
+      statePathContains(hiddenNode, candidate.state_node_id),
+    )
+    .sort((a, b) => Number(b.level || 0) - Number(a.level || 0))[0] || null
+}
+
+function nearestVisibleActivityProxy(hiddenNode) {
+  return x6BaseVisibleActivityNodes.value
+    .filter((candidate) =>
+      candidate.id !== hiddenNode.id &&
+      candidate.activity_node_id &&
+      activityPathContains(hiddenNode, candidate.activity_node_id),
+    )
+    .sort((a, b) => Number(b.level || 0) - Number(a.level || 0))[0] || null
+}
+
+function collapsedProxyEdge(group, { internal = false } = {}) {
+  const first = group.edges[0] || {}
+  const collapsedEdges = group.edges
+  const hiddenSourceIds = collapsedEdges.map((edge) => edge.hiddenSourceId).filter(Boolean)
+  const hiddenTargetIds = collapsedEdges.map((edge) => edge.hiddenTargetId).filter(Boolean)
+  const label = collapsedProxyLabel(group.type, collapsedEdges.length, {
+    sourceHidden: !!hiddenSourceIds.length,
+    targetHidden: !!hiddenTargetIds.length,
+    internal,
+  })
+  return {
+    ...first,
+    id: `collapsed-proxy:${group.key}`,
+    source_id: group.source.id,
+    target_id: group.target.id,
+    proxySourceId: group.source.id,
+    proxyTargetId: group.target.id,
+    hiddenSourceId: hiddenSourceIds[0] || null,
+    hiddenTargetId: hiddenTargetIds[0] || null,
+    hiddenSourceIds,
+    hiddenTargetIds,
+    collapsedEdges,
+    collapsedEdgeCount: collapsedEdges.length,
+    aggregateCount: collapsedEdges.length,
+    aggregateEdges: collapsedEdges,
+    aggregateLabel: label,
+    displayLabel: label,
+    title: collapsedProxyTitle(collapsedEdges),
+    aggregate: true,
+    isCollapsedProxy: true,
+    isCollapsedInternalProxy: internal,
+  }
+}
+
+function collapsedProxyLabel(type, count, { sourceHidden = false, targetHidden = false, internal = false } = {}) {
+  const prefix = `${count} 条`
+  if (internal) return `${prefix}内部关系`
+  if (sourceHidden && targetHidden) return `${prefix}跨层关系`
+  if (type === 'STATE_TO_ACTIVITY') return `${prefix}内部输入`
+  if (type === 'ACTIVITY_TO_STATE') return `${prefix}内部输出`
+  return `${prefix}折叠关系`
+}
+
+function collapsedProxyTitle(edges) {
+  const previews = edges.slice(0, 3).map((edge) => {
+    const source = nodeLabelForGraphId(edge.source_id)
+    const target = nodeLabelForGraphId(edge.target_id)
+    return `${source} -> ${target}`
+  })
+  const suffix = edges.length > previews.length ? ` 等 ${edges.length} 条` : ''
+  return `${previews.join('；')}${suffix}`
+}
+
+function nodeLabelForGraphId(graphId) {
+  const id = String(graphId || '')
+  if (id.startsWith('state_node:')) {
+    const node = visibleStateNodes.value.find((item) => item.id === id) || fallbackStateGraphNode(id)
+    return nodeLabel(node)
+  }
+  const activity = visibleActivityNodes.value.find((item) => item.id === id) || fallbackActivityGraphNode(id)
+  return nodeLabel(activity)
+}
+
+function buildX6CollapsedRelationBadges(edges) {
+  const badges = new Map()
+  const ensure = (graphId) => {
+    if (!graphId) return null
+    if (!badges.has(graphId)) badges.set(graphId, { input: 0, output: 0, internal: 0 })
+    return badges.get(graphId)
+  }
+  for (const edge of edges) {
+    if (!edge.isCollapsedProxy) continue
+    const count = Number(edge.collapsedEdgeCount || edge.aggregateCount || 1)
+    if (edge.isCollapsedInternalProxy) {
+      const badge = ensure(edge.source_id)
+      if (badge) badge.internal += count
+      continue
+    }
+    if (edge.hiddenSourceIds?.length) {
+      const badge = ensure(edge.source_id)
+      if (badge) badge.output += count
+    }
+    if (edge.hiddenTargetIds?.length) {
+      const badge = ensure(edge.target_id)
+      if (badge) badge.input += count
+    }
+  }
+  return badges
+}
+
+function nodeWithCollapsedRelationBadges(node) {
+  const counts = x6CollapsedRelationBadges.value.get(node.id)
+  if (!counts || (!counts.input && !counts.output && !counts.internal)) return node
+  return {
+    ...node,
+    collapsedRelationCounts: counts,
+  }
+}
+
+function selectedStateGraphId() {
+  if (!selectedStateId.value) return ''
+  const graphNode = selectedStateGraphNode.value || graphStateById.value.get(selectedStateId.value)
+  return String(graphNode?.id || `state_node:${selectedStateId.value}`)
+}
+
+function nodeWithFlowState(node) {
+  if (!activeFlowGraphId.value) return node
+  const active = x6FlowFocus.value.nodeIds.has(String(node.id)) ||
+    graphIdsMatch(node.id, activeFlowGraphId.value)
+  return {
+    ...node,
+    flowState: active ? 'active' : 'muted',
+  }
+}
+
+function edgeFlowMetadata(edge) {
+  const hasFocus = !!activeFlowGraphId.value
+  const active = hasFocus && x6FlowFocus.value.edgeIds.has(String(edge.id))
+  return {
+    role: edgeFlowRole(edge),
+    state: active ? 'active' : hasFocus ? 'muted' : 'backbone',
+    focusGraphId: activeFlowGraphId.value || null,
+    active,
+  }
+}
+
+function edgeFlowRole(edge) {
+  if (edge.isCollapsedProxy) return 'proxy'
+  if (edge.aggregate) return 'aggregate'
+  if (isTransitionRelayEdge(edge)) return edge.type === 'STATE_TO_ACTIVITY' ? 'precondition' : 'realizer'
+  if (edge.type === 'STATE_FLOW') return 'transition'
+  return edge.type === 'STATE_TO_ACTIVITY' ? 'precondition' : 'realizer'
+}
+
+function isTransitionRelayEdge(edge) {
+  return !!edge?.isTransitionRelayEdge || edge?.source_kind === 'state_transition_relay'
+}
+
+function transitionRelayGraphId(activityId) {
+  return `transition_relay:${String(activityId || '')}`
+}
+
+function transitionRelayActivityGraphId(node) {
+  return node?.transitionRelayActivityGraphId ||
+    node?.metadata_json?._network_editor_transition_relay?.activityGraphId ||
+    null
+}
+
+function buildStateTransitionRelayGroups() {
+  const inputsByActivity = new Map()
+  const outputsByActivity = new Map()
+  const ensure = (map, key) => {
+    if (!map.has(key)) map.set(key, [])
+    return map.get(key)
+  }
+  for (const edge of stateTransitionEdges.value) {
+    if (edge.type === 'STATE_TO_ACTIVITY' && ['input', 'context_input'].includes(edge.binding_role)) {
+      ensure(inputsByActivity, edge.target_id).push(edge)
+    } else if (edge.type === 'ACTIVITY_TO_STATE' && ['output', 'declared_output'].includes(edge.binding_role)) {
+      ensure(outputsByActivity, edge.source_id).push(edge)
+    }
+  }
+
+  const visibleStateIds = new Set(x6BaseVisibleStateNodes.value.map((node) => String(node.id)))
+  const groups = []
+  const activityIds = new Set([...inputsByActivity.keys(), ...outputsByActivity.keys()])
+  for (const activityId of Array.from(activityIds).sort((a, b) =>
+    nodeLabelForGraphId(a).localeCompare(nodeLabelForGraphId(b), 'zh-Hans-CN') || String(a).localeCompare(String(b)),
+  )) {
+    const inputs = uniqueTransitionEdgesByEndpoint(
+      (inputsByActivity.get(activityId) || []).filter((edge) => visibleStateIds.has(String(edge.source_id))),
+      'source_id',
+    )
+    const outputs = uniqueTransitionEdgesByEndpoint(
+      (outputsByActivity.get(activityId) || []).filter((edge) => visibleStateIds.has(String(edge.target_id))),
+      'target_id',
+    )
+    if (!inputs.length || !outputs.length) continue
+    const relayId = transitionRelayGraphId(activityId)
+    groups.push({
+      id: relayId,
+      relayId,
+      activityId,
+      label: nodeLabelForGraphId(activityId),
+      inputs,
+      outputs,
+      inputStateIds: inputs.map((edge) => edge.source_id),
+      outputStateIds: outputs.map((edge) => edge.target_id),
+      coverage_status: [...inputs, ...outputs].some((edge) => edge.coverage_status === 'draft') ? 'draft' : 'complete',
+    })
+  }
+  return groups
+}
+
+function uniqueTransitionEdgesByEndpoint(edges, endpointKey) {
+  const seen = new Set()
+  const result = []
+  for (const edge of edges || []) {
+    const endpoint = String(edge?.[endpointKey] || '')
+    if (!endpoint || seen.has(endpoint)) continue
+    seen.add(endpoint)
+    result.push(edge)
+  }
+  return result
+}
+
+function mergeLayoutPositions(fallback, preferred) {
+  return new Map([
+    ...(fallback || new Map()).entries(),
+    ...(preferred || new Map()).entries(),
+  ])
+}
+
+function buildStateTransitionVisualPlan(stateNodes = [], relayGroups = []) {
+  const stateNodeById = new Map((stateNodes || []).map((node) => [String(node.id), node]))
+  const stateRank = new Map()
+  const relayRank = new Map()
+  const involvedStateIds = new Set()
+  const outputStateIds = new Set()
+  const usableGroups = (relayGroups || []).filter((group) => {
+    const inputs = (group.inputStateIds || []).filter((id) => stateNodeById.has(String(id)))
+    const outputs = (group.outputStateIds || []).filter((id) => stateNodeById.has(String(id)))
+    inputs.forEach((id) => involvedStateIds.add(String(id)))
+    outputs.forEach((id) => {
+      involvedStateIds.add(String(id))
+      outputStateIds.add(String(id))
+    })
+    return inputs.length && outputs.length
+  })
+
+  for (const stateId of involvedStateIds) {
+    if (!outputStateIds.has(stateId)) stateRank.set(stateId, 0)
+  }
+
+  const remaining = new Set(usableGroups.map((group) => group.relayId))
+  const groupsByRelayId = new Map(usableGroups.map((group) => [group.relayId, group]))
+  let guard = 0
+  while (remaining.size && guard < usableGroups.length + 6) {
+    guard += 1
+    let ready = usableGroups.filter((group) =>
+      remaining.has(group.relayId) &&
+      (group.inputStateIds || []).every((stateId) => stateRank.has(String(stateId))),
+    )
+    if (!ready.length) {
+      const fallback = Array.from(remaining)
+        .map((relayId) => groupsByRelayId.get(relayId))
+        .filter(Boolean)
+        .sort((a, b) => transitionGroupSortKey(a, stateNodeById) - transitionGroupSortKey(b, stateNodeById))[0]
+      ready = fallback ? [fallback] : []
+    }
+    if (!ready.length) break
+    for (const group of ready) {
+      const inputRanks = (group.inputStateIds || [])
+        .map((stateId) => stateRank.get(String(stateId)))
+        .filter((rank) => Number.isFinite(rank))
+      const rank = (inputRanks.length ? Math.max(...inputRanks) : 0) + 1
+      relayRank.set(group.relayId, rank)
+      for (const outputStateId of group.outputStateIds || []) {
+        const key = String(outputStateId)
+        stateRank.set(key, Math.max(stateRank.get(key) || 0, rank + 1))
+      }
+      remaining.delete(group.relayId)
+    }
+  }
+
+  const statePositions = new Map()
+  const relayPositions = new Map()
+  const stateColumns = new Map()
+  for (const stateId of involvedStateIds) {
+    const rank = stateRank.get(stateId) ?? 0
+    if (!stateColumns.has(rank)) stateColumns.set(rank, [])
+    stateColumns.get(rank).push(stateId)
+  }
+  const relayColumns = new Map()
+  for (const group of usableGroups) {
+    const rank = relayRank.get(group.relayId) ?? 1
+    if (!relayColumns.has(rank)) relayColumns.set(rank, [])
+    relayColumns.get(rank).push(group)
+  }
+
+  const rowsByRank = new Map()
+  for (const [rank, stateIds] of stateColumns.entries()) {
+    rowsByRank.set(rank, Math.max(rowsByRank.get(rank) || 0, stateIds.length))
+  }
+  for (const [rank, groups] of relayColumns.entries()) {
+    rowsByRank.set(rank, Math.max(rowsByRank.get(rank) || 0, groups.length))
+  }
+  const laneOffsets = transitionPlanLaneOffsets(rowsByRank)
+
+  for (const [rank, stateIds] of stateColumns.entries()) {
+    stateIds
+      .sort((a, b) => stateSortKey(stateNodeById.get(a), stateNodes) - stateSortKey(stateNodeById.get(b), stateNodes))
+      .forEach((stateId, index) => {
+        statePositions.set(stateId, transitionPlanPosition(rank, index, 'state', laneOffsets))
+      })
+  }
+
+  for (const [rank, groups] of relayColumns.entries()) {
+    groups
+      .sort((a, b) =>
+        relaySortKey(a, statePositions, stateNodeById, stateNodes) -
+        relaySortKey(b, statePositions, stateNodeById, stateNodes),
+      )
+      .forEach((group, index) => {
+        relayPositions.set(group.relayId, transitionPlanPosition(rank, index, 'relay', laneOffsets))
+      })
+  }
+
+  return { stateRanks: stateRank, relayRanks: relayRank, statePositions, relayPositions }
+}
+
+function transitionGroupSortKey(group, stateNodeById) {
+  const ys = [...(group.inputStateIds || []), ...(group.outputStateIds || [])]
+    .map((stateId) => stateNodeById.get(String(stateId)))
+    .map((node) => node?.metadata_json?._network_editor_layout?.y)
+    .map(Number)
+    .filter(Number.isFinite)
+  return ys.length ? ys.reduce((sum, y) => sum + y, 0) / ys.length : 0
+}
+
+function stateSortKey(node, stateNodes) {
+  if (!node) return 0
+  const index = stateNodes.findIndex((item) => item.id === node.id)
+  const pos = nodePosition(node, Math.max(index, 0), 'state')
+  return pos.y * 10000 + pos.x
+}
+
+function relaySortKey(group, statePositions, stateNodeById, stateNodes) {
+  const positions = [...(group.inputStateIds || []), ...(group.outputStateIds || [])]
+    .map((stateId) => statePositions.get(String(stateId)) || currentStatePosition(stateNodeById.get(String(stateId)), stateNodes))
+    .filter(Boolean)
+  if (!positions.length) return 0
+  return positions.reduce((sum, pos) => sum + pos.y, 0) / positions.length
+}
+
+function currentStatePosition(node, stateNodes) {
+  if (!node) return null
+  const index = stateNodes.findIndex((item) => item.id === node.id)
+  return nodePosition(node, Math.max(index, 0), 'state')
+}
+
+function transitionPlanLaneIndex(rank) {
+  return Math.floor(Math.max(0, Number(rank) || 0) / transitionLayoutRanksPerLane)
+}
+
+function transitionPlanRankInLane(rank) {
+  return Math.max(0, Number(rank) || 0) % transitionLayoutRanksPerLane
+}
+
+function transitionPlanLaneOffsets(rowsByRank) {
+  const rowCountsByLane = new Map()
+  for (const [rank, rowCount] of rowsByRank.entries()) {
+    const lane = transitionPlanLaneIndex(rank)
+    rowCountsByLane.set(lane, Math.max(rowCountsByLane.get(lane) || 0, rowCount || 1))
+  }
+  const lanes = Array.from(rowCountsByLane.keys()).sort((a, b) => a - b)
+  const offsets = new Map()
+  let y = transitionLayoutBaseY
+  for (const lane of lanes) {
+    offsets.set(lane, y)
+    const rowCount = Math.max(1, rowCountsByLane.get(lane) || 1)
+    y += Math.max(transitionLayoutMinLaneHeight, rowCount * transitionLayoutRowGap + transitionLayoutLaneGap)
+  }
+  return offsets
+}
+
+function transitionPlanPosition(rank, index, kind, laneOffsets = null) {
+  const lane = transitionPlanLaneIndex(rank)
+  const rankInLane = transitionPlanRankInLane(rank)
+  return {
+    x: transitionLayoutBaseX +
+      rankInLane * transitionLayoutColumnGap +
+      (kind === 'relay' ? transitionLayoutRelayXOffset : 0),
+    y: (laneOffsets?.get(lane) ?? (transitionLayoutBaseY + lane * transitionLayoutMinLaneHeight)) +
+      index * transitionLayoutRowGap +
+      (kind === 'relay' ? transitionLayoutRelayYOffset : 0),
+  }
+}
+
+function transitionRelayFallbackPosition(index) {
+  return {
+    x: transitionLayoutBaseX + transitionLayoutColumnGap,
+    y: transitionLayoutBaseY + transitionLayoutRelayYOffset + index * transitionLayoutRowGap,
+  }
+}
+
+function buildStateTransitionBackboneEdges() {
+  const result = []
+  const seen = new Set()
+  for (const group of stateTransitionRelayGroups.value) {
+    for (const input of group.inputs || []) {
+      const key = `${input.source_id}->${group.relayId}:${group.activityId}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      result.push({
+        id: `state-flow-relay-in:${key}`,
+        source_id: input.source_id,
+        target_id: group.relayId,
+        type: 'STATE_TO_ACTIVITY',
+        binding_role: 'transition_precondition',
+        source_kind: 'state_transition_relay',
+        coverage_status: input.coverage_status || group.coverage_status,
+        isTransitionRelayEdge: true,
+        flowActivityId: group.activityId,
+        flowRelayId: group.relayId,
+        flowInputEdgeId: input.id,
+        flowRealizerLabel: group.label,
+      })
+    }
+    for (const output of group.outputs || []) {
+      const key = `${group.relayId}->${output.target_id}:${group.activityId}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      result.push({
+        id: `state-flow-relay-out:${key}`,
+        source_id: group.relayId,
+        target_id: output.target_id,
+        type: 'ACTIVITY_TO_STATE',
+        binding_role: 'transition_realizer',
+        source_kind: 'state_transition_relay',
+        coverage_status: output.coverage_status || group.coverage_status,
+        isTransitionRelayEdge: true,
+        flowActivityId: group.activityId,
+        flowRelayId: group.relayId,
+        flowOutputEdgeId: output.id,
+        flowRealizerLabel: group.label,
+      })
+    }
+  }
+  return result
+}
+
+function buildFlowFocus(edges, focusGraphId, mode = 'selected') {
+  const edgeIds = new Set()
+  const nodeIds = new Set()
+  const focusId = String(focusGraphId || '')
+  if (!focusId) return { edgeIds, nodeIds }
+  nodeIds.add(focusId)
+
+  const firstHopEdges = edges.filter((edge) => flowEdgeTouchesGraphId(edge, focusId))
+  const addEdge = (edge) => {
+    edgeIds.add(String(edge.id))
+    for (const graphId of flowEdgeGraphIds(edge)) nodeIds.add(String(graphId))
+  }
+  firstHopEdges.forEach(addEdge)
+
+  if (mode !== 'hover') {
+    const activityIds = new Set()
+    for (const edge of firstHopEdges) {
+      for (const activityId of flowEdgeActivityGraphIds(edge)) activityIds.add(activityId)
+    }
+    for (const edge of edges) {
+      if (flowEdgeActivityGraphIds(edge).some((activityId) => activityIds.has(activityId))) {
+        addEdge(edge)
+      }
+    }
+  }
+  return { edgeIds, nodeIds }
+}
+
+function flowEdgeTouchesGraphId(edge, graphId) {
+  return flowEdgeGraphIds(edge).some((id) => graphIdsMatch(id, graphId))
+}
+
+function flowEdgeGraphIds(edge) {
+  const ids = [
+    edge.source_id,
+    edge.target_id,
+    edge.flowActivityId,
+    edge.flowRelayId,
+    edge.aggregateActivityId,
+    ...(edge.aggregateStateIds || []),
+    edge.hiddenSourceId,
+    edge.hiddenTargetId,
+    ...(edge.hiddenSourceIds || []),
+    ...(edge.hiddenTargetIds || []),
+  ].filter(Boolean)
+  for (const child of edge.collapsedEdges || edge.aggregateEdges || []) {
+    ids.push(...flowEdgeGraphIds(child))
+  }
+  return [...new Set(ids.map((id) => String(id)))]
+}
+
+function flowEdgeActivityGraphIds(edge) {
+  return flowEdgeGraphIds(edge).filter((id) =>
+    id.startsWith('activity_node:') || id.startsWith('atomic_activity:'),
+  )
+}
+
+function graphIdsMatch(left, right) {
+  const leftId = String(left || '')
+  const rightId = String(right || '')
+  if (!leftId || !rightId) return false
+  if (leftId === rightId) return true
+  if (leftId.startsWith('state_node:') && rightId.startsWith('state_node:')) {
+    const leftNumber = graphIdNumber(leftId)
+    const rightNumber = graphIdNumber(rightId)
+    return Number.isFinite(leftNumber) &&
+      Number.isFinite(rightNumber) &&
+      String(leftNumber) === String(rightNumber)
+  }
+  return false
+}
+
 function buildRenderedEdges(edges) {
   const groups = new Map()
+  const proxyEdges = []
+  const directEdges = []
   for (const edge of edges) {
+    if (edge.isCollapsedInternalProxy) continue
+    if (edge.isCollapsedProxy) {
+      proxyEdges.push(edge)
+      continue
+    }
+    if (edge.type === 'STATE_FLOW' || isTransitionRelayEdge(edge)) {
+      directEdges.push(edge)
+      continue
+    }
     const key = edge.type === 'STATE_TO_ACTIVITY'
       ? `input:${edge.target_id}`
       : `output:${edge.source_id}`
@@ -6521,7 +10167,7 @@ function buildRenderedEdges(edges) {
     group.stateIds.add(edge.type === 'STATE_TO_ACTIVITY' ? edge.source_id : edge.target_id)
   }
 
-  const rendered = []
+  const rendered = [...proxyEdges, ...directEdges]
   for (const group of groups.values()) {
     if (group.edges.length > edgeSummaryThreshold && !shouldExpandEdgeGroup(group)) {
       rendered.push({
@@ -6664,8 +10310,8 @@ function edgeSemanticLabel(edge) {
   let label = roleLabel
   if (binding?.binding_type === 'state_package') {
     label = {
-      context_input: '状态包上下文',
-      declared_output: '状态包声明输出',
+      context_input: '历史状态包上下文',
+      declared_output: '历史状态包声明输出',
       input: '状态包输入',
       output: '状态包产出',
     }[binding.binding_role] || `状态包${roleLabel}`
@@ -6677,7 +10323,9 @@ function edgeSemanticLabel(edge) {
 }
 
 function edgeDisplayLabel(edge) {
+  if (edge.isCollapsedProxy) return edge.aggregateLabel || edge.displayLabel || ''
   if (edge.aggregate) return edge.aggregateLabel
+  if (edge.type === 'STATE_FLOW') return ''
   if (edge.is_draft || edge.is_pending) return edgeSemanticLabel(edge)
   const binding = edgeBinding(edge)
   if (binding?.binding_type === 'state_package' || isCrossLevelEdge(edge, binding)) {
@@ -6687,6 +10335,16 @@ function edgeDisplayLabel(edge) {
 }
 
 function edgeTitle(edge) {
+  if (isTransitionRelayEdge(edge)) {
+    if (edge.type === 'STATE_TO_ACTIVITY') {
+      return `前置条件：${nodeLabelForGraphId(edge.source_id)} -> ${edge.flowRealizerLabel || nodeLabelForGraphId(edge.flowActivityId)}`
+    }
+    return `达成结果：${edge.flowRealizerLabel || nodeLabelForGraphId(edge.flowActivityId)} -> ${nodeLabelForGraphId(edge.target_id)}`
+  }
+  if (edge.type === 'STATE_FLOW') {
+    return `流动关系：${nodeLabelForGraphId(edge.source_id)} -> ${nodeLabelForGraphId(edge.target_id)}${edge.flowRealizerLabel ? ` / ${edge.flowRealizerLabel}` : ''}`
+  }
+  if (edge.isCollapsedProxy) return edge.title || edge.aggregateLabel || ''
   if (edge.aggregate) return `${edge.aggregateLabel}，选中相关状态或活动后展开具体连线`
   return edgeSemanticLabel(edge)
 }
@@ -6799,11 +10457,14 @@ function dragOverState(node, event) {
 async function dropOnActivity(node) {
   if (!requireEditMode('创建绑定')) return endCanvasDrag()
   if (canvasDrag.value?.type !== 'state') return endCanvasDrag()
+  if (!supportsGraphActivityBinding(node)) {
+    ElMessage.warning('虚拟活动仅作为管理包，不能直接绑定状态')
+    return endCanvasDrag()
+  }
   selectGraphActivity(node)
   selectedStateId.value = canvasDrag.value.stateNodeId
   bindingForm.value.state_node_id = canvasDrag.value.stateNodeId
-  const role = node.activity_type === 'virtual' ? 'context_input' : 'input'
-  await confirmDroppedBinding(node, role, canvasDrag.value.stateNodeId)
+  await confirmDroppedBinding(node, 'input', canvasDrag.value.stateNodeId)
   endCanvasDrag()
 }
 
@@ -6812,45 +10473,15 @@ async function dropOnState(node) {
   if (canvasDrag.value?.type !== 'activity') return endCanvasDrag()
   const activity = graphActivityById.value.get(canvasDrag.value.activityGraphId)
   if (!activity) return endCanvasDrag()
+  if (!supportsGraphActivityBinding(activity)) {
+    ElMessage.warning('虚拟活动仅作为管理包，不能直接绑定状态')
+    return endCanvasDrag()
+  }
   selectGraphState(node)
   selectedActivityGraphId.value = activity.id
   bindingForm.value.activity_graph_id = activity.id
-  const role = activity.activity_type === 'virtual' ? 'declared_output' : 'output'
-  await confirmDroppedBinding(activity, role, node.state_node_id)
+  await confirmDroppedBinding(activity, 'output', node.state_node_id)
   endCanvasDrag()
-}
-
-async function handleX6ConnectNodes({ source, target }) {
-  if (!requireEditMode('创建绑定')) return
-  if (source?.kind === 'state' && target?.kind === 'activity') {
-    const state = source.node
-    const activity = target.node
-    if (!state?.state_node_id || !activity) return
-    selectGraphState(state)
-    selectGraphActivity(activity)
-    const role = activity.activity_type === 'virtual' ? 'context_input' : 'input'
-    setPendingBindingPreview(activity, role, state.state_node_id)
-    await confirmDroppedBinding(activity, role, state.state_node_id)
-    if (bindingAlreadyExistsOrQueued(activity, role, state.state_node_id)) {
-      clearPendingBindingPreview(activity, role, state.state_node_id)
-    }
-    return
-  }
-  if (source?.kind === 'activity' && target?.kind === 'state') {
-    const activity = source.node
-    const state = target.node
-    if (!activity || !state?.state_node_id) return
-    selectGraphActivity(activity)
-    selectGraphState(state)
-    const role = activity.activity_type === 'virtual' ? 'declared_output' : 'output'
-    setPendingBindingPreview(activity, role, state.state_node_id)
-    await confirmDroppedBinding(activity, role, state.state_node_id)
-    if (bindingAlreadyExistsOrQueued(activity, role, state.state_node_id)) {
-      clearPendingBindingPreview(activity, role, state.state_node_id)
-    }
-    return
-  }
-  ElMessage.warning('请从右侧“产出”端口拉到另一类节点左侧“输入”端口')
 }
 
 function graphPayload() {
@@ -6907,6 +10538,7 @@ function activityPathContains(node, activityNodeId) {
 
 function isStateVisibleInX6(node) {
   if (!node?.state_node_id) return false
+  if (isAtomicStateLibraryObject(node)) return false
   if (isInsideCollapsedStateContainer(node)) return false
   if (stateDepth.value !== 0 && selectedStateRootIds.value.length) {
     return !selectedStateRootIds.value.some((collapsedRootId) =>
@@ -6926,6 +10558,11 @@ function isActivityVisibleInX6(node) {
   if (!isDraftActivityId(collapsedRootId)) return true
   if (String(node.activity_node_id || '') === String(collapsedRootId)) return true
   return !activityPathContains(node, collapsedRootId)
+}
+
+function isActivityVisibleInStateTransitionCanvas(node) {
+  if (!isStateTransitionCanvas.value) return true
+  return false
 }
 
 function stateContainerCollapseKey(node) {
@@ -7249,6 +10886,7 @@ function selectGraphState(node, event = null) {
     selectionFocus.value = 'state'
     bindingForm.value.state_node_id = node.state_node_id
     resetBindingCoverageSelection()
+    ensureTransitionRulesForState(node.state_node_id)
     loadImpact()
     return
   }
@@ -7257,14 +10895,16 @@ function selectGraphState(node, event = null) {
   selectionFocus.value = 'state'
   bindingForm.value.state_node_id = node.state_node_id
   resetBindingCoverageSelection()
+  ensureTransitionRulesForState(node.state_node_id)
   loadImpact()
 }
 
 function selectGraphActivity(node) {
   closeContextMenu()
-  selectedActivityGraphId.value = node.id
+  const activityGraphId = transitionRelayActivityGraphId(node) || node.id
+  selectedActivityGraphId.value = activityGraphId
   selectionFocus.value = 'activity'
-  bindingForm.value.activity_graph_id = node.id
+  bindingForm.value.activity_graph_id = activityGraphId
   onBindingActivityChange()
   loadImpact()
 }
@@ -7286,13 +10926,13 @@ function onBindingActivityChange() {
   }
 }
 
-function selectBinding(row) {
+function selectBinding(row, options = {}) {
   selectedBinding.value = row
   selectedStateId.value = row.state_node_id
   selectedActivityGraphId.value = row.atomic_activity_id
     ? `atomic_activity:${row.atomic_activity_id}`
     : `activity_node:${row.activity_node_id}`
-  selectionFocus.value = row.atomic_activity_id || row.activity_node_id ? 'activity' : 'state'
+  selectionFocus.value = options.preferState ? 'state' : (row.atomic_activity_id || row.activity_node_id ? 'activity' : 'state')
   bindingForm.value.state_node_id = row.state_node_id
   bindingForm.value.binding_role = row.binding_role
   bindingForm.value.activity_graph_id = selectedActivityGraphId.value
@@ -7346,26 +10986,52 @@ async function revealIssueState(stateId) {
   return graphState || null
 }
 
-async function revealIssueBinding(binding) {
+function issuePrefersActivity(issue) {
+  const code = String(issue?.code || '').toUpperCase()
+  const details = issue?.details || {}
+  if (activityFirstIssueCodes.has(code)) return true
+  if (details.node_type === 'activity_node' || details.node_type === 'legacy_activity_node' || details.node_type === 'atomic_activity') {
+    return true
+  }
+  return !issueDetailStateId(issue) && !(issue?.related_state_ids || []).some((id) => stateById.value.has(Number(id)))
+}
+
+async function revealIssueBinding(binding, options = {}) {
   if (!binding) return null
   const activityId = bindingActivityGraphId(binding)
-  if (activityId) await revealIssueActivity(activityId)
+  if (options.revealActivity && activityId) await revealIssueActivity(activityId)
   await revealIssueState(binding.state_node_id)
   const refreshedBinding = bindingById.value.get(Number(binding.id)) || binding
-  selectBinding(refreshedBinding)
+  selectBinding(refreshedBinding, { preferState: !options.revealActivity })
   return refreshedBinding
 }
 
 async function inspectIssue(issue) {
   if (!issue) return
+  const preferActivity = issuePrefersActivity(issue)
   const bindingId = issue.details?.binding_id
   if (bindingId) {
     const binding = bindingById.value.get(Number(bindingId))
     if (binding) {
-      await revealIssueBinding(binding)
+      await revealIssueBinding(binding, { revealActivity: preferActivity })
       ElMessage.info(`已定位绑定 #${binding.id}`)
       return
     }
+  }
+
+  const stateId = Number(
+    issue.related_state_ids?.find((id) => stateById.value.has(Number(id))) ??
+    issueDetailStateId(issue),
+  )
+  if (!preferActivity && stateId) {
+    const graphState = await revealIssueState(stateId)
+    if (graphState) {
+      selectGraphState(graphState)
+    } else {
+      selectState(stateById.value.get(stateId))
+    }
+    ElMessage.info(`已定位 ${stateById.value.get(stateId)?.code || `状态 #${stateId}`}`)
+    return
   }
 
   const activityId = issue.related_activity_ids?.find((id) =>
@@ -7380,10 +11046,6 @@ async function inspectIssue(issue) {
     }
   }
 
-  const stateId = Number(
-    issue.related_state_ids?.find((id) => stateById.value.has(Number(id))) ??
-    issueDetailStateId(issue),
-  )
   if (stateId) {
     const graphState = await revealIssueState(stateId)
     if (graphState) {
@@ -7523,10 +11185,15 @@ async function onTypeChange() {
   editorMode.value = 'preview'
   draftChanges.value = []
   draftSequence.value = 0
+  draftBatchSequence.value = 0
+  clearSubmittedLayoutOverlay()
   pendingBindingPreview.value = null
   editBaselineRevision.value = null
   layoutDraft.value = {}
   containerDraft.value = {}
+  pendingStateLayout.value = null
+  pendingActivityLayout.value = null
+  pendingAtomicActivityLayout.value = null
   resetCollapsedStateContainers()
   resetCollapsedActivityContainers()
   resetStateActivityCreationSelection()
@@ -7535,7 +11202,7 @@ async function onTypeChange() {
   await loadAll()
 }
 
-async function loadAll() {
+async function loadAll({ preserveAutoLayout = false } = {}) {
   if (!machineTypeId.value) return
   loading.value = true
   try {
@@ -7564,7 +11231,7 @@ async function loadAll() {
     opRules.value = rules
     stateFeatureDefs.value = featureDefs
     await loadActivityPackageRefs(activities.filter((item) => item.level === 2))
-    await reloadGraph()
+    await reloadGraph({ preserveAutoLayout })
   } catch (error) {
     notifyOperationError('加载网络编辑器数据失败', error)
   } finally {
@@ -7583,11 +11250,15 @@ async function loadActivityPackageRefs(packages) {
   atomicRefsByPackage.value = new Map(entries)
 }
 
-async function reloadGraph() {
+async function reloadGraph({ preserveAutoLayout = false } = {}) {
   if (!machineTypeId.value) return
+  if (!preserveAutoLayout) {
+    stateTransitionAutoLayout.value = null
+    relationAutoLayout.value = null
+    clearSubmittedLayoutOverlay()
+  }
   try {
     graph.value = await previewNetworkEditorGraph(machineTypeId.value, graphPayload())
-    bindings.value = graph.value.bindings || bindings.value
     pruneCollapsedStateContainers()
     pruneCollapsedActivityContainers()
     await loadImpact()
@@ -7706,6 +11377,49 @@ async function runSolverPrecheck() {
   }
 }
 
+function defaultCoveredLeafIdsForState(stateNodeId) {
+  if (!stateNodeId) return null
+  const activeLeafIds = leafStateIdsUnder(stateNodeId, { activeOnly: true })
+  const hasActiveChildren = displayStateChildren(stateNodeId, { activeOnly: true }).length > 0
+  return hasActiveChildren && activeLeafIds.length ? activeLeafIds : null
+}
+
+function openCreateTransitionRealizer() {
+  if (!requireEditMode('新建达成活动')) return
+  if (!selectedStateId.value) return
+  openCreateAtomicActivity(null, {
+    outputStateIds: [selectedStateId.value],
+    useSelectedPackage: false,
+  })
+}
+
+async function addTransitionRealizer() {
+  if (!requireEditMode('绑定达成活动')) return
+  const activity = graphActivityById.value.get(transitionRealizerActivityId.value)
+  if (!activity || !selectedStateId.value) return
+  await createBindingForActivity(activity, 'output', {
+    stateNodeId: selectedStateId.value,
+    coveredLeafStateIds: defaultCoveredLeafIdsForState(selectedStateId.value),
+    allowMissingRule: true,
+    autoReflexivePrecondition: true,
+  })
+  ensureTransitionRuleForActivity(activity, selectedStateId.value)
+  transitionRealizerActivityId.value = null
+}
+
+async function addTransitionPrecondition() {
+  if (!requireEditMode('添加前置状态')) return
+  const activity = selectedTransitionSingleRealizer.value
+  if (!activity || !transitionPreconditionStateId.value) return
+  await createBindingForActivity(activity, 'input', {
+    stateNodeId: transitionPreconditionStateId.value,
+    coveredLeafStateIds: defaultCoveredLeafIdsForState(transitionPreconditionStateId.value),
+    allowMissingRule: true,
+  })
+  ensureTransitionRuleForActivity(activity, selectedStateId.value)
+  transitionPreconditionStateId.value = null
+}
+
 async function createBindingFromForm() {
   const activity = selectedBindingActivity.value
   if (!activity) return
@@ -7714,18 +11428,6 @@ async function createBindingFromForm() {
     opRuleId: bindingForm.value.op_rule_id,
     coveredLeafStateIds: bindingFormCoveredLeafStateIds.value,
   })
-}
-
-async function createSelectedInputEdge() {
-  const activity = selectedGraphActivity.value
-  const role = activity?.activity_type === 'virtual' ? 'context_input' : 'input'
-  await createBindingForActivity(activity, role, { stateNodeId: selectedStateId.value, quick: true })
-}
-
-async function createSelectedOutputEdge() {
-  const activity = selectedGraphActivity.value
-  const role = activity?.activity_type === 'virtual' ? 'declared_output' : 'output'
-  await createBindingForActivity(activity, role, { stateNodeId: selectedStateId.value, quick: true })
 }
 
 function openBatchBindingDialog() {
@@ -7758,9 +11460,8 @@ function activityRefComparableId(value) {
 }
 
 function atomicActivityRefComparableId(value) {
-  if (value && typeof value === 'object' && !Array.isArray(value) && value._draft_ref) {
-    return draftAtomicActivityId(value._draft_ref)
-  }
+  const draftClientId = atomicActivityDraftClientIdFromRef(value)
+  if (draftClientId) return draftAtomicActivityId(draftClientId)
   return value
 }
 
@@ -7808,12 +11509,301 @@ function bindingAlreadyExistsOrQueued(activity, role, stateNodeId) {
     bindingMatchesActivity(item, activity) &&
     item.binding_role === role &&
     sameStateId(item.state_node_id, stateNodeId)
-  if (bindings.value.some(matches)) return true
+  if (bindings.value.some((item) => !deletedBindingIdSet.value.has(Number(item.id)) && matches(item))) return true
   return draftChanges.value.some((change) =>
     change.entity_type === 'activity_state_binding' &&
     change.operation === 'create' &&
     matches(change.payload),
   )
+}
+
+function bindingDeletedInCurrentDraft(activity, role, stateNodeId) {
+  if (!deletedBindingIdSet.value.size) return false
+  return bindings.value.some((item) =>
+    item?.id &&
+    deletedBindingIdSet.value.has(Number(item.id)) &&
+    bindingMatchesActivity(item, activity) &&
+    item.binding_role === role &&
+    sameStateId(item.state_node_id, stateNodeId),
+  )
+}
+
+function comparableStateNodeId(value) {
+  const rawId = graphStateNodeKey(value) || value
+  const state = stateNodeByComparableId(rawId)
+  return state?.id ?? rawId
+}
+
+function uniqueComparableStateIds(ids) {
+  const result = []
+  const seen = new Set()
+  for (const rawId of ids || []) {
+    const id = comparableStateNodeId(rawId)
+    if (id === null || id === undefined || id === '') continue
+    const key = String(id)
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(id)
+  }
+  return result
+}
+
+function activityAtomicRulePayloadRef(activity) {
+  const atomicActivityId = activity?.atomic_activity_id
+  const draftClientId = atomicActivityDraftClientIdFromRef(atomicActivityId)
+  return draftClientId ? { _draft_ref: draftClientId } : atomicActivityId
+}
+
+function cloneOpRuleRef(opRuleRef) {
+  return opRuleRef && typeof opRuleRef === 'object' && !Array.isArray(opRuleRef)
+    ? { ...opRuleRef }
+    : opRuleRef
+}
+
+function draftRuleClientIdForActivity(activity) {
+  const atomicActivityId = String(activity?.atomic_activity_id || '')
+  if (!atomicActivityId) return null
+  const change = draftChanges.value.find((item) =>
+    item.entity_type === 'op_rule' &&
+    item.operation === 'create' &&
+    item.payload?.is_active !== false &&
+    String(atomicActivityRefComparableId(item.payload?.atomic_activity_id) || '') === atomicActivityId,
+  )
+  return change?.client_id || null
+}
+
+function transitionOutputStateIdsForActivity(activity, targetStateId = null) {
+  const ids = []
+  for (const stateGraphId of stateTransitionOutputsByActivityId.value.get(activity?.id) || []) {
+    ids.push(stateGraphId)
+  }
+  if (targetStateId) ids.push(targetStateId)
+  return uniqueComparableStateIds(ids)
+}
+
+function transitionInputStateIdsForActivity(activity) {
+  return uniqueComparableStateIds(
+    (stateTransitionPreconditionsByActivityId.value.get(activity?.id) || []).map((item) => item.stateNodeId),
+  )
+}
+
+function transitionRuleFactsForActivity(activity, targetStateId = null) {
+  const outputStateIds = transitionOutputStateIdsForActivity(activity, targetStateId)
+  const inputStateIds = transitionInputStateIdsForActivity(activity)
+  const outputEffectStateIds = outputStateIds.flatMap((stateNodeId) =>
+    defaultCoveredLeafIdsForState(stateNodeId) || [stateNodeId],
+  )
+  return {
+    outputStateIds,
+    inputStateIds,
+    preconditions: rulePreconditionsForStateIds(inputStateIds),
+    effects: ruleEffectsForStateIds(outputEffectStateIds),
+  }
+}
+
+function ruleDurationForActivity(activity) {
+  const draftClientId = draftAtomicActivityClientId(activity?.atomic_activity_id)
+  if (draftClientId) {
+    const draft = draftChanges.value.find((change) =>
+      change.entity_type === 'atomic_activity' &&
+      change.operation === 'create' &&
+      change.client_id === draftClientId,
+    )
+    const draftDuration = Number(draft?.payload?.duration_min)
+    if (Number.isFinite(draftDuration) && draftDuration > 0) return draftDuration
+  }
+  return 30
+}
+
+function updateDraftTransitionRulePayload(ruleDraftClientId, activity, targetStateId = null) {
+  if (!ruleDraftClientId) return
+  const facts = transitionRuleFactsForActivity(activity, targetStateId)
+  if (!facts.effects.length) return
+  const index = draftChanges.value.findIndex((change) =>
+    change.entity_type === 'op_rule' &&
+    change.operation === 'create' &&
+    change.client_id === ruleDraftClientId,
+  )
+  if (index < 0) return
+  const change = draftChanges.value[index]
+  draftChanges.value.splice(index, 1, {
+    ...change,
+    payload: {
+      ...change.payload,
+      preconditions: facts.preconditions,
+      effects: facts.effects,
+    },
+  })
+}
+
+function ensureTransitionOpRuleRef(activity, targetStateId = null) {
+  if (!activity?.atomic_activity_id) return null
+  const activeRules = activeOpRulesForAtomicActivity(activity.atomic_activity_id)
+  if (activeRules.length === 1) return activeRules[0].id
+  if (activeRules.length > 1) return null
+  const existingDraftRuleId = draftRuleClientIdForActivity(activity)
+  if (existingDraftRuleId) {
+    updateDraftTransitionRulePayload(existingDraftRuleId, activity, targetStateId)
+    return { _draft_ref: existingDraftRuleId }
+  }
+  const facts = transitionRuleFactsForActivity(activity, targetStateId)
+  if (!facts.effects.length) return null
+  const ruleDraftId = queueDraftChange({
+    entityType: 'op_rule',
+    operation: 'create',
+    payload: {
+      machine_type_id: machineTypeId.value,
+      atomic_activity_id: activityAtomicRulePayloadRef(activity),
+      code: null,
+      name: nodeLabel(activity),
+      duration_min: ruleDurationForActivity(activity),
+      description: activity.description || null,
+      is_active: activity.is_active !== false,
+      is_repair: activity.activity_category === 'repair',
+      preconditions: facts.preconditions,
+      effects: facts.effects,
+      resource_reqs: [],
+    },
+    label: `补齐状态迁移规则：${nodeLabel(activity)}`,
+  })
+  return ruleDraftId ? { _draft_ref: ruleDraftId } : null
+}
+
+function transitionBindingMatchesStateSets(binding, activity, inputStateIdSet, outputStateIdSet) {
+  if (!binding || !bindingMatchesActivity(binding, activity)) return false
+  if (binding.binding_role === 'input') return inputStateIdSet.has(String(comparableStateNodeId(binding.state_node_id)))
+  if (binding.binding_role === 'output') return outputStateIdSet.has(String(comparableStateNodeId(binding.state_node_id)))
+  return false
+}
+
+function attachOpRuleToDraftTransitionBindings(activity, opRuleRef, inputStateIdSet, outputStateIdSet) {
+  let changed = false
+  draftChanges.value = draftChanges.value.map((change) => {
+    if (
+      change.entity_type !== 'activity_state_binding' ||
+      change.operation !== 'create' ||
+      change.payload?.op_rule_id ||
+      !transitionBindingMatchesStateSets(change.payload, activity, inputStateIdSet, outputStateIdSet)
+    ) {
+      return change
+    }
+    changed = true
+    return {
+      ...change,
+      payload: {
+        ...change.payload,
+        op_rule_id: cloneOpRuleRef(opRuleRef),
+      },
+    }
+  })
+  if (changed) invalidateDerivedResults()
+}
+
+function bindingUpdatePayloadWithRule(binding, opRuleRef) {
+  const effective = bindingById.value.get(Number(binding.id)) || binding
+  return {
+    machine_type_id: effective.machine_type_id || machineTypeId.value,
+    activity_node_id: effective.activity_node_id || null,
+    atomic_activity_id: effective.atomic_activity_id || null,
+    op_rule_id: cloneOpRuleRef(opRuleRef),
+    state_node_id: effective.state_node_id,
+    binding_role: effective.binding_role,
+    covered_leaf_state_ids: effective.covered_leaf_state_ids || null,
+    is_inherited: effective.is_inherited === true,
+    is_active: effective.is_active !== false,
+    metadata_json: effective.metadata_json || null,
+  }
+}
+
+function attachOpRuleToCommittedTransitionBindings(activity, opRuleRef, inputStateIdSet, outputStateIdSet) {
+  for (const binding of bindings.value) {
+    const bindingId = Number(binding?.id)
+    if (!Number.isFinite(bindingId) || deletedBindingIdSet.value.has(bindingId)) continue
+    const effective = bindingById.value.get(bindingId) || binding
+    if (effective.op_rule_id) continue
+    if (!transitionBindingMatchesStateSets(effective, activity, inputStateIdSet, outputStateIdSet)) continue
+    queueDraftChange({
+      entityType: 'activity_state_binding',
+      operation: 'update',
+      entityId: binding.id,
+      payload: bindingUpdatePayloadWithRule(effective, opRuleRef),
+      label: `补齐状态迁移绑定规则 #${binding.id}`,
+    })
+  }
+}
+
+function ensureTransitionRuleForActivity(activity, targetStateId = null) {
+  if (!isEditMode.value || !activity?.atomic_activity_id) return false
+  const facts = transitionRuleFactsForActivity(activity, targetStateId)
+  if (!facts.outputStateIds.length || !facts.effects.length) return false
+  const opRuleRef = ensureTransitionOpRuleRef(activity, targetStateId)
+  if (!opRuleRef) return false
+  const inputStateIdSet = new Set(facts.inputStateIds.map((id) => String(id)))
+  const outputStateIdSet = new Set(facts.outputStateIds.map((id) => String(id)))
+  attachOpRuleToDraftTransitionBindings(activity, opRuleRef, inputStateIdSet, outputStateIdSet)
+  attachOpRuleToCommittedTransitionBindings(activity, opRuleRef, inputStateIdSet, outputStateIdSet)
+  return true
+}
+
+function ensureTransitionRulesForState(stateNodeId) {
+  if (!isEditMode.value || !stateNodeId) return false
+  const transition = stateTransitionByStateId.value.get(stateNodeKey(stateNodeId))
+  let changed = false
+  for (const realizer of transition?.realizers || []) {
+    if (realizer?.activity?.atomic_activity_id) {
+      changed = ensureTransitionRuleForActivity(realizer.activity, stateNodeId) || changed
+    }
+  }
+  return changed
+}
+
+function transitionPreconditionDraftIndex(item) {
+  return draftChanges.value.findIndex((change) =>
+    change.entity_type === 'activity_state_binding' &&
+    change.operation === 'create' &&
+    change.payload?.binding_role === (item.edge?.binding_role || 'input') &&
+    sameStateId(change.payload?.state_node_id, item.stateNodeId) &&
+    bindingMatchesActivity(change.payload, item.activity),
+  )
+}
+
+async function removeTransitionPrecondition(item) {
+  if (!requireEditMode('移除前置状态')) return
+  if (!item?.stateNodeId || !item?.activity) return
+  const draftIndex = transitionPreconditionDraftIndex(item)
+  if (draftIndex >= 0) {
+    draftChanges.value.splice(draftIndex, 1)
+    invalidateDerivedResults()
+    ensureTransitionRuleForActivity(item.activity, selectedStateId.value)
+    ElMessage.success('前置状态草稿已移除')
+    return
+  }
+  const bindingId = Number(item.binding?.id || item.edge?.binding_id)
+  if (!Number.isFinite(bindingId) || bindingId <= 0) {
+    ElMessage.warning('未找到可移除的前置绑定')
+    return
+  }
+  if (deletedBindingIdSet.value.has(bindingId)) {
+    ElMessage.info('该前置状态已在草稿中移除')
+    return
+  }
+  for (let index = draftChanges.value.length - 1; index >= 0; index -= 1) {
+    const change = draftChanges.value[index]
+    if (
+      change.entity_type === 'activity_state_binding' &&
+      change.operation === 'update' &&
+      Number(change.entity_id) === bindingId
+    ) {
+      draftChanges.value.splice(index, 1)
+    }
+  }
+  queueDraftChange({
+    entityType: 'activity_state_binding',
+    operation: 'delete',
+    entityId: bindingId,
+    label: `移除前置状态：${nodeLabel(item.state)}`,
+  })
+  ElMessage.success('前置状态移除已加入草稿')
 }
 
 function prefillBindingForm(activity, role, stateNodeId, opRuleId = null) {
@@ -7833,13 +11823,13 @@ function bindingCoveragePreviewText(stateNodeId) {
   const leafIds = leafStateIdsUnder(stateNodeId, { activeOnly: true })
   const state = stateById.value.get(stateNodeId)
   const childCount = displayStateChildren(stateNodeId, { activeOnly: true }).length
-  if (!leafIds.length) return '覆盖范围：无启用叶子状态'
+  if (!leafIds.length) return '覆盖范围：无启用原子状态'
   if (leafIds.length === 1 && !childCount) return `覆盖范围：${nodeLabel(state)}`
   const labels = leafIds
     .slice(0, 4)
     .map((id) => nodeLabel(stateById.value.get(id)))
     .join('、')
-  return `覆盖范围：状态包当前 ${leafIds.length} 个启用叶子${labels ? `（${labels}${leafIds.length > 4 ? '...' : ''}）` : ''}`
+  return `覆盖范围：状态包当前 ${leafIds.length} 个启用原子状态${labels ? `（${labels}${leafIds.length > 4 ? '...' : ''}）` : ''}`
 }
 
 async function confirmDroppedBinding(activity, role, stateNodeId) {
@@ -7944,15 +11934,19 @@ async function queueBatchBindings() {
   ElMessage.success(`批量绑定已加入草稿：${payloads.length} 条${skipped ? `，跳过 ${skipped} 条重复` : ''}`)
 }
 
-function buildBindingPayload(activity, role, { stateNodeId, opRuleId = null, quick = false, coveredLeafStateIds = null } = {}) {
+function buildBindingPayload(activity, role, {
+  stateNodeId,
+  opRuleId = null,
+  quick = false,
+  coveredLeafStateIds = null,
+  allowMissingRule = false,
+} = {}) {
   if (!stateNodeId || !activity || !supportsGraphActivityBinding(activity)) {
-    ElMessage.warning('请先选择可绑定的状态和活动')
+    ElMessage.warning('请先选择状态和原子活动；虚拟活动仅作为管理包')
     return null
   }
   if (!bindingRoleAllowedForActivity(activity, role)) {
-    ElMessage.warning(activity.atomic_activity_id
-      ? '原子活动只支持输入或产出绑定'
-      : '虚拟活动只支持上下文输入或声明输出绑定')
+    ElMessage.warning('原子活动只支持输入或产出绑定')
     return null
   }
   const payload = {
@@ -7973,13 +11967,11 @@ function buildBindingPayload(activity, role, { stateNodeId, opRuleId = null, qui
       payload.op_rule_id = opRuleId
     } else if (rules.length === 1) {
       payload.op_rule_id = rules[0].id
-    } else {
+    } else if (!allowMissingRule) {
       ElMessage.warning(atomicRuleSelectionWarning(activity, quick))
       return null
     }
     payload.atomic_activity_id = activity.atomic_activity_id
-  } else {
-    payload.activity_node_id = activity.activity_node_id
   }
   return payload
 }
@@ -7989,6 +11981,8 @@ async function createBindingForActivity(activity, role, {
   opRuleId = null,
   quick = false,
   coveredLeafStateIds = null,
+  allowMissingRule = false,
+  autoReflexivePrecondition = false,
 } = {}) {
   if (!requireEditMode('创建绑定')) return
   if (bindingAlreadyExistsOrQueued(activity, role, stateNodeId)) {
@@ -7996,7 +11990,7 @@ async function createBindingForActivity(activity, role, {
     clearPendingBindingPreview(activity, role, stateNodeId)
     return
   }
-  const payload = buildBindingPayload(activity, role, { stateNodeId, opRuleId, quick, coveredLeafStateIds })
+  const payload = buildBindingPayload(activity, role, { stateNodeId, opRuleId, quick, coveredLeafStateIds, allowMissingRule })
   if (!payload) return
   try {
     queueDraftChange({
@@ -8005,6 +11999,9 @@ async function createBindingForActivity(activity, role, {
       payload,
       label: `创建绑定：${role} / ${nodeLabel(stateById.value.get(stateNodeId))}`,
     })
+    if (autoReflexivePrecondition) {
+      queueReflexivePreconditionBindingForActivity(activity, stateNodeId, payload, { allowMissingRule, quick })
+    }
     bindingForm.value = defaultBindingForm({
       binding_role: role,
       state_node_id: stateNodeId,
@@ -8017,6 +12014,32 @@ async function createBindingForActivity(activity, role, {
   } catch (error) {
     ElMessage.error(errorMessage(error))
   }
+}
+
+function queueReflexivePreconditionBindingForActivity(activity, outputStateNodeId, outputPayload, {
+  allowMissingRule = false,
+  quick = false,
+} = {}) {
+  if (!activity?.atomic_activity_id || outputPayload?.binding_role !== 'output') return false
+  const reflexiveStateId = reflexivePreconditionStateIdForTarget(outputStateNodeId)
+  if (!reflexiveStateId) return false
+  if (bindingAlreadyExistsOrQueued(activity, 'input', reflexiveStateId)) return false
+  if (bindingDeletedInCurrentDraft(activity, 'input', reflexiveStateId)) return false
+  const payload = buildBindingPayload(activity, 'input', {
+    stateNodeId: reflexiveStateId,
+    opRuleId: outputPayload?.op_rule_id || null,
+    quick,
+    coveredLeafStateIds: defaultCoveredLeafIdsForState(reflexiveStateId),
+    allowMissingRule,
+  })
+  if (!payload) return false
+  queueDraftChange({
+    entityType: 'activity_state_binding',
+    operation: 'create',
+    payload,
+    label: `自动添加自反前置：${nodeLabel(stateNodeByComparableId(reflexiveStateId))}`,
+  })
+  return true
 }
 
 async function updateSelectedBindingFromForm() {
@@ -8058,6 +12081,43 @@ async function removeBinding() {
   ElMessage.success('绑定删除已加入草稿')
   } catch (error) {
     if (!isUserCancel(error)) notifyOperationError('删除绑定失败', error)
+  }
+}
+
+async function createStateReferenceFromDrawer() {
+  if (!requireEditMode('引用已有状态')) return
+  try {
+    const candidate = stateById.value.get(stateForm.value.reference_state_node_id)
+    const parentId = stateForm.value.parent_id
+    if (!candidate) {
+      ElMessage.warning('请选择要引用的状态')
+      return
+    }
+    if (!parentId) {
+      ElMessage.warning('请先选择所在状态包')
+      return
+    }
+    if (statePackageChangeNeedsDecision(parentId)) {
+      openPackageChangeDialog({
+        mode: 'reuse',
+        origin: 'state_drawer_reference',
+        sourceStateNodeId: parentId,
+        payload: {
+          parent_id: parentId,
+          sort_order: stateForm.value.sort_order || 0,
+          name: candidate?.name || '',
+        },
+        candidate,
+      })
+      return
+    }
+    queueStateReuseReference(candidate, {
+      parent_id: parentId,
+      sort_order: stateForm.value.sort_order || 0,
+      name: candidate?.name || '',
+    })
+  } catch (error) {
+    notifyOperationError('创建状态引用失败', error)
   }
 }
 
@@ -8134,6 +12194,9 @@ onUnmounted(() => {
   window.removeEventListener('pointerup', endContainerMove)
   window.removeEventListener('pointermove', onContainerResizeMove)
   window.removeEventListener('pointerup', endContainerResize)
+  window.removeEventListener('pointermove', onPaneResizeMove)
+  window.removeEventListener('pointerup', endPaneResize)
+  document.body.classList.remove('network-editor-pane-resizing')
 })
 </script>
 
@@ -8149,21 +12212,26 @@ onUnmounted(() => {
 .workspace-toolbar {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
-  margin-bottom: 14px;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.workspace-toolbar > div:first-child {
+  flex: 1 1 220px;
+  min-width: 0;
 }
 .workspace-toolbar h2 {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
 }
 .workspace-toolbar p {
   margin: 0;
   color: #606266;
+  font-size: 12px;
 }
 .toolbar-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -8231,26 +12299,28 @@ onUnmounted(() => {
   width: 104px;
 }
 .summary-strip {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
-  gap: 8px;
-  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 .metric {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 6px;
   border: 1px solid #dcdfe6;
-  border-radius: 6px;
-  padding: 10px 12px;
+  border-radius: 999px;
+  padding: 4px 9px;
   background: #fff;
 }
 .metric span {
-  display: block;
   color: #606266;
   font-size: 12px;
 }
 .metric strong {
-  display: block;
-  margin-top: 4px;
-  font-size: 20px;
+  font-size: 14px;
   line-height: 1;
 }
 .metric.warning strong {
@@ -8259,57 +12329,54 @@ onUnmounted(() => {
 .metric.danger strong {
   color: #c45656;
 }
-.solver-readiness-strip {
+.summary-overflow-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.summary-overflow-grid div {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  border: 1px solid #dcdfe6;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid #ebeef5;
   border-radius: 6px;
-  padding: 10px 12px;
-  margin-bottom: 12px;
-  background: #fff;
+  background: #fafafa;
 }
-.solver-readiness-strip strong {
-  display: block;
-  font-size: 14px;
-  line-height: 1.3;
-}
-.solver-readiness-strip span {
-  display: block;
-  margin-top: 3px;
+.summary-overflow-grid span {
   color: #606266;
   font-size: 12px;
-  line-height: 1.4;
 }
-.solver-readiness-strip.is-success {
-  border-color: #b3e19d;
-  background: #f0f9eb;
-}
-.solver-readiness-strip.is-warning {
-  border-color: #f3d19e;
-  background: #fdf6ec;
-}
-.solver-readiness-strip.is-danger {
-  border-color: #fab6b6;
-  background: #fef0f0;
-}
-.solver-readiness-strip.is-info {
-  border-color: #c8d3e0;
-  background: #f4f7fb;
+.summary-overflow-grid strong {
+  color: #303133;
+  font-size: 13px;
 }
 .workspace-body {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) minmax(176px, 30%);
-  gap: 12px;
-  height: max(520px, calc(100vh - 260px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: max(620px, calc(100vh - 196px));
   min-height: 0;
 }
 .editor-grid {
+  position: relative;
   display: grid;
-  grid-template-columns: 300px minmax(460px, 1fr) 360px;
-  gap: 12px;
+  flex: 1 1 auto;
+  grid-template-columns: var(--resource-pane-width, 260px) minmax(720px, 1fr) var(--properties-pane-width, 320px);
+  gap: 8px;
   min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.editor-grid.resource-collapsed {
+  grid-template-columns: minmax(720px, 1fr) var(--properties-pane-width, 320px);
+}
+.editor-grid.properties-collapsed {
+  grid-template-columns: var(--resource-pane-width, 260px) minmax(0, 1fr);
+}
+.editor-grid.resource-collapsed.properties-collapsed {
+  grid-template-columns: minmax(0, 1fr);
 }
 .resource-pane,
 .canvas-pane,
@@ -8322,23 +12389,104 @@ onUnmounted(() => {
 }
 .resource-pane,
 .properties-pane {
-  padding: 12px;
+  position: relative;
+  padding: 10px;
   overflow: auto;
   scrollbar-gutter: stable;
 }
+.resource-pane.collapsed,
+.properties-pane.collapsed {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  z-index: 7;
+  width: 36px;
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
+  padding: 6px 4px;
+  overflow: hidden;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+}
+.resource-pane.collapsed {
+  left: 8px;
+}
+.properties-pane.collapsed {
+  right: 8px;
+}
+.resource-pane.collapsed .pane-header,
+.properties-pane.collapsed .pane-header {
+  justify-content: center;
+  margin-bottom: 6px;
+}
+.resource-pane.collapsed .pane-header > span,
+.properties-pane.collapsed .pane-header > span {
+  display: none;
+}
+.resource-pane.collapsed .pane-header-actions,
+.properties-pane.collapsed .pane-header-actions {
+  justify-content: center;
+}
+.pane-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 9;
+  width: 10px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.pane-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 4px;
+  width: 2px;
+  border-radius: 999px;
+  background: transparent;
+  transition: background 0.14s ease;
+}
+.pane-resize-handle:hover::after,
+.pane-resize-handle:focus-visible::after,
+:global(.network-editor-pane-resizing) .pane-resize-handle::after {
+  background: #409eff;
+}
+.resource-resize-handle {
+  right: -5px;
+}
+.properties-resize-handle {
+  left: -5px;
+}
+:global(.network-editor-pane-resizing) {
+  cursor: col-resize;
+  user-select: none;
+}
 .canvas-pane {
   display: flex;
+  flex: 1 1 auto;
+  height: 100%;
   min-height: 0;
   flex-direction: column;
-  padding: 12px;
+  padding: 8px;
   overflow: hidden;
+}
+.x6-canvas-wrapper {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  background: #f8fafc;
 }
 .canvas-action-bar {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 .canvas-view-controls {
   flex: 0 0 auto;
@@ -8372,37 +12520,49 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  min-height: 28px;
-  margin-bottom: 10px;
+  gap: 6px;
+  min-height: 26px;
+  margin-bottom: 8px;
   font-weight: 600;
 }
-.search-input {
-  margin-bottom: 10px;
+.pane-header-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
 }
-.quick-create {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  margin-bottom: 12px;
+.pane-rail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  color: #606266;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  writing-mode: vertical-rl;
+}
+.search-input {
+  margin-bottom: 8px;
 }
 .draft-change-list {
   display: grid;
   gap: 6px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
   padding: 8px 0;
   border-top: 1px solid #ebeef5;
   border-bottom: 1px solid #ebeef5;
 }
 .draft-change-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   font-size: 12px;
   color: #606266;
 }
-.draft-change-row span:last-child {
+.draft-change-row > span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -8410,7 +12570,7 @@ onUnmounted(() => {
 }
 .resource-section,
 .detail-block {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 .section-title {
   display: flex;
@@ -8487,6 +12647,51 @@ onUnmounted(() => {
   grid-template-columns: 1fr;
   gap: 8px;
   margin-bottom: 8px;
+}
+.inline-reference-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  width: 100%;
+}
+.transition-warning-list,
+.transition-list,
+.transition-inline-form,
+.transition-editor-section {
+  display: grid;
+  gap: 8px;
+}
+.transition-warning-list,
+.transition-list {
+  grid-template-columns: repeat(auto-fit, minmax(84px, max-content));
+  align-items: center;
+  margin-top: 8px;
+}
+.transition-list {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+}
+.transition-precondition-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-width: 0;
+}
+.transition-precondition-item .el-tag {
+  max-width: 160px;
+}
+.transition-editor-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #ebeef5;
+}
+.section-title.compact {
+  margin-bottom: 0;
+  font-size: 12px;
+}
+.transition-inline-form {
+  grid-template-columns: minmax(0, 1fr);
 }
 .duplicate-state-dialog p {
   margin: 0 0 12px;
@@ -8607,7 +12812,7 @@ onUnmounted(() => {
 .canvas {
   position: relative;
   flex: 1 1 auto;
-  min-height: 360px;
+  min-height: 480px;
   overflow: auto;
   border: 1px solid #ebeef5;
   border-radius: 6px;
@@ -8803,37 +13008,6 @@ onUnmounted(() => {
 }
 .layout-handle:hover {
   opacity: 1;
-}
-.semantic-port {
-  position: absolute;
-  top: 50%;
-  z-index: 4;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 36px;
-  height: 20px;
-  border: 1px solid #c6e2ff;
-  border-radius: 999px;
-  color: #337ecc;
-  background: #ecf5ff;
-  font-size: 11px;
-  line-height: 1;
-  cursor: copy;
-  transform: translateY(-50%);
-  user-select: none;
-}
-.semantic-port.port-left {
-  left: -18px;
-}
-.semantic-port.port-right {
-  right: -18px;
-}
-.semantic-port:hover,
-.semantic-port:focus-visible {
-  border-color: #409eff;
-  outline: none;
-  background: #d9ecff;
 }
 .graph-node:active {
   cursor: pointer;
@@ -9208,12 +13382,64 @@ onUnmounted(() => {
   max-height: 86px;
   overflow: auto;
 }
+.validation-status-strip {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: #fff;
+}
+.validation-status-strip.is-success {
+  border-color: #b3e19d;
+  background: #f0f9eb;
+}
+.validation-status-strip.is-warning {
+  border-color: #f3d19e;
+  background: #fdf6ec;
+}
+.validation-status-strip.is-danger {
+  border-color: #fab6b6;
+  background: #fef0f0;
+}
+.validation-status-strip.is-info {
+  border-color: #c8d3e0;
+  background: #f4f7fb;
+}
+.validation-status-main {
+  min-width: 0;
+}
+.validation-status-main strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.2;
+}
+.validation-status-main span {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: #606266;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.validation-status-chips,
+.validation-status-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
 .validation-pane {
   display: grid;
   grid-template-columns: 1fr 1fr 0.9fr;
   gap: 12px;
-  min-height: 0;
-  padding: 12px;
+  flex: 0 0 min(34vh, 280px);
+  min-height: 176px;
+  padding: 10px;
   overflow: auto;
   scrollbar-gutter: stable;
 }
@@ -9280,8 +13506,19 @@ onUnmounted(() => {
   margin-top: 10px;
 }
 @media (max-width: 1180px) {
-  .editor-grid {
+  .editor-grid,
+  .editor-grid.resource-collapsed,
+  .editor-grid.properties-collapsed,
+  .editor-grid.resource-collapsed.properties-collapsed {
     grid-template-columns: 1fr;
+  }
+  .validation-status-strip {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+  .validation-status-chips,
+  .validation-status-actions {
+    justify-content: flex-start;
   }
   .validation-pane {
     grid-template-columns: 1fr;
