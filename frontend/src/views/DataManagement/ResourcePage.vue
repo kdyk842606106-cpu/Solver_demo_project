@@ -1,19 +1,78 @@
 <template>
-  <div>
-    <h2>资源管理</h2>
+  <div class="resource-page">
+    <div class="resource-context">
+      <el-form label-width="96px">
+        <el-row :gutter="16">
+          <el-col :span="10">
+            <el-form-item label="设备类型">
+              <el-select
+                v-model="machineTypeId"
+                clearable
+                filterable
+                placeholder="可先按设备类型过滤"
+                style="width:100%"
+                @change="loadMachines"
+              >
+                <el-option
+                  v-for="item in machineTypes"
+                  :key="item.id"
+                  :label="`${item.name} (${item.code})`"
+                  :value="item.id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="10">
+            <el-form-item label="具体机器" required>
+              <el-select
+                v-model="machineId"
+                clearable
+                filterable
+                placeholder="选择机器后维护资源"
+                style="width:100%"
+                @change="onMachineChange"
+              >
+                <el-option
+                  v-for="item in machines"
+                  :key="item.id"
+                  :label="`${item.name} (${item.code})`"
+                  :value="item.id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="4">
+            <el-button class="refresh-button" @click="refreshContext">刷新</el-button>
+          </el-col>
+        </el-row>
+      </el-form>
+    </div>
+
+    <el-alert
+      v-if="!machineId"
+      title="请先选择具体机器，再维护这台机器绑定的资源。"
+      type="warning"
+      :closable="false"
+      class="context-alert"
+    />
+
     <el-row :gutter="16">
-      <!-- Form -->
       <el-col :span="10">
         <el-card>
-          <el-form :model="form" label-width="80px" @submit.prevent>
+          <template #header>资源表单</template>
+          <el-form :model="form" label-width="92px" @submit.prevent>
+            <el-form-item label="所属机器">
+              <el-tag v-if="selectedMachineLabel" type="info">{{ selectedMachineLabel }}</el-tag>
+              <span v-else class="muted">未选择</span>
+            </el-form-item>
             <el-form-item label="编码" required>
-              <el-input v-model="form.code" placeholder="例如 NITROGEN_GAS" />
+              <el-input v-model="form.code" placeholder="例如 TECH-01" />
             </el-form-item>
             <el-form-item label="名称" required>
-              <el-input v-model="form.name" placeholder="例如 氮气供应" />
+              <el-input v-model="form.name" placeholder="例如 技术员 01" />
             </el-form-item>
             <el-form-item label="资源类型" required>
-              <el-input v-model="form.resource_type" placeholder="例如 gas" />
+              <el-input v-model="form.resource_type" placeholder="例如 TECHNICIAN" />
             </el-form-item>
             <el-form-item label="容量">
               <el-input-number v-model="form.capacity" :min="1" style="width:100%" />
@@ -22,22 +81,23 @@
               <el-switch v-model="form.is_available" />
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+              <el-button type="primary" :loading="saving" :disabled="!machineId" @click="save">保存</el-button>
               <el-button @click="reset">清空</el-button>
             </el-form-item>
           </el-form>
         </el-card>
       </el-col>
 
-      <!-- Table -->
       <el-col :span="14">
         <el-card v-loading="loading">
-          <el-table :data="list" size="small" border stripe>
+          <template #header>当前机器资源</template>
+          <el-empty v-if="!machineId" description="请选择机器" />
+          <el-table v-else :data="list" size="small" border stripe>
             <el-table-column prop="code" label="编码" width="140" />
             <el-table-column prop="name" label="名称" />
-            <el-table-column prop="resource_type" label="类型" width="100" />
-            <el-table-column prop="capacity" label="容量" width="70" />
-            <el-table-column label="可用" width="70">
+            <el-table-column prop="resource_type" label="类型" width="120" />
+            <el-table-column prop="capacity" label="容量" width="80" />
+            <el-table-column label="可用" width="80">
               <template #default="{ row }">
                 <el-tag :type="row.is_available ? 'success' : 'info'" size="small">
                   {{ row.is_available ? '是' : '否' }}
@@ -58,29 +118,88 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getResources, createResource, updateResource, deleteResource } from '../../api/masterData'
+import {
+  createResource,
+  deleteResource,
+  getMachineTypes,
+  getMachines,
+  getResources,
+  updateResource,
+} from '../../api/masterData'
 
+const machineTypes = ref([])
+const machines = ref([])
+const machineTypeId = ref(null)
+const machineId = ref(null)
 const list = ref([])
 const loading = ref(false)
 const saving = ref(false)
 const editId = ref(null)
 
-const form = ref({ code: '', name: '', resource_type: '', capacity: 1, is_available: true })
+const selectedMachineLabel = computed(() => {
+  const machine = machines.value.find((item) => item.id === machineId.value)
+  return machine ? `${machine.name} (${machine.code})` : ''
+})
+
+const emptyForm = () => ({ code: '', name: '', resource_type: '', capacity: 1, is_available: true })
+const form = ref(emptyForm())
+
+async function refreshContext() {
+  try {
+    machineTypes.value = await getMachineTypes()
+  } catch {
+    machineTypes.value = []
+  }
+  await loadMachines()
+}
+
+async function loadMachines() {
+  const params = machineTypeId.value ? { machine_type_id: machineTypeId.value } : {}
+  try {
+    machines.value = await getMachines(params)
+    if (!machines.value.some((item) => item.id === machineId.value)) {
+      machineId.value = null
+      list.value = []
+      reset()
+    }
+  } catch {
+    machines.value = []
+    machineId.value = null
+    list.value = []
+  }
+}
+
+async function onMachineChange() {
+  reset()
+  await load()
+}
 
 async function load() {
+  if (!machineId.value) {
+    list.value = []
+    return
+  }
   loading.value = true
-  try { list.value = await getResources() } finally { loading.value = false }
+  try {
+    list.value = await getResources(machineId.value)
+  } catch {
+    list.value = []
+  } finally {
+    loading.value = false
+  }
 }
 
 async function save() {
+  if (!machineId.value) return ElMessage.warning('请先选择具体机器')
   if (!form.value.code || !form.value.name || !form.value.resource_type) {
     return ElMessage.warning('编码、名称、类型不能为空')
   }
   saving.value = true
   try {
     const payload = {
+      machine_id: machineId.value,
       code: form.value.code.trim(),
       name: form.value.name.trim(),
       resource_type: form.value.resource_type.trim(),
@@ -96,7 +215,9 @@ async function save() {
     ElMessage.success('资源已保存')
     reset()
     await load()
-  } finally { saving.value = false }
+  } finally {
+    saving.value = false
+  }
 }
 
 function edit(row) {
@@ -119,8 +240,20 @@ async function remove(id) {
 
 function reset() {
   editId.value = null
-  form.value = { code: '', name: '', resource_type: '', capacity: 1, is_available: true }
+  form.value = emptyForm()
 }
 
-onMounted(load)
+onMounted(refreshContext)
 </script>
+
+<style scoped>
+.resource-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.resource-context { margin-bottom: 4px; }
+.refresh-button { width: 100%; }
+.context-alert { margin-bottom: 4px; }
+.muted { color: #909399; }
+</style>

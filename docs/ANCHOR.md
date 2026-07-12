@@ -150,8 +150,8 @@ UI (Vue 3) → API (FastAPI) → Service → Domain (solver/) → Persistence (S
 
 ```
 约束 9：求解失败必须可诊断
-  SOLVE_NO_SOLUTION → 返回 unresolved_delta
-  SOLVE_CYCLE_DETECTED → 返回 cycle_path
+  求解失败必须返回稳定的结构化 error_code。
+  至少覆盖：无解、循环依赖、资源不可行、求解超时。
 
 约束 10：前端错误展示
   统一 ElMessage.error()，error_code → 中文映射表。
@@ -168,7 +168,7 @@ UI (Vue 3) → API (FastAPI) → Service → Domain (solver/) → Persistence (S
   类型注解完整。
 
 约束 12：前端
-  API 调用统一通过 src/api/ 封装。
+  API 调用统一通过 src/api/ 封装（包括健康检查等基础接口）。
   GanttChart / BlockageDialog 是纯组件，数据由父页面传入，事件通过 emit 传递。
 
 约束 13：注册表模式
@@ -227,6 +227,30 @@ UI (Vue 3) → API (FastAPI) → Service → Domain (solver/) → Persistence (S
 | 维修工序(repair op) | is_repair=TRUE，通过 blockage_reason 匹配触发 |
 | 版本链 | candidate_plan 通过 parent_plan_id 的父子关系 |
 | step_role | 版本对比中步骤的变化标注 (normal/repair/pulled_forward/delayed) |
+
+### V0.3 术语分层补充（锁定）
+
+V0.3 引入 Network Editor 后，“状态”需要区分求解器状态快照、业务状态定义和画布引用实例。后续文档、UI 文案和代码注释必须按下表使用规范业务名；技术名保持现状，通过映射表解释，不把历史字段名直接暴露为新业务概念。
+
+| 规范业务名 | 技术名 / 表 | 含义与边界 |
+|------|------|------|
+| 状态快照 | `MachineState` / `machine_state` | 机台某一时刻的特征键值集合，用于起点状态、目标状态或历史快照。 |
+| 状态维度 | `feature_key`；`StateFeatureDef` / `FeatureDefinition` | 描述状态事实的维度键。用户侧统一称“状态维度”；`StateFeatureDef` 表示机台类型内定义，`FeatureDefinition` 表示全局特征定义。 |
+| 状态本体 | `StateNode` / `state_node` | 全局唯一的业务状态定义，不直接携带层级所有权。 |
+| 原子状态 | `StateNode` 且非 `aggregate`，并具备可转换为事实的 `feature_key/operator/target_value` | 可判定的叶子状态事实；后续实现应统一原子状态判定口径，避免按 `feature_key`、`is_leaf`、`state_kind` 分散判断。 |
+| 状态包 | 聚合型 `StateNode` | 命名状态集合，按当前成员 AND 达成，可作为前置、上下文、声明输出或目标状态。 |
+| 状态包成员引用 | `StateNodeReference` / `state_node_reference` | 表示同一状态本体出现在某个状态包中；删除引用不删除状态本体。 |
+| 引用实例 | `state_node_reference` 的图投影 / `reference_id` 图节点 | 状态包容器或画布中的一次显示实例，布局信息归实例所有，不污染状态本体。 |
+
+活动类术语同样按业务层级区分：
+
+| 规范业务名 | 技术名 / 表 | 含义与边界 |
+|------|------|------|
+| 虚拟活动 | `ActivityNode(level 1/2)` / `activity_node` | 组织、分解和声明上下文/输出的活动包，不直接参与求解器执行。 |
+| 原子活动 | `AtomicActivity` / `atomic_activity` | 当前推荐的可复用可执行能力定义，通过规则和绑定进入求解。 |
+| 旧执行活动 | `ActivityNode(level 3)` | 历史兼容的可执行活动节点，仅用于旧数据兼容，不作为新增建模首选。 |
+| 工序规则 / 执行定义 | `OpRule` / `op_rule` | 求解器实际读取的可执行规则，包含 precondition、effect、duration 和资源需求。 |
+| 活动包原子活动引用 | `ActivityPackageAtomicRef` / `activity_package_atomic_ref` | 表示某个二级活动包复用一个原子活动；移除引用不删除原子活动定义。 |
 
 ---
 

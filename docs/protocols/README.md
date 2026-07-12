@@ -2,14 +2,14 @@
 
 > 描述当前代码实现的模块职责、输入输出契约和模块间数据流。以仓库现状为准。
 >
-> **上层文档**：[`../ANCHOR.md`](../ANCHOR.md)（系统宪法） · [`../STATE_V0.2.md`](../STATE_V0.2.md)（当前版本快照） · [`../v0.2-spec.md`](../v0.2-spec.md)（v0.2 规格书）
+> **上层文档**：[`../ANCHOR.md`](../ANCHOR.md)（系统宪法） · [`../STATE_V0.3.md`](../STATE_V0.3.md)（当前版本快照） · 最新 `../TICKET_*.md`（任务工单）
 
 ## 模块列表
 
 | 模块 | 目录 | 文档 | 说明 |
 |------|------|------|------|
-| Planner | `app/core/planner/` | [planner.md](./planner.md) | 基于状态差异和 precondition/effect 链构建 RAG |
-| Scheduler | `app/core/scheduler/` | [scheduler.md](./scheduler.md) | 基于 RAG 和资源容量做 CP-SAT 排程 |
+| Planner | `app/core/planner/` | [planner.md](./planner.md) | 基于实例级 Partial Order Planner 和 precondition/effect 链构建 RAG |
+| Scheduler | `app/core/scheduler/` | [scheduler.md](./scheduler.md) | 基于 RAG、多资源需求和资源容量做 CP-SAT 排程 |
 | API | `app/api/v1/` | [api.md](./api.md) | 对外 HTTP 接口（求解 + 主数据维护） |
 | DB | `app/db/` | [db.md](./db.md) | ORM 模型、Schema 与共享数据契约 |
 
@@ -17,7 +17,8 @@
 
 ```text
 Client
-  -> API (/api/v1/solve)
+  -> API (/api/v1/solve | /api/v1/solve/layered | /api/v1/solve/maintenance)
+  -> optional layered expansion / maintenance intent merge
   -> Planner.build_rag(...)
   -> Planner.save_candidate_plan(...)
   -> Scheduler.solve_schedule(...)
@@ -33,3 +34,5 @@ Client
 - `candidate_plan_step.predecessor_ids` 是 Planner 推导出的依赖边来源
 - `parallel_groups` 来自 Scheduler 求解后时间重叠检测，非 Planner 预标记
 - `solve_request.status` 模型默认 `pending`，但 API 创建时直接写入 `running`
+- TICKET-036 后，分层状态目标按“活跃无子节点 = 原子状态”递归展开；聚合状态节点不绑定事实。
+- TICKET-036 后，活动能力推荐通过一级/二级 `activity_node` 包 + `atomic_activity` + `activity_package_atomic_ref` 表达；旧三级 `activity_node` 仍作为兼容路径存在。

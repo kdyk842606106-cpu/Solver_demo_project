@@ -10,7 +10,7 @@ Orchestrates the full scheduling pipeline:
 6. Persist results to DB
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import combinations
 from typing import Any, Optional
 import asyncio
@@ -26,7 +26,13 @@ from app.core.scheduler.loader import (
     load_rag,
     load_resources,
 )
-from app.core.scheduler.model import ScheduleModel, build_model
+from app.core.scheduler.model import ScheduleModel, build_model, step_resource_requirements
+from app.core.scheduler.diagnostics import diagnose_schedule_inputs
+from app.core.scheduler.schedule_graph import (
+    ScheduleGraph,
+    build_schedule_graph,
+    compute_critical_path,
+)
 
 
 # ============================================================
@@ -40,12 +46,21 @@ class TaskResult:
     step_order: int
     op_rule_id: int
     op_rule_code: str
+    op_rule_name: str | None
     start_min: int
     end_min: int
     duration_min: int
     predecessors: list[int]
     resources: list[dict[str, Any]]  # [{"resource_id": 1, "resource_code": "TECH-01"}]
     resource_type: str = "NONE"  # Required resource type for assignment
+    resource_reqs: list[dict[str, Any]] = field(default_factory=list)
+    activity_node_id: int | None = None
+    activity_node_code: str | None = None
+    activity_node_level: int | None = None
+    activity_group_id: int | None = None
+    activity_group_code: str | None = None
+    activity_group_name: str | None = None
+    state_continuity_groups: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -65,6 +80,45 @@ class ScheduleResultData:
     parallel_groups: Optional[list[list[int]]] = None
     solver_stats: Optional[SolverStats] = None
     error_message: Optional[str] = None
+    schedule_graph: Optional[ScheduleGraph] = None
+    critical_path: Optional[list[str]] = None
+    diagnostics: Optional[dict[str, Any]] = None
+
+
+def _normalize_state_group_membership(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize and deduplicate state package continuity group metadata."""
+    normalized: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for group in groups or []:
+        group_id = group.get("state_group_id")
+        if group_id is None:
+            continue
+        try:
+            group_id_int = int(group_id)
+        except (TypeError, ValueError):
+            continue
+        if group_id_int in seen:
+            continue
+        seen.add(group_id_int)
+        normalized.append({
+            "state_group_id": group_id_int,
+            "state_group_code": group.get("state_group_code"),
+            "state_group_name": group.get("state_group_name"),
+            "state_group_level": group.get("state_group_level"),
+            "parent_state_group_id": group.get("parent_state_group_id"),
+        })
+    return normalized
+
+
+def _apply_state_continuity_groups(
+    rag_data: RagData,
+    groups_by_step: dict[int, list[dict[str, Any]]],
+) -> None:
+    """Attach in-memory state package continuity memberships to RAG steps."""
+    for step in rag_data.steps:
+        step.state_continuity_groups = _normalize_state_group_membership(
+            groups_by_step.get(step.step_order, [])
+        )
 
 
 # ============================================================
@@ -77,6 +131,7 @@ async def solve_schedule(
     session: AsyncSession,
     max_time_seconds: float = 30.0,
     objectives: list[dict] | None = None,
+    state_continuity_groups_by_step: dict[int, list[dict[str, Any]]] | None = None,
 ) -> ScheduleResultData:
     """
     Main entry point: solve a schedule for a candidate plan.
@@ -86,6 +141,8 @@ async def solve_schedule(
         session: SQLAlchemy async session
         max_time_seconds: CP-SAT time limit
         objectives: List of objective dicts for CP-SAT (default: minimize_makespan)
+        state_continuity_groups_by_step: Optional in-memory state package
+            continuity membership keyed by step_order.
 
     Returns:
         ScheduleResultData with full results or error
@@ -103,13 +160,21 @@ async def solve_schedule(
             status="error",
             error_message="Candidate plan has no steps",
         )
+    if state_continuity_groups_by_step:
+        _apply_state_continuity_groups(rag_data, state_continuity_groups_by_step)
 
     # ---- 2. Load resources ----
-    resource_types = list({s.resource_type for s in rag_data.steps if s.resource_type != "NONE"})
-    resources = await load_resources(resource_types, session)
+    resource_types = sorted({
+        resource_type
+        for step in rag_data.steps
+        for resource_type in step_resource_requirements(step)
+    })
+    resources = await load_resources(resource_types, session, rag_data.machine_id)
+    diagnostics = diagnose_schedule_inputs(rag_data, resources)
 
     # ---- 3. Build model ----
     schedule_model = build_model(rag_data, resources, objectives)
+    diagnostics["model_horizon"] = schedule_model.horizon
 
     # ---- 4. Solve ----
     solver = cp_model.CpSolver()
@@ -142,12 +207,21 @@ async def solve_schedule(
                 step_order=so,
                 op_rule_id=sd.op_rule_id,
                 op_rule_code=sd.op_rule_code,
+                op_rule_name=sd.op_rule_name,
                 start_min=solver.value(tv.start),
                 end_min=solver.value(tv.end),
                 duration_min=sd.duration_min,
                 predecessors=pred_map.get(so, []),
                 resources=[],  # filled next
                 resource_type=sd.resource_type,
+                resource_reqs=sd.resource_reqs,
+                activity_node_id=sd.activity_node_id,
+                activity_node_code=sd.activity_node_code,
+                activity_node_level=sd.activity_node_level,
+                activity_group_id=sd.activity_group_id,
+                activity_group_code=sd.activity_group_code,
+                activity_group_name=sd.activity_group_name,
+                state_continuity_groups=sd.state_continuity_groups,
             ))
 
         # Sort by start_min, then step_order
@@ -158,6 +232,12 @@ async def solve_schedule(
 
         # ---- 7. Detect actual parallel groups ----
         parallel_groups = _detect_actual_parallel(tasks)
+
+        # ---- 8. Build schedule graph and compute critical path ----
+        schedule_graph = build_schedule_graph(tasks, rag_data.edges, makespan_val)
+        critical_path = compute_critical_path(schedule_graph)
+        activity_continuity = _activity_group_continuity_diagnostics(tasks, objectives)
+        state_continuity = _state_group_continuity_diagnostics(tasks, objectives)
 
         stats = SolverStats(
             solver_status=status_name,
@@ -171,17 +251,40 @@ async def solve_schedule(
             tasks=tasks,
             parallel_groups=parallel_groups,
             solver_stats=stats,
+            schedule_graph=schedule_graph,
+            critical_path=critical_path,
+            diagnostics={
+                **diagnostics,
+                "solver_status": status_name,
+                "solver_wall_time_sec": round(solver.wall_time, 4),
+                "solver_branches": solver.num_branches,
+                "objective_terms": schedule_model.objective_cache.get("metadata", []),
+                "activity_group_continuity": activity_continuity,
+                "state_group_continuity": state_continuity,
+            },
         )
 
     elif status == cp_model.INFEASIBLE:
         return ScheduleResultData(
             status="infeasible",
             error_message="Resource constraints cannot be satisfied",
+            diagnostics={
+                **diagnostics,
+                "solver_status": status_name,
+                "solver_wall_time_sec": round(solver.wall_time, 4),
+                "solver_branches": solver.num_branches,
+            },
         )
     else:
         return ScheduleResultData(
             status="error",
             error_message=f"Solver returned: {status_name}",
+            diagnostics={
+                **diagnostics,
+                "solver_status": status_name,
+                "solver_wall_time_sec": round(solver.wall_time, 4),
+                "solver_branches": solver.num_branches,
+            },
         )
 
 
@@ -197,8 +300,9 @@ def _assign_resources(
     """
     Assign concrete resource instances to tasks.
 
-    MVP strategy: for each task, assign the first available resource
-    of the required type that is not already busy at that time.
+    Assign every required resource type for a task.  Resource instances may have
+    capacity > 1, so occupancy is tracked as used capacity over time intervals
+    rather than a binary busy/free flag.
     Mutates tasks in place.
     """
     # Build per-resource-type pools
@@ -206,36 +310,80 @@ def _assign_resources(
     for r in resources:
         pools.setdefault(r.resource_type, []).append(r)
 
-    # Track resource busy intervals: resource_id -> list of (start, end)
-    busy: dict[int, list[tuple[int, int]]] = {r.id: [] for r in resources}
+    # Track resource busy intervals: resource_id -> list of (start, end, quantity)
+    busy: dict[int, list[tuple[int, int, int]]] = {r.id: [] for r in resources}
 
     for task in tasks:
-        if task.resource_type == "NONE":
-            continue
+        for req in _task_resource_requirements(task):
+            resource_type = req["resource_type"]
+            quantity_remaining = req["quantity"]
+            pool = pools.get(resource_type, [])
 
-        pool = pools.get(task.resource_type, [])
+            for res in pool:
+                if quantity_remaining <= 0:
+                    break
 
-        for res in pool:
-            if _is_resource_free(busy[res.id], task.start_min, task.end_min):
+                capacity = max(int(res.capacity), 1)
+                available = _available_capacity(
+                    busy[res.id],
+                    task.start_min,
+                    task.end_min,
+                    capacity,
+                )
+                if available <= 0:
+                    continue
+
+                assigned_quantity = min(quantity_remaining, available)
                 task.resources.append({
                     "resource_id": res.id,
                     "resource_code": res.code,
+                    "resource_type": resource_type,
+                    "quantity": assigned_quantity,
                 })
-                busy[res.id].append((task.start_min, task.end_min))
-                break
-        # If no resource found in pool, leave empty (degraded mode)
+                busy[res.id].append((
+                    task.start_min,
+                    task.end_min,
+                    assigned_quantity,
+                ))
+                quantity_remaining -= assigned_quantity
+            # If no full assignment is found, leave the remaining quantity
+            # unassigned as degraded mode; CP-SAT should normally prevent this.
 
 
-def _is_resource_free(
-    intervals: list[tuple[int, int]],
+def _task_resource_requirements(task: TaskResult) -> list[dict[str, Any]]:
+    """Return normalized resource requirements for solved task assignment."""
+    requirements: dict[str, int] = {}
+
+    for req in task.resource_reqs or []:
+        resource_type = req.get("resource_type") or "NONE"
+        if resource_type == "NONE":
+            continue
+        quantity = int(req.get("quantity") or 1)
+        if quantity <= 0:
+            quantity = 1
+        requirements[resource_type] = requirements.get(resource_type, 0) + quantity
+
+    if not requirements and task.resource_type != "NONE":
+        requirements[task.resource_type] = 1
+
+    return [
+        {"resource_type": resource_type, "quantity": quantity}
+        for resource_type, quantity in requirements.items()
+    ]
+
+
+def _available_capacity(
+    intervals: list[tuple[int, int, int]],
     start: int,
     end: int,
-) -> bool:
-    """Check if a resource is free during [start, end)."""
-    for busy_start, busy_end in intervals:
+    capacity: int,
+) -> int:
+    """Return remaining resource capacity during [start, end)."""
+    used = 0
+    for busy_start, busy_end, quantity in intervals:
         if start < busy_end and end > busy_start:
-            return False  # overlap
-    return True
+            used += quantity
+    return capacity - used
 
 
 # ============================================================
@@ -258,6 +406,139 @@ def _detect_actual_parallel(tasks: list[TaskResult]) -> list[list[int]]:
                 parallel_groups.append(group)
 
     return parallel_groups
+
+
+def _activity_group_continuity_diagnostics(
+    tasks: list[TaskResult],
+    objectives: list[dict] | None,
+) -> dict[str, Any]:
+    """Summarize compactness of scheduled tasks by level-2 activity group."""
+    groups: dict[int, list[TaskResult]] = {}
+    for task in tasks:
+        if task.activity_group_id is None:
+            continue
+        groups.setdefault(task.activity_group_id, []).append(task)
+
+    objective_weights = {
+        item.get("type"): item.get("weight", 1.0)
+        for item in objectives or [{"type": "minimize_makespan", "weight": 1.0}]
+    }
+
+    summaries = []
+    for group_id, group_tasks in sorted(groups.items()):
+        if len(group_tasks) < 2:
+            continue
+        start = min(task.start_min for task in group_tasks)
+        end = max(task.end_min for task in group_tasks)
+        duration_sum = sum(task.duration_min for task in group_tasks)
+        span = end - start
+        internal_gap = max(0, span - duration_sum)
+        group_step_orders = {task.step_order for task in group_tasks}
+        interruptions = [
+            task
+            for task in tasks
+            if task.step_order not in group_step_orders
+            and task.start_min >= start
+            and task.end_min <= end
+        ]
+        summaries.append({
+            "activity_group_id": group_id,
+            "activity_group_code": group_tasks[0].activity_group_code,
+            "activity_group_name": group_tasks[0].activity_group_name,
+            "task_count": len(group_tasks),
+            "task_step_orders": [task.step_order for task in sorted(group_tasks, key=lambda t: (t.start_min, t.step_order))],
+            "window_start_min": start,
+            "window_end_min": end,
+            "span_min": span,
+            "duration_sum_min": duration_sum,
+            "internal_gap_min": internal_gap,
+            "interruption_count": len(interruptions),
+            "interruption_step_orders": [
+                task.step_order for task in sorted(interruptions, key=lambda t: (t.start_min, t.step_order))
+            ],
+            "is_compact": internal_gap == 0 and not interruptions,
+        })
+
+    return {
+        "objective_weights": objective_weights,
+        "group_count": len(summaries),
+        "groups": summaries,
+    }
+
+
+def _state_group_continuity_diagnostics(
+    tasks: list[TaskResult],
+    objectives: list[dict] | None,
+) -> dict[str, Any]:
+    """Summarize compactness of scheduled tasks by target state package."""
+    groups: dict[int, list[TaskResult]] = {}
+    group_meta: dict[int, dict[str, Any]] = {}
+    for task in tasks:
+        seen_for_task: set[int] = set()
+        for group in task.state_continuity_groups or []:
+            group_id = group.get("state_group_id")
+            if group_id is None:
+                continue
+            try:
+                group_id_int = int(group_id)
+            except (TypeError, ValueError):
+                continue
+            if group_id_int in seen_for_task:
+                continue
+            seen_for_task.add(group_id_int)
+            groups.setdefault(group_id_int, []).append(task)
+            group_meta.setdefault(group_id_int, group)
+
+    objective_weights = {
+        item.get("type"): item.get("weight", 1.0)
+        for item in objectives or [{"type": "minimize_makespan", "weight": 1.0}]
+    }
+
+    summaries = []
+    for group_id, group_tasks in sorted(groups.items()):
+        if len(group_tasks) < 2:
+            continue
+        start = min(task.start_min for task in group_tasks)
+        end = max(task.end_min for task in group_tasks)
+        duration_sum = sum(task.duration_min for task in group_tasks)
+        span = end - start
+        internal_gap = max(0, span - duration_sum)
+        group_step_orders = {task.step_order for task in group_tasks}
+        interruptions = [
+            task
+            for task in tasks
+            if task.step_order not in group_step_orders
+            and task.start_min >= start
+            and task.end_min <= end
+        ]
+        meta = group_meta.get(group_id, {})
+        summaries.append({
+            "state_group_id": group_id,
+            "state_group_code": meta.get("state_group_code"),
+            "state_group_name": meta.get("state_group_name"),
+            "state_group_level": meta.get("state_group_level"),
+            "parent_state_group_id": meta.get("parent_state_group_id"),
+            "task_count": len(group_tasks),
+            "task_step_orders": [
+                task.step_order for task in sorted(group_tasks, key=lambda t: (t.start_min, t.step_order))
+            ],
+            "window_start_min": start,
+            "window_end_min": end,
+            "span_min": span,
+            "duration_sum_min": duration_sum,
+            "internal_gap_min": internal_gap,
+            "interruption_count": len(interruptions),
+            "interruption_step_orders": [
+                task.step_order for task in sorted(interruptions, key=lambda t: (t.start_min, t.step_order))
+            ],
+            "is_compact": internal_gap == 0 and not interruptions,
+        })
+
+    return {
+        "objective_weights": objective_weights,
+        "group_count": len(summaries),
+        "groups": summaries,
+    }
 
 
 # ============================================================
@@ -290,11 +571,21 @@ async def save_schedule_result(
                 "step_order": t.step_order,
                 "op_rule_id": t.op_rule_id,
                 "op_rule_code": t.op_rule_code,
+                "op_rule_name": t.op_rule_name,
                 "start_min": t.start_min,
                 "end_min": t.end_min,
                 "duration_min": t.duration_min,
                 "predecessors": t.predecessors,
                 "resources": t.resources,
+                "resource_type": t.resource_type,
+                "resource_reqs": t.resource_reqs,
+                "activity_node_id": t.activity_node_id,
+                "activity_node_code": t.activity_node_code,
+                "activity_node_level": t.activity_node_level,
+                "activity_group_id": t.activity_group_id,
+                "activity_group_code": t.activity_group_code,
+                "activity_group_name": t.activity_group_name,
+                "state_continuity_groups": t.state_continuity_groups,
             })
 
     record = ScheduleResult(

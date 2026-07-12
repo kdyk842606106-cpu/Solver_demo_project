@@ -12,7 +12,7 @@ INSERT INTO feature_definition (feature_key, value_type, allowed_values, unit, d
 ('clean_level', 'enum', '["dirty", "clean"]', NULL, 'Machine cleanliness level'),
 ('calibration', 'enum', '["off", "on"]', NULL, 'Calibration status'),
 ('integration_status', 'enum', '["not_integrated", "integrated"]', NULL, 'Integration readiness status'),
-('blockage_reason', 'enum', '["hardware_fault", "pending_approval", "material_missing", "power_failure"]', NULL, 'Reason for blockage'),
+('blockage_reason', 'enum', '["none", "hardware_fault", "pending_approval", "material_missing", "power_failure"]', NULL, 'Reason for blockage'),
 ('pressure_bar', 'number', NULL, 'bar', 'Hydraulic pressure reading'),
 ('temperature_celsius', 'number', NULL, '°C', 'Temperature in Celsius')
 ON CONFLICT (feature_key) DO NOTHING;
@@ -73,7 +73,7 @@ ON CONFLICT DO NOTHING;
 -- ============================================================
 
 INSERT INTO state_feature_def (machine_type_id, feature_key, feature_name, value_type, allowed_values) VALUES
-(1, 'blockage_reason', 'Blockage Reason', 'enum', '["hardware_fault", "pending_approval", "material_missing", "power_failure"]'),
+(1, 'blockage_reason', 'Blockage Reason', 'enum', '["none", "hardware_fault", "pending_approval", "material_missing", "power_failure"]'),
 (1, 'pressure_bar', 'Hydraulic Pressure', 'number', NULL)
 ON CONFLICT DO NOTHING;
 

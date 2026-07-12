@@ -13,10 +13,17 @@ metadata:
 Automatically load the project's 3-layer context system, confirm understanding,
 and prepare for focused development work.
 
+This skill is the project-level entry point. It loads project context first,
+then routes the session into the appropriate global superpowers workflow when
+design, planning, or plan execution is needed.
+
 ## When to use me
 
 Use this at the **start of every new conversation** before any development work.
 Always use me first — do not skip context loading even for "small" tasks.
+
+After context is loaded and confirmed, decide whether the task should remain in
+the current session flow or hand off to a global superpowers skill.
 
 ## Execution steps
 
@@ -65,6 +72,35 @@ Output EXACTLY in this format (in Chinese), then STOP and wait for user confirma
 Do NOT begin any implementation until the user explicitly confirms.
 If the user wants to change the task scope, update the TICKET file accordingly.
 
+### Step 7: Route into the right workflow
+
+Once the user confirms context and scope, decide the next workflow based on the
+task type:
+
+- **New feature / behavior change / workflow design / structural change**:
+  invoke global `brainstorming` first. Do not skip design, even if the change
+  looks small.
+- **Approved spec already exists**: invoke global `writing-plans` to create the
+  executable implementation plan.
+- **Approved plan already exists**: invoke global `plan-execution` to execute
+  the plan task-by-task.
+- **Bug diagnosis / narrow fix / non-creative implementation**: continue in the
+  current session, but still obey `ANCHOR.md`, `STATE`, and `TICKET`.
+
+If the correct next step is a global superpowers skill, explicitly announce the
+handoff so the user can see which workflow is being used.
+
+### Step 8: Preserve project context during handoff
+
+When invoking a global superpowers skill, keep these project-level constraints
+active throughout the session:
+
+- `ANCHOR.md` remains the source of truth for architecture and constraints
+- `STATE_V*.md` remains the source of truth for current version status
+- `TICKET_*.md` remains the source of truth for current scoped work
+- Any spec or plan produced by global workflows must stay aligned with the
+  current TICKET scope, or the TICKET must be updated before execution
+
 ## If no TICKET exists
 
 After confirming ANCHOR + STATE are loaded, look at the STATE document's
@@ -94,6 +130,10 @@ If the user confirms, create the TICKET file following the standard format
 - Every file I create or modify must be consistent with STATE document's
   description of the current codebase
 - I will mark TICKET subtasks as completed (□ → ✅) as I finish them
+- I will not use a global superpowers workflow without first loading project
+  context through this skill
+- If a global workflow produces a spec or plan, I will treat that artifact as
+  subordinate to project context until it is reflected in TICKET/STATE
 
 ## File paths reference
 
@@ -103,4 +143,6 @@ docs/STATE_V*.md         — Layer 2: current version snapshot (glob to find)
 docs/TICKET_*.md         — Layer 3: current task ticket (glob to find)
 docs/v0.2-spec.md        — detailed V0.2 spec (read on demand)
 docs/protocols/           — module implementation details (read on demand)
+docs/superpowers/specs/   — global brainstorming output to track
+docs/superpowers/plans/   — global writing-plans output to track
 ```

@@ -1,149 +1,141 @@
-# DB 模块协议
+# DB Module Protocol
 
-路径：`app/db/`
+Path: `app/db/`
 
-DB 层提供：
+The DB layer provides:
 
-- SQLAlchemy ORM 模型
-- AsyncSession 会话工厂
-- Pydantic Schema
-- 与 Planner、Scheduler、API 共享的数据契约
+- SQLAlchemy ORM models
+- async session factory
+- Pydantic schemas
+- shared persistence contracts for Planner, Scheduler, and API
 
-## 当前表结构
+## Current Core Tables
 
-当前 ORM 共 14 张表：
+- `machine_type`
+- `machine`
+- `state_feature_def`
+- `machine_state`
+- `machine_state_feature`
+- `op_rule`
+- `op_rule_precond`
+- `op_rule_effect`
+- `op_rule_resource_req`
+- `resource`
+- `activity_node`
+- `state_node`
+- `scope_guard`
+- `scope_guard_precond`
+- `atomic_activity`
+- `activity_package_atomic_ref`
+- `maintenance_intent_template`
+- `solve_request`
+- `candidate_plan`
+- `candidate_plan_step`
+- `schedule_result`
+- `blockage_event`
 
-### 机台与状态
+## `solve_request`
 
-1. `machine_type`
-2. `machine`
-3. `state_feature_def`
-4. `machine_state`
-5. `machine_state_feature`
+Written by API and used as the root request record.
 
-### 工序规则
-
-6. `op_rule`
-7. `op_rule_precond`
-8. `op_rule_effect`
-9. `op_rule_resource_req`
-
-### 资源
-
-10. `resource`
-
-### 求解与结果
-
-11. `solve_request`
-12. `candidate_plan`
-13. `candidate_plan_step`
-14. `schedule_result`
-
-说明：代码注释里仍写“13 tables”，但按当前 ORM 实际上是 14 张表。
-
-## 共享表契约
-
-### `solve_request`
-
-由 API 写入，供查询接口和结果链路使用。
-
-关键字段：
+Important fields:
 
 - `machine_id`
 - `current_state_id`
 - `target_state_id`
 - `objective`
-- `status`
+- `objectives`
+- `constraints`
+- `parent_plan_id`
+- `blockage_constraints`
 - `overrides`
+- `status`
 - `created_at`
 - `solved_at`
 
-注意：
+Runtime status flow is normally:
 
-- ORM 默认值是 `pending`
-- 但当前 API 创建记录时直接写入 `status="running"`
-- 所以实际运行中常见状态流转为：`running -> done/failed`
+```text
+running -> done | failed
+```
 
-### `candidate_plan`
+## `candidate_plan`
 
-由 Planner 写入。
+Written by Planner.
 
-关键字段：
+Important fields:
 
 - `solve_request_id`
 - `total_steps`
 - `search_method`
+- `version`
+- `parent_plan_id`
+- `replan_reason`
+- `status`
 
-当前 `search_method` 固定为 `state_inference`。
+Current `search_method` is `partial_order`.
 
-### `candidate_plan_step`
+## `candidate_plan_step`
 
-由 Planner 写入，供 Scheduler 读取。
+Written by Planner and read by Scheduler.
 
-关键字段：
+Important fields:
 
 - `candidate_plan_id`
 - `step_order`
 - `op_rule_id`
 - `predecessor_ids`
+- `not_before`
+- `step_role`
 
-`predecessor_ids` 当前使用 PostgreSQL `INTEGER[]`，表示前驱步骤号数组。
+`predecessor_ids` stores predecessor `step_order` values. Repeated
+`op_rule_id` values are valid and represent separate activity instances.
 
-### `schedule_result`
+## Layered State / Activity Contracts
 
-由 Scheduler 写入，供 API 查询。
+TICKET-036 keeps old layered tables compatible while changing the preferred
+model:
 
-关键字段：
+- `state_node.level >= 1`; active childless nodes are atomic states.
+- Atomic state nodes carry `feature_key`, `operator`, and `target_value`.
+- Aggregate state nodes have children and must not bind concrete facts.
+- Atomic state writes auto-ensure global `feature_definition` and per-machine-type
+  `state_feature_def` rows.
+- `activity_node` level 1/2 rows are business packages/scopes used for
+  organization, Scope Guards, maintenance scopes, grouping, and explanation.
+- `atomic_activity` rows are reusable executable activity definitions.
+- `activity_package_atomic_ref` attaches atomic activities to level-2 activity
+  packages, allowing reuse across packages.
+- `op_rule.atomic_activity_id` is the preferred executable binding. Existing
+  `op_rule.activity_node_id` remains nullable and supports legacy level-3
+  activity-node data.
+
+## `schedule_result`
+
+Written by Scheduler and read by API.
+
+Important fields:
 
 - `solve_request_id`
 - `candidate_plan_id`
-- `makespan`
 - `solver_status`
+- `makespan`
 - `tasks`
-- `created_at`
+- `parallel_groups`
+- `critical_path`
 
-其中 `tasks` 为 JSONB，保存完整任务详情。
+Task JSON includes both legacy primary resource fields and the canonical
+multi-resource fields:
 
-## 当前 Schema 现状
+- `resource_type`
+- `resource_reqs`
+- `resources`
 
-`app/db/schemas.py` 中定义了大量通用 Schema，但当前 API 路由并没有全面使用这些响应模型作为 `response_model`。
+## Constraints
 
-已实现接口实际更接近“手写 dict 响应”，因此要区分：
-
-- Schema 定义的理想结构
-- 路由函数实际返回结构
-
-例如：
-
-- `SolveResponse` 存在，但 `POST /api/v1/solve` 未显式声明 `response_model`
-- `ErrorResponse` 存在，但 `422/404/500` 实际由全局异常处理器返回 dict
-
-## 数据类型契约
-
-| 类型 | 用途 |
-|------|------|
-| `String(64)` | 编码、特征键、资源类型 |
-| `String(128)` | 名称、标签、位置 |
-| `String(256)` | 特征值、effect 新值 |
-| `Integer` | 时长、开始/结束时间、数量 |
-| `DateTime(timezone=True)` | 创建时间、求解完成时间 |
-| `JSONB` | `allowed_values`、`meta`、`overrides`、`tasks` |
-| `ARRAY(Integer)` | `predecessor_ids` |
-
-## 会话契约
-
-`get_db_session()` 提供异步数据库会话，供 FastAPI 依赖注入使用。
-
-约束：
-
-- 每次请求使用一个会话
-- 写操作需要显式 `commit()`
-- 当前代码中 Planner 与 Scheduler 的持久化函数内部会自行 `commit()`
-
-这意味着 API 编排层和下游模块共享同一个 session，但提交边界在多个函数内部。
-
-## 前端数据维护说明
-
-主数据维护已通过 `app/api/v1/master_data.py` 实现，直接复用现有业务表，无中间配置表。
-
-**Scheduler 资源限制**：当前只读取每个工序首个 `is_required=True` 的资源需求做主资源约束。多资源联合排程不在当前版本范围。
+- Keep SQLAlchemy ORM models and Pydantic schemas separate.
+- Domain modules must not import FastAPI modules.
+- Planner persistence remains `candidate_plan` + `candidate_plan_step`; POP
+  causal links and threat decisions are not persisted in the current version.
+- Import and CRUD paths may preserve legacy level-3 `activity_node` rows, but
+  new Data Management flows should prefer `atomic_activity` bindings.

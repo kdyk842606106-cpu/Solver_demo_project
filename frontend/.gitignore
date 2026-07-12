@@ -1,0 +1,6 @@
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
+# E2E test DB
+*.db

@@ -60,7 +60,7 @@ async def _seed_base_data(client):
         {"code": "CLEAN-01", "name": "Cleaner", "resource_type": "CLEANER",
          "capacity": 1, "is_available": True, "meta": None},
     ]:
-        r = await client.post("/api/v1/resources", json=res)
+        r = await client.post("/api/v1/resources", json={**res, "machine_id": machine_id})
         assert r.status_code == 201
 
     # Current state: cold / dirty / off
@@ -124,6 +124,121 @@ async def _seed_base_data(client):
         "machine_id": machine_id,
         "current_state_id": current_state_id,
         "target_state_id": target_state_id,
+    }
+
+
+async def _seed_numeric_api_data(client):
+    """Create numeric planning data through APIs for solve response tests."""
+    r = await client.post("/api/v1/machine-types", json={
+        "code": "NUMERIC_API", "name": "Numeric API Machine", "description": "Numeric API test",
+    })
+    assert r.status_code == 201
+    mt_id = r.json()["id"]
+
+    for item in [
+        {"feature_key": "water_level", "feature_name": "Water", "value_type": "number", "allowed_values": None},
+        {"feature_key": "pressure", "feature_name": "Pressure", "value_type": "number", "allowed_values": None},
+        {"feature_key": "calibration", "feature_name": "Calibration", "value_type": "enum", "allowed_values": ["off", "on"]},
+    ]:
+        r = await client.post(
+            f"/api/v1/machine-types/{mt_id}/feature-defs",
+            json={"machine_type_id": mt_id, **item},
+        )
+        assert r.status_code == 201, r.text
+
+    r = await client.post("/api/v1/machines", json={
+        "machine_type_id": mt_id, "code": "M-NAPI-01", "name": "Numeric API Machine", "location": "Lab",
+    })
+    assert r.status_code == 201
+    machine_id = r.json()["id"]
+
+    for res in [
+        {"code": "TECH-N1", "name": "Tech One", "resource_type": "TECHNICIAN", "capacity": 1, "is_available": True, "meta": None},
+        {"code": "TECH-N2", "name": "Tech Two", "resource_type": "TECHNICIAN", "capacity": 1, "is_available": True, "meta": None},
+    ]:
+        r = await client.post("/api/v1/resources", json={**res, "machine_id": machine_id})
+        assert r.status_code == 201
+
+    async def add_rule(code, name, duration, preconditions, effects):
+        r = await client.post(f"/api/v1/machine-types/{mt_id}/op-rules", json={
+            "machine_type_id": mt_id,
+            "code": code,
+            "name": name,
+            "duration_min": duration,
+            "is_active": True,
+            "preconditions": preconditions,
+            "effects": effects,
+            "resource_reqs": [{"resource_type": "TECHNICIAN", "quantity": 1, "is_required": True}],
+        })
+        assert r.status_code == 201, r.text
+        return r.json()["id"]
+
+    fill_rule_id = await add_rule(
+        "OP_FILL_WATER",
+        "Fill Water",
+        5,
+        [{"feature_key": "pressure", "operator": "gte", "feature_value": "2"}],
+        [{"feature_key": "water_level", "new_value": "1", "effect_type": "increment", "delta_value": 20}],
+    )
+    await add_rule(
+        "OP_PRESSURIZE",
+        "Pressurize",
+        3,
+        [],
+        [{"feature_key": "pressure", "new_value": "1", "effect_type": "increment", "delta_value": 1}],
+    )
+    await add_rule(
+        "OP_CALIBRATE_NUM",
+        "Calibrate Numeric",
+        8,
+        [{"feature_key": "calibration", "operator": "eq", "feature_value": "off"}],
+        [{"feature_key": "calibration", "new_value": "on", "effect_type": "set"}],
+    )
+
+    r = await client.post(f"/api/v1/machines/{machine_id}/states", json={
+        "machine_id": machine_id,
+        "state_type": "current",
+        "label": "Numeric Current",
+        "features": {"water_level": "0", "pressure": "0", "calibration": "off"},
+    })
+    assert r.status_code == 201
+    current_state_id = r.json()["state_id"]
+
+    r = await client.post(f"/api/v1/machines/{machine_id}/states", json={
+        "machine_id": machine_id,
+        "state_type": "target",
+        "label": "Numeric Target",
+        "features": {"water_level": "40", "pressure": "0", "calibration": "off"},
+    })
+    assert r.status_code == 201
+    target_state_id = r.json()["state_id"]
+
+    r = await client.post(f"/api/v1/machines/{machine_id}/states", json={
+        "machine_id": machine_id,
+        "state_type": "target",
+        "label": "Numeric Mixed Target",
+        "features": {"water_level": "40", "pressure": "0", "calibration": "on"},
+    })
+    assert r.status_code == 201
+    mixed_target_state_id = r.json()["state_id"]
+
+    r = await client.post(f"/api/v1/machines/{machine_id}/states", json={
+        "machine_id": machine_id,
+        "state_type": "target",
+        "label": "Numeric Unreachable Target",
+        "features": {"water_level": "25", "pressure": "0", "calibration": "off"},
+    })
+    assert r.status_code == 201
+    unreachable_target_state_id = r.json()["state_id"]
+
+    return {
+        "machine_type_id": mt_id,
+        "machine_id": machine_id,
+        "current_state_id": current_state_id,
+        "target_state_id": target_state_id,
+        "mixed_target_state_id": mixed_target_state_id,
+        "unreachable_target_state_id": unreachable_target_state_id,
+        "fill_rule_id": fill_rule_id,
     }
 
 
@@ -242,6 +357,86 @@ class TestSolveEnrichedResponse:
         assert replan_calibrate["start_min"] >= 120, (
             f"Expected OP_CALIBRATE start_min >= 120, got {replan_calibrate['start_min']}"
         )
+
+
+class TestNumericSolveApi:
+    """API coverage for numeric planning Phase 1 closeout."""
+
+    @pytest.mark.asyncio
+    async def test_numeric_target_success_returns_repeated_tasks(self, client):
+        ids = await _seed_numeric_api_data(client)
+        data = await _do_solve(client, ids)
+
+        assert data["status"] == "done"
+        tasks = data["schedule"]["tasks"]
+        fill_tasks = [t for t in tasks if t["op_rule_code"] == "OP_FILL_WATER"]
+        pressurize_tasks = [t for t in tasks if t["op_rule_code"] == "OP_PRESSURIZE"]
+
+        assert len(fill_tasks) == 2
+        assert len(pressurize_tasks) == 2
+        assert all(t.get("step_id") is not None for t in tasks)
+
+    @pytest.mark.asyncio
+    async def test_numeric_repeated_step_blockage_uses_step_id(self, client):
+        ids = await _seed_numeric_api_data(client)
+        data = await _do_solve(client, ids)
+        assert data["status"] == "done"
+
+        tasks = data["schedule"]["tasks"]
+        fill_tasks = [t for t in tasks if t["op_rule_code"] == "OP_FILL_WATER"]
+        assert len(fill_tasks) == 2
+
+        target_task = fill_tasks[1]
+        assert target_task["step_id"] is not None
+
+        replan = await _do_solve(
+            client,
+            ids,
+            parent_plan_id=data["candidate_plan_id"],
+            blockage_constraints={
+                "strategy": "A",
+                "blocked_step_id": target_task["step_id"],
+                "strategy_a": {"not_before_offset": 120},
+            },
+        )
+        assert replan["status"] == "done", replan.get("error_message")
+
+        replan_tasks = replan["schedule"]["tasks"]
+        replan_fill_tasks = [t for t in replan_tasks if t["op_rule_code"] == "OP_FILL_WATER"]
+        assert len(replan_fill_tasks) == 2
+        blocked = next(t for t in replan_fill_tasks if t["step_order"] == target_task["step_order"])
+        other = next(t for t in replan_fill_tasks if t["step_order"] != target_task["step_order"])
+        assert blocked["not_before"] == 120
+        assert other["not_before"] is None
+
+    @pytest.mark.asyncio
+    async def test_unreachable_numeric_target_returns_failed(self, client):
+        ids = await _seed_numeric_api_data(client)
+        data = await _do_solve(client, ids, target_state_id=ids["unreachable_target_state_id"])
+
+        assert data["status"] == "failed"
+        assert data["error_message"] is not None
+
+    @pytest.mark.asyncio
+    async def test_existing_enum_scenario_still_succeeds(self, client):
+        ids = await _seed_base_data(client)
+        data = await _do_solve(client, ids)
+
+        assert data["status"] == "done"
+        assert {t["op_rule_code"] for t in data["schedule"]["tasks"]} == {
+            "OP_WARMUP", "OP_CLEANING", "OP_CALIBRATE"
+        }
+
+    @pytest.mark.asyncio
+    async def test_mixed_numeric_and_enum_target_returns_both_task_types(self, client):
+        ids = await _seed_numeric_api_data(client)
+        data = await _do_solve(client, ids, target_state_id=ids["mixed_target_state_id"])
+
+        assert data["status"] == "done"
+        codes = [t["op_rule_code"] for t in data["schedule"]["tasks"]]
+        assert codes.count("OP_FILL_WATER") == 2
+        assert codes.count("OP_PRESSURIZE") == 2
+        assert codes.count("OP_CALIBRATE_NUM") == 1
 
 
 # ============================================================
@@ -614,7 +809,7 @@ class TestPlanNotScheduled:
 
         plan = CandidatePlan(
             solve_request_id=sr.id,
-            search_method="state_inference",
+            search_method="forward_bfs",
             version=1,
             status="draft",
         )

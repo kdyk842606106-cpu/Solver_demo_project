@@ -28,12 +28,24 @@ TaskResult(
     step_order=1,
     op_rule_id=3,
     op_rule_code="OP_WARMUP",
+    op_rule_name="Warm up",
     start_min=0,
     end_min=30,
     duration_min=30,
     predecessors=[],
-    resources=[{"resource_id": 1, "resource_code": "TECH-01"}],
+    resources=[
+        {
+            "resource_id": 1,
+            "resource_code": "TECH-01",
+            "resource_type": "TECHNICIAN",
+            "quantity": 1,
+        }
+    ],
     resource_type="TECHNICIAN",
+    resource_reqs=[
+        {"resource_type": "TECHNICIAN", "quantity": 1},
+        {"resource_type": "TOOLING", "quantity": 1},
+    ],
 )
 ```
 
@@ -58,6 +70,15 @@ RagData(
 )
 ```
 
+每个 `StepData` 会保留：
+
+- `resource_reqs`：canonical 多资源需求列表，来自所有 `is_required=True` 的 `op_rule_resource_req`。
+- `resource_type/resource_qty`：兼容旧数据与旧测试的主资源 fallback。
+- `not_before`：阻塞策略 A/AB 注入的最早开始时间约束。
+- `activity_node_id/activity_node_code/activity_node_name`：任务展示用活动元数据；原子活动路径会使用合成的负数 `activity_node_id` 兼容旧展示字段。
+- `atomic_activity_id`：TICKET-036 后原子活动规则的真实执行能力身份。
+- `activity_group_id/activity_group_code/activity_group_name`：二级活动包/活动组元数据，用于 Gantt 分组和连续性软目标诊断。
+
 ### 2. 加载资源
 
 通过 `load_resources(resource_types, session)` 按资源类型查询 `resource` 表，仅加载 `is_available=True` 资源。
@@ -68,8 +89,16 @@ RagData(
 
 - 每个任务的 `start / end / interval`
 - 所有依赖边的 precedence 约束
-- 按资源类型分组的 cumulative 容量约束
+- 按资源类型分组的 cumulative 容量约束；同一个任务可同时出现在多个资源类型的 cumulative 中
+- `not_before` 约束：`start >= not_before`
 - `minimize(makespan)` 目标
+
+资源需求归一化规则：
+
+1. 优先读取 `StepData.resource_reqs`。
+2. 对相同 `resource_type` 的需求数量求和。
+3. 若 `resource_reqs` 为空，再使用旧字段 `resource_type/resource_qty` 作为兼容 fallback。
+4. 如果某类资源当前没有可用实例，建模容量回退为 `1`，作为开发期容错；这不代表真实业务语义。
 
 ### 4. 求解
 
@@ -98,16 +127,11 @@ solver.parameters.max_time_in_seconds = 30.0
 
 `_assign_resources(...)` 的当前策略：
 
-- 按 `resource_type` 建立资源池
-- 对每个任务按时间顺序尝试分配第一个空闲资源
-- 只分配一个具体资源实例
-- 如果找不到空闲资源，则保留空列表，作为降级行为
-
-重要限制：
-
-- 建模时只读取每个工序“第一个 `is_required=True` 的资源需求”
-- `resource_qty > 1` 会进入 cumulative 约束，但资源实例分配阶段仍只写入一个具体资源
-- 因此当前“容量建模”与“实例回填”并不完全等价
+- 按 `resource_type` 建立资源池。
+- 对每个任务读取完整 `resource_reqs`，为每个资源类型分别分配实例。
+- 资源实例可以有 `capacity > 1`；占用表按 `(start, end, quantity)` 记录，而不是二元 busy/free。
+- 分配结果写入 `task.resources`，每条包含 `resource_id`、`resource_code`、`resource_type`、`quantity`。
+- 如果某个需求未能完整回填，保留未分配部分作为降级行为；正常情况下 CP-SAT 的 cumulative 约束应避免这种情况。
 
 ### 6. 检测并行组
 
@@ -139,11 +163,21 @@ if t1.start_min < t2.end_min and t2.start_min < t1.end_min:
 - `step_order`
 - `op_rule_id`
 - `op_rule_code`
+- `op_rule_name`
 - `start_min`
 - `end_min`
 - `duration_min`
 - `predecessors`
 - `resources`
+- `resource_type`
+- `resource_reqs`
+- `activity_node_id`
+- `activity_node_code`
+- `activity_node_name`
+- `atomic_activity_id`
+- `activity_group_id`
+- `activity_group_code`
+- `activity_group_name`
 
 ## 输入契约
 
@@ -152,7 +186,10 @@ Scheduler 对 Planner/DB 的假设：
 - `candidate_plan_id` 必须存在
 - `candidate_plan_step.predecessor_ids` 中的步骤号有效
 - `op_rule.duration_min` 有效
-- 对应规则若没有可用资源，模型会把容量回退到 `1`
+- `resource_reqs` 是 Scheduler 的主资源契约
+- `resource_type/resource_qty` 只用于兼容旧数据与旧测试
+- 对应资源类型若没有可用资源，模型会把容量回退到 `1`
+- 原子活动任务应携带原子活动和二级活动包元数据；共享原子活动归属到哪个二级包用于连续性目标仍是遗留策略问题。
 
 这个“回退到 1”是当前实现的容错策略，不代表真实业务语义。
 
@@ -164,3 +201,13 @@ Scheduler 对 Planner/DB 的假设：
 | `candidate_plan.steps` 为空 | `status="error"` |
 | 资源约束不可满足 | `status="infeasible"` |
 | 求解器返回其他状态 | `status="error"` |
+
+## 关键路径与调度图
+
+求解成功后会构建 `ScheduleGraph`：
+
+- `logic_edges` 来自 Planner/RAG 的 precedence。
+- `resource_edges` 来自资源实例分配后的相邻使用顺序。
+- `compute_critical_path()` 使用逻辑边 + 资源边做 CPM backward pass，返回关键路径上的 `op_rule_code` 列表。
+
+该逻辑已适配多资源：一个任务分配到多个资源时，每个资源实例都会参与 `resource_edges` 推导。

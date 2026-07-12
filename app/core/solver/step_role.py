@@ -79,9 +79,11 @@ async def compute_step_role_diff(
         await session.flush()
         return step_roles
 
-    parent_steps_by_rule: dict[int, CandidatePlanStep] = {
-        s.op_rule_id: s for s in parent_plan.steps
-    }
+    parent_steps_by_rule: dict[int, list[CandidatePlanStep]] = {}
+    for step in parent_plan.steps:
+        parent_steps_by_rule.setdefault(step.op_rule_id, []).append(step)
+    for steps in parent_steps_by_rule.values():
+        steps.sort(key=lambda s: s.step_order)
 
     new_result = await session.execute(
         select(CandidatePlanStep)
@@ -126,15 +128,22 @@ async def compute_step_role_diff(
 
     for step in new_steps:
         rule = rules_map.get(step.op_rule_id)
-        if step.op_rule_id not in parent_steps_by_rule:
+        parent_steps = parent_steps_by_rule.get(step.op_rule_id, [])
+        if not parent_steps:
             if rule and rule.is_repair:
                 role = "repair"
             else:
                 role = "normal"
         else:
             new_start = new_start_map.get(step.step_order)
-            parent_step = parent_steps_by_rule[step.op_rule_id]
-            parent_start = parent_start_map.get(parent_step.step_order)
+            matched_parent_step = None
+            for parent_step in parent_steps:
+                if parent_step.step_order == step.step_order:
+                    matched_parent_step = parent_step
+                    break
+            if matched_parent_step is None:
+                matched_parent_step = parent_steps[0]
+            parent_start = parent_start_map.get(matched_parent_step.step_order)
             if new_start is not None and parent_start is not None:
                 if new_start < parent_start:
                     role = "pulled_forward"

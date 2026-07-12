@@ -8,7 +8,7 @@ Translates the RAG structure and resource constraints into a CP-SAT model:
 - Minimize makespan objective
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from ortools.sat.python import cp_model
@@ -27,6 +27,34 @@ class TaskVar:
     resource_type: str
 
 
+def step_resource_requirements(step: Any) -> dict[str, int]:
+    """Return normalized required resource quantities for one step.
+
+    `resource_reqs` is the canonical multi-resource contract.  The legacy
+    `resource_type/resource_qty` pair is retained as a fallback so older tests
+    and persisted rows still schedule the same way.
+    """
+    requirements: dict[str, int] = {}
+
+    for req in getattr(step, "resource_reqs", []) or []:
+        resource_type = req.get("resource_type") or "NONE"
+        if resource_type == "NONE":
+            continue
+
+        quantity = int(req.get("quantity") or 1)
+        if quantity <= 0:
+            quantity = 1
+        requirements[resource_type] = requirements.get(resource_type, 0) + quantity
+
+    if not requirements:
+        resource_type = getattr(step, "resource_type", "NONE")
+        if resource_type != "NONE":
+            quantity = getattr(step, "resource_qty", 0) or 1
+            requirements[resource_type] = max(int(quantity), 1)
+
+    return requirements
+
+
 @dataclass
 class ScheduleModel:
     """Packaged CP-SAT model ready for solving."""
@@ -34,6 +62,9 @@ class ScheduleModel:
     task_vars: dict[int, TaskVar]  # step_order -> TaskVar
     makespan: Any  # cp_model.IntVar
     horizon: int
+    activity_groups: dict[int, list[int]] = field(default_factory=dict)
+    state_groups: dict[int, list[int]] = field(default_factory=dict)
+    objective_cache: dict[str, Any] = field(default_factory=dict)
 
 
 def build_model(
@@ -63,6 +94,8 @@ def build_model(
         horizon = max_not_before + horizon
 
     task_vars: dict[int, TaskVar] = {}
+    activity_groups: dict[int, list[int]] = {}
+    state_groups: dict[int, list[int]] = {}
 
     for step in rag_data.steps:
         so = step.step_order
@@ -80,12 +113,35 @@ def build_model(
             duration=step.duration_min,
             resource_type=step.resource_type,
         )
+        if step.activity_group_id is not None:
+            activity_groups.setdefault(step.activity_group_id, []).append(so)
+        seen_state_groups: set[int] = set()
+        for group in getattr(step, "state_continuity_groups", []) or []:
+            group_id = group.get("state_group_id")
+            if group_id is None:
+                continue
+            try:
+                group_id_int = int(group_id)
+            except (TypeError, ValueError):
+                continue
+            if group_id_int in seen_state_groups:
+                continue
+            seen_state_groups.add(group_id_int)
+            state_groups.setdefault(group_id_int, []).append(so)
 
     for pred_so, succ_so in rag_data.edges:
         if pred_so in task_vars and succ_so in task_vars:
             model.add(task_vars[succ_so].start >= task_vars[pred_so].end)
 
-    resource_type_set = {s.resource_type for s in rag_data.steps if s.resource_type != "NONE"}
+    requirements_by_step = {
+        s.step_order: step_resource_requirements(s)
+        for s in rag_data.steps
+    }
+    resource_type_set = sorted({
+        resource_type
+        for requirements in requirements_by_step.values()
+        for resource_type in requirements
+    })
 
     for res_type in resource_type_set:
         capacity = get_resource_capacity(resources, res_type)
@@ -96,10 +152,11 @@ def build_model(
         demands = []
 
         for step in rag_data.steps:
-            if step.resource_type == res_type:
+            demand = requirements_by_step[step.step_order].get(res_type)
+            if demand is not None:
                 tv = task_vars[step.step_order]
                 intervals.append(tv.interval)
-                demands.append(step.resource_qty if step.resource_qty > 0 else 1)
+                demands.append(demand)
 
         if intervals:
             model.add_cumulative(intervals, demands, capacity)
@@ -116,6 +173,16 @@ def build_model(
         task_vars=task_vars,
         makespan=makespan,
         horizon=horizon,
+        activity_groups={
+            group_id: step_orders
+            for group_id, step_orders in activity_groups.items()
+            if len(step_orders) >= 2
+        },
+        state_groups={
+            group_id: step_orders
+            for group_id, step_orders in state_groups.items()
+            if len(step_orders) >= 2
+        },
     )
 
     if objectives is None:

@@ -13,6 +13,10 @@ metadata:
 Synchronize all progress from this session back to the project's context documents,
 ensuring the next session (or a different AI) can seamlessly continue.
 
+This skill is the project-level closing step. It syncs project documents first,
+then records any global superpowers artifacts created or advanced during the
+session so the next workflow can resume cleanly.
+
 ## When to use me
 
 Use this at the **end of every conversation**, even if the task is incomplete.
@@ -61,6 +65,20 @@ Use the Edit tool to make precise changes. Do NOT rewrite the entire file.
 - If ALL subtasks are done, add a completion note at the top:
   `> 状态：已完成 — [date]`
 
+### Step 5.5: Record superpowers workflow state
+
+If this session used any global superpowers workflow, capture that state in the
+handoff and project context:
+
+- If a spec was created or updated, record its path under
+  `docs/superpowers/specs/` in the STATE document's relevant section or notes
+- If a plan was created or updated, record its path under
+  `docs/superpowers/plans/` in the STATE document's relevant section or notes
+- If execution stopped mid-plan, note exactly which task or step should resume
+  next
+- If the next session must use a specific global skill, state that explicitly
+  in the final summary
+
 ### Step 6: ANCHOR violation check
 
 Review all code produced this session against ANCHOR.md constraints.
@@ -91,6 +109,13 @@ If the current TICKET is incomplete, output:
 Output a one-paragraph handoff summary that the next session's session-start
 can use to quickly understand where things left off.
 
+If superpowers artifacts exist, the summary must include:
+- Which global skill was last used
+- The latest approved spec path, if any
+- The latest active plan path, if any
+- Whether the next session should brainstorm, write a plan, execute a plan, or
+  continue direct implementation
+
 ## Important rules
 
 - **Always write changes to files** — do not just output text for the user to
@@ -101,6 +126,11 @@ can use to quickly understand where things left off.
 - **Record ALL decisions made during the session** — even small ones that
   might affect future work. Put them in STATE's "当前已知问题" section if
   they need future attention.
+- **Do not let global workflow artifacts drift from project context** — if a
+  spec or plan changes scope, reflect that in TICKET/STATE before ending.
+- **Project context wins on conflict** — if a global workflow artifact conflicts
+  with `ANCHOR.md` or the active TICKET, flag it instead of silently preserving
+  the mismatch.
 
 ## File paths reference
 
@@ -108,4 +138,6 @@ can use to quickly understand where things left off.
 docs/STATE_V*.md         — edit this to sync progress
 docs/TICKET_*.md         — edit to mark subtask completion
 docs/ANCHOR.md           — read-only reference for violation check
+docs/superpowers/specs/   — brainstorming artifacts to reference
+docs/superpowers/plans/   — plan artifacts to reference
 ```

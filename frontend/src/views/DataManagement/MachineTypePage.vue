@@ -62,7 +62,11 @@ const form = ref({ code: '', name: '', description: '' })
 
 async function load() {
   loading.value = true
-  try { list.value = await getMachineTypes() } finally { loading.value = false }
+  try {
+    list.value = await getMachineTypes()
+  } catch {
+    list.value = []
+  } finally { loading.value = false }
 }
 
 async function save() {

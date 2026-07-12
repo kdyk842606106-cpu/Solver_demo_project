@@ -6,6 +6,18 @@ consumed by the existing /solve pipeline without seed SQL.
 """
 
 import pytest
+from sqlalchemy import select
+
+from app.db.models import (
+    ActivityNode,
+    ActivityPackageAtomicRef,
+    ActivityStateBinding,
+    AtomicActivity,
+    FeatureDefinition,
+    StateFeatureDef,
+    StateNode,
+    StateNodeReference,
+)
 
 
 @pytest.mark.asyncio
@@ -85,7 +97,7 @@ async def test_master_data_to_solve_flow(client):
         },
     ]
     for item in resources:
-        resource_resp = await client.post("/api/v1/resources", json=item)
+        resource_resp = await client.post("/api/v1/resources", json={**item, "machine_id": machine_id})
         assert resource_resp.status_code == 201
 
     # 5. Operation rules
@@ -192,3 +204,1206 @@ async def test_master_data_to_solve_flow(client):
     assert solve_data["status"] == "done"
     assert solve_data["schedule"]["makespan"] == 45
     assert len(solve_data["schedule"]["tasks"]) == 3
+
+
+async def _post_json(client, url: str, payload: dict, expected_status: int = 201) -> dict:
+    response = await client.post(url, json=payload)
+    assert response.status_code == expected_status, response.text
+    return response.json()
+
+
+async def _seed_network_editor_graph(client) -> dict:
+    machine_type = await _post_json(
+        client,
+        "/api/v1/machine-types",
+        {
+            "code": "NET_EDITOR_DB",
+            "name": "Network Editor DB",
+            "description": "Network editor integration fixture",
+        },
+    )
+    machine_type_id = machine_type["id"]
+    for feature_key in ("ready_flag", "done_flag", "review_flag"):
+        await _post_json(
+            client,
+            f"/api/v1/machine-types/{machine_type_id}/feature-defs",
+            {
+                "machine_type_id": machine_type_id,
+                "feature_key": feature_key,
+                "feature_name": feature_key,
+                "value_type": "enum",
+                "allowed_values": ["false", "true"],
+            },
+        )
+
+    root_state = await _post_json(
+        client,
+        f"/api/v1/machine-types/{machine_type_id}/state-nodes",
+        {
+            "machine_type_id": machine_type_id,
+            "parent_id": None,
+            "level": 1,
+            "code": "PKG_ROOT",
+            "name": "Root package",
+            "feature_key": None,
+            "operator": "eq",
+            "target_value": None,
+            "state_kind": "aggregate",
+            "sort_order": 10,
+            "is_active": True,
+            "metadata_json": {
+                "keep": "state-root",
+                "_network_editor_layout": {"x": 80, "y": 80},
+                "_network_editor_container": {"width": 360, "height": 220},
+            },
+        },
+    )
+    ready_state = await _post_json(
+        client,
+        f"/api/v1/machine-types/{machine_type_id}/state-nodes",
+        {
+            "machine_type_id": machine_type_id,
+            "parent_id": root_state["id"],
+            "level": 2,
+            "code": "STATE_READY",
+            "name": "Ready leaf",
+            "feature_key": "ready_flag",
+            "operator": "eq",
+            "target_value": "true",
+            "state_kind": "atomic",
+            "sort_order": 10,
+            "is_active": True,
+            "metadata_json": {"_network_editor_layout": {"x": 130, "y": 170}},
+        },
+    )
+    done_state = await _post_json(
+        client,
+        f"/api/v1/machine-types/{machine_type_id}/state-nodes",
+        {
+            "machine_type_id": machine_type_id,
+            "parent_id": root_state["id"],
+            "level": 2,
+            "code": "STATE_DONE",
+            "name": "Done leaf",
+            "feature_key": "done_flag",
+            "operator": "eq",
+            "target_value": "true",
+            "state_kind": "atomic",
+            "sort_order": 20,
+            "is_active": True,
+            "metadata_json": {"_network_editor_layout": {"x": 130, "y": 260}},
+        },
+    )
+    reuse_parent = await _post_json(
+        client,
+        f"/api/v1/machine-types/{machine_type_id}/state-nodes",
+        {
+            "machine_type_id": machine_type_id,
+            "parent_id": None,
+            "level": 1,
+            "code": "PKG_REUSE_PARENT",
+            "name": "Reuse parent",
+            "feature_key": None,
+            "operator": "eq",
+            "target_value": None,
+            "state_kind": "aggregate",
+            "sort_order": 20,
+            "is_active": True,
+            "metadata_json": {"_network_editor_layout": {"x": 80, "y": 420}},
+        },
+    )
+    state_ref = await _post_json(
+        client,
+        f"/api/v1/state-nodes/{root_state['id']}/references",
+        {
+            "parent_state_node_id": reuse_parent["id"],
+            "sort_order": 30,
+            "is_active": True,
+            "metadata_json": {"_network_editor_layout": {"x": 160, "y": 500}},
+        },
+    )
+
+    activity_root = await _post_json(
+        client,
+        f"/api/v1/machine-types/{machine_type_id}/activity-nodes",
+        {
+            "machine_type_id": machine_type_id,
+            "parent_id": None,
+            "level": 1,
+            "code": "ACT_ROOT",
+            "name": "Activity root",
+            "description": None,
+            "activity_category": "normal",
+            "sort_order": 10,
+            "is_active": True,
+            "metadata_json": {"_network_editor_layout": {"x": 520, "y": 80}},
+        },
+    )
+    activity_package = await _post_json(
+        client,
+        f"/api/v1/machine-types/{machine_type_id}/activity-nodes",
+        {
+            "machine_type_id": machine_type_id,
+            "parent_id": activity_root["id"],
+            "level": 2,
+            "code": "ACT_PACKAGE",
+            "name": "Activity package",
+            "description": None,
+            "activity_category": "normal",
+            "sort_order": 10,
+            "is_active": True,
+            "metadata_json": {
+                "_network_editor_layout": {"x": 560, "y": 170},
+                "_network_editor_container": {"width": 360, "height": 220},
+            },
+        },
+    )
+    atomic = await _post_json(
+        client,
+        f"/api/v1/machine-types/{machine_type_id}/atomic-activities",
+        {
+            "machine_type_id": machine_type_id,
+            "code": "AA_FINISH",
+            "name": "Finish atomic",
+            "description": None,
+            "activity_category": "normal",
+            "sort_order": 10,
+            "is_active": True,
+            "metadata_json": {
+                "library_note": "base",
+                "_network_editor_layout": {"x": 900, "y": 900},
+            },
+        },
+    )
+    atomic_ref = await _post_json(
+        client,
+        f"/api/v1/activity-nodes/{activity_package['id']}/atomic-activity-refs",
+        {
+            "atomic_activity_id": atomic["id"],
+            "sort_order": 10,
+            "is_active": True,
+            "metadata_json": {
+                "ref_note": "package-instance",
+                "_network_editor_layout": {"x": 620, "y": 260},
+            },
+        },
+    )
+    op_rule = await _post_json(
+        client,
+        f"/api/v1/machine-types/{machine_type_id}/op-rules",
+        {
+            "machine_type_id": machine_type_id,
+            "activity_node_id": None,
+            "atomic_activity_id": atomic["id"],
+            "code": "RULE_FINISH",
+            "name": "Finish rule",
+            "duration_min": 30,
+            "description": None,
+            "is_active": True,
+            "is_repair": False,
+            "preconditions": [
+                {"feature_key": "ready_flag", "operator": "eq", "feature_value": "true"},
+            ],
+            "effects": [
+                {"feature_key": "done_flag", "new_value": "true"},
+            ],
+            "resource_reqs": [],
+        },
+    )
+    await _post_json(
+        client,
+        "/api/v1/activity-state-bindings",
+        {
+            "machine_type_id": machine_type_id,
+            "atomic_activity_id": atomic["id"],
+            "activity_node_id": None,
+            "op_rule_id": op_rule["id"],
+            "state_node_id": ready_state["id"],
+            "binding_role": "input",
+            "covered_leaf_state_ids": [ready_state["id"]],
+            "is_inherited": False,
+            "is_active": True,
+            "metadata_json": {"binding_note": "input"},
+        },
+    )
+    await _post_json(
+        client,
+        "/api/v1/activity-state-bindings",
+        {
+            "machine_type_id": machine_type_id,
+            "atomic_activity_id": atomic["id"],
+            "activity_node_id": None,
+            "op_rule_id": op_rule["id"],
+            "state_node_id": done_state["id"],
+            "binding_role": "output",
+            "covered_leaf_state_ids": [done_state["id"]],
+            "is_inherited": False,
+            "is_active": True,
+            "metadata_json": {"binding_note": "output"},
+        },
+    )
+
+    return {
+        "machine_type_id": machine_type_id,
+        "root_state_id": root_state["id"],
+        "ready_state_id": ready_state["id"],
+        "done_state_id": done_state["id"],
+        "reuse_parent_id": reuse_parent["id"],
+        "state_ref_id": state_ref["id"],
+        "activity_root_id": activity_root["id"],
+        "activity_package_id": activity_package["id"],
+        "atomic_id": atomic["id"],
+        "atomic_ref_id": atomic_ref["id"],
+        "op_rule_id": op_rule["id"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_activity_state_binding_rejects_virtual_activity_targets(client):
+    ids = await _seed_network_editor_graph(client)
+
+    response = await client.post(
+        "/api/v1/activity-state-bindings",
+        json={
+            "machine_type_id": ids["machine_type_id"],
+            "atomic_activity_id": None,
+            "activity_node_id": ids["activity_package_id"],
+            "op_rule_id": None,
+            "state_node_id": ids["ready_state_id"],
+            "binding_role": "context_input",
+            "covered_leaf_state_ids": [ids["ready_state_id"]],
+            "is_inherited": False,
+            "is_active": True,
+            "metadata_json": {},
+        },
+    )
+
+    assert response.status_code == 422
+    assert "Virtual activities are management packages" in response.text
+
+
+async def _load_network_graph(client, machine_type_id: int, **overrides) -> dict:
+    payload = {
+        "state_root_ids": [],
+        "activity_scope_node_ids": [],
+        "view_mode": "implementation",
+        "include_inactive": True,
+        "state_depth": 0,
+        "activity_depth": 0,
+        **overrides,
+    }
+    response = await client.post(
+        f"/api/v1/machine-types/{machine_type_id}/network-editor/graph",
+        json=payload,
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+@pytest.mark.asyncio
+async def test_network_editor_loads_existing_graph_from_database(client):
+    ids = await _seed_network_editor_graph(client)
+
+    graph = await _load_network_graph(client, ids["machine_type_id"])
+
+    state_ref_graph_id = f"state_node:{ids['root_state_id']}:ref:{ids['state_ref_id']}"
+    state_ref_node = next(node for node in graph["state_nodes"] if node["id"] == state_ref_graph_id)
+    assert state_ref_node["reference_id"] == ids["state_ref_id"]
+    assert state_ref_node["parent_id"] == ids["reuse_parent_id"]
+    assert state_ref_node["metadata_json"]["_network_editor_layout"] == {"x": 160, "y": 500}
+
+    atomic_node = next(node for node in graph["activity_nodes"] if node["id"] == f"atomic_activity:{ids['atomic_id']}")
+    assert atomic_node["reference_id"] == ids["atomic_ref_id"]
+    assert atomic_node["reference_ids"] == [ids["atomic_ref_id"]]
+    assert atomic_node["parent_graph_id"] == f"activity_node:{ids['activity_package_id']}"
+    assert atomic_node["metadata_json"]["_network_editor_layout"] == {"x": 620, "y": 260}
+    assert atomic_node["metadata_json"]["ref_note"] == "package-instance"
+    assert atomic_node["atomic_metadata_json"]["library_note"] == "base"
+
+    edge_pairs = {(edge["source_id"], edge["target_id"], edge["binding_role"]) for edge in graph["edges"]}
+    assert (f"state_node:{ids['ready_state_id']}", f"atomic_activity:{ids['atomic_id']}", "input") in edge_pairs
+    assert (f"atomic_activity:{ids['atomic_id']}", f"state_node:{ids['done_state_id']}", "output") in edge_pairs
+    assert graph["revision"]
+
+
+@pytest.mark.asyncio
+async def test_network_editor_activity_depth_two_hides_nested_atomic_refs(client):
+    ids = await _seed_network_editor_graph(client)
+
+    graph = await _load_network_graph(
+        client,
+        ids["machine_type_id"],
+        activity_scope_node_ids=[ids["activity_root_id"]],
+        activity_depth=2,
+    )
+
+    activity_ids = {node["id"] for node in graph["activity_nodes"]}
+    assert f"activity_node:{ids['activity_root_id']}" in activity_ids
+    assert f"activity_node:{ids['activity_package_id']}" in activity_ids
+    assert f"atomic_activity:{ids['atomic_id']}" not in activity_ids
+
+    child_graph = await _load_network_graph(
+        client,
+        ids["machine_type_id"],
+        activity_scope_node_ids=[ids["activity_package_id"]],
+        activity_depth=2,
+    )
+    child_activity_ids = {node["id"] for node in child_graph["activity_nodes"]}
+    assert f"activity_node:{ids['activity_package_id']}" in child_activity_ids
+    assert f"atomic_activity:{ids['atomic_id']}" in child_activity_ids
+
+    expanded_graph = await _load_network_graph(
+        client,
+        ids["machine_type_id"],
+        activity_scope_node_ids=[ids["activity_root_id"]],
+        activity_depth=3,
+    )
+    expanded_atomic = next(
+        node for node in expanded_graph["activity_nodes"]
+        if node["id"] == f"atomic_activity:{ids['atomic_id']}"
+    )
+    assert ids["atomic_ref_id"] in expanded_atomic["reference_ids"]
+
+
+@pytest.mark.asyncio
+async def test_network_editor_commit_writes_back_and_reloads_from_database(client, db_session):
+    ids = await _seed_network_editor_graph(client)
+    graph = await _load_network_graph(client, ids["machine_type_id"])
+
+    commit_response = await client.post(
+        f"/api/v1/machine-types/{ids['machine_type_id']}/network-editor/commit",
+        json={
+            "base_revision": graph["revision"],
+            "validate_after_apply": False,
+            "allow_warnings": True,
+            "validation_payload": {
+                "state_root_ids": [],
+                "activity_scope_node_ids": [],
+                "view_mode": "implementation",
+                "include_inactive": True,
+                "state_depth": 0,
+                "activity_depth": 0,
+            },
+            "changes": [
+                {
+                    "client_id": "move-existing-atomic-ref",
+                    "entity_type": "activity_package_atomic_ref",
+                    "operation": "update",
+                    "entity_id": ids["atomic_ref_id"],
+                    "payload": {
+                        "atomic_activity_id": ids["atomic_id"],
+                        "sort_order": 20,
+                        "is_active": True,
+                        "metadata_json": {
+                            "ref_note": "moved",
+                            "_network_editor_layout": {"x": 740, "y": 310},
+                        },
+                    },
+                    "label": "move existing ref",
+                },
+                {
+                    "client_id": "draft-state",
+                    "entity_type": "state_node",
+                    "operation": "create",
+                    "payload": {
+                        "machine_type_id": ids["machine_type_id"],
+                        "parent_id": ids["root_state_id"],
+                        "level": 2,
+                        "code": "STATE_REVIEW",
+                        "name": "Review leaf",
+                        "feature_key": "review_flag",
+                        "operator": "eq",
+                        "target_value": "true",
+                        "state_kind": "atomic",
+                        "sort_order": 30,
+                        "is_active": True,
+                        "metadata_json": {
+                            "keep": "state",
+                            "_network_editor_layout": {"x": 210, "y": 360},
+                        },
+                    },
+                    "label": "create review state",
+                },
+                {
+                    "client_id": "draft-state-reference",
+                    "entity_type": "state_node_reference",
+                    "operation": "create",
+                    "payload": {
+                        "state_node_id": {"_draft_ref": "draft-state"},
+                        "parent_state_node_id": ids["reuse_parent_id"],
+                        "sort_order": 31,
+                        "is_active": True,
+                        "metadata_json": {
+                            "ref_note": "draft-state-reference",
+                            "_network_editor_layout": {"x": 180, "y": 560},
+                        },
+                    },
+                    "label": "reference review state",
+                },
+                {
+                    "client_id": "draft-atomic",
+                    "entity_type": "atomic_activity",
+                    "operation": "create",
+                    "payload": {
+                        "machine_type_id": ids["machine_type_id"],
+                        "package_id": ids["activity_package_id"],
+                        "code": "AA_REVIEW",
+                        "name": "Review atomic",
+                        "description": None,
+                        "activity_category": "normal",
+                        "sort_order": 30,
+                        "is_active": True,
+                        "metadata_json": {
+                            "library_note": "created-from-editor",
+                            "_network_editor_layout": {"x": 990, "y": 990},
+                        },
+                        "package_ref_metadata_json": {
+                            "ref_note": "created-instance",
+                            "_network_editor_layout": {"x": 760, "y": 390},
+                        },
+                    },
+                    "label": "create review atomic",
+                },
+                {
+                    "client_id": "draft-binding",
+                    "entity_type": "activity_state_binding",
+                    "operation": "create",
+                    "payload": {
+                        "machine_type_id": ids["machine_type_id"],
+                        "atomic_activity_id": {"_draft_ref": "draft-atomic"},
+                        "activity_node_id": None,
+                        "op_rule_id": None,
+                        "state_node_id": {"_draft_ref": "draft-state"},
+                        "binding_role": "output",
+                        "covered_leaf_state_ids": [{"_draft_ref": "draft-state"}],
+                        "is_inherited": False,
+                        "is_active": True,
+                        "metadata_json": {"binding_note": "draft-ref-resolution"},
+                    },
+                    "label": "bind review output",
+                },
+            ],
+        },
+    )
+    assert commit_response.status_code == 200, commit_response.text
+    data = commit_response.json()
+    assert data["applied_change_count"] == 5
+    assert data["revision"] and data["revision"] != graph["revision"]
+
+    existing_ref = await db_session.get(ActivityPackageAtomicRef, ids["atomic_ref_id"])
+    assert existing_ref.sort_order == 20
+    assert existing_ref.metadata_json["_network_editor_layout"] == {"x": 740, "y": 310}
+
+    created_atomic = (
+        await db_session.execute(select(AtomicActivity).where(AtomicActivity.code == "AA_REVIEW"))
+    ).scalar_one()
+    assert created_atomic.metadata_json == {"library_note": "created-from-editor"}
+    created_ref = (
+        await db_session.execute(
+            select(ActivityPackageAtomicRef).where(
+                ActivityPackageAtomicRef.atomic_activity_id == created_atomic.id
+            )
+        )
+    ).scalar_one()
+    assert created_ref.activity_node_id == ids["activity_package_id"]
+    assert created_ref.metadata_json["_network_editor_layout"] == {"x": 760, "y": 390}
+
+    created_state = (
+        await db_session.execute(select(StateNode).where(StateNode.code == "STATE_REVIEW"))
+    ).scalar_one()
+    assert created_state.parent_id is None
+    assert created_state.level == 1
+    assert created_state.metadata_json == {"keep": "state"}
+    created_root_ref = (
+        await db_session.execute(
+            select(StateNodeReference).where(
+                StateNodeReference.state_node_id == created_state.id,
+                StateNodeReference.parent_state_node_id == ids["root_state_id"],
+            )
+        )
+    ).scalar_one()
+    assert created_root_ref.metadata_json["_network_editor_layout"] == {"x": 210, "y": 360}
+    created_state_ref = (
+        await db_session.execute(
+            select(StateNodeReference).where(
+                StateNodeReference.state_node_id == created_state.id,
+                StateNodeReference.parent_state_node_id == ids["reuse_parent_id"],
+            )
+        )
+    ).scalar_one()
+    assert created_state_ref.sort_order == 31
+    assert created_state_ref.metadata_json["_network_editor_layout"] == {"x": 180, "y": 560}
+    created_binding = (
+        await db_session.execute(
+            select(ActivityStateBinding).where(
+                ActivityStateBinding.atomic_activity_id == created_atomic.id,
+                ActivityStateBinding.state_node_id == created_state.id,
+            )
+        )
+    ).scalar_one()
+    assert created_binding.covered_leaf_state_ids == [created_state.id]
+    assert created_binding.metadata_json == {"binding_note": "draft-ref-resolution"}
+
+    reloaded = await _load_network_graph(client, ids["machine_type_id"])
+    reloaded_atomic = next(
+        node for node in reloaded["activity_nodes"]
+        if node["id"] == f"atomic_activity:{created_atomic.id}"
+    )
+    assert reloaded_atomic["metadata_json"]["_network_editor_layout"] == {"x": 760, "y": 390}
+    assert reloaded_atomic["atomic_metadata_json"] == {"library_note": "created-from-editor"}
+
+
+@pytest.mark.asyncio
+async def test_network_editor_commit_adds_atomic_ref_to_new_activity_package(client, db_session):
+    ids = await _seed_network_editor_graph(client)
+    graph = await _load_network_graph(client, ids["machine_type_id"])
+
+    commit_response = await client.post(
+        f"/api/v1/machine-types/{ids['machine_type_id']}/network-editor/commit",
+        json={
+            "base_revision": graph["revision"],
+            "validate_after_apply": False,
+            "allow_warnings": True,
+            "validation_payload": {
+                "state_root_ids": [],
+                "activity_scope_node_ids": [],
+                "view_mode": "implementation",
+                "include_inactive": True,
+                "state_depth": 0,
+                "activity_depth": 0,
+            },
+            "changes": [
+                {
+                    "client_id": "draft-parent-activity",
+                    "entity_type": "activity_node",
+                    "operation": "create",
+                    "payload": {
+                        "machine_type_id": ids["machine_type_id"],
+                        "parent_id": None,
+                        "level": 1,
+                        "code": "VA_NEW_PARENT",
+                        "name": "New parent activity",
+                        "description": None,
+                        "activity_category": "normal",
+                        "sort_order": 90,
+                        "is_active": True,
+                        "metadata_json": {"_network_editor_layout": {"x": 540, "y": 540}},
+                    },
+                    "label": "create parent activity",
+                },
+                {
+                    "client_id": "draft-child-package",
+                    "entity_type": "activity_node",
+                    "operation": "create",
+                    "payload": {
+                        "machine_type_id": ids["machine_type_id"],
+                        "parent_id": {"_draft_ref": "draft-parent-activity"},
+                        "level": 2,
+                        "code": "VA_NEW_CHILD",
+                        "name": "New child activity package",
+                        "description": None,
+                        "activity_category": "normal",
+                        "sort_order": 91,
+                        "is_active": True,
+                        "metadata_json": {"_network_editor_layout": {"x": 600, "y": 620}},
+                    },
+                    "label": "create child package",
+                },
+                {
+                    "client_id": "draft-existing-atomic-ref",
+                    "entity_type": "activity_package_atomic_ref",
+                    "operation": "create",
+                    "payload": {
+                        "package_id": {"_draft_ref": "draft-child-package"},
+                        "atomic_activity_id": ids["atomic_id"],
+                        "sort_order": 1,
+                        "is_active": True,
+                        "metadata_json": {
+                            "ref_note": "existing-atomic-on-new-package",
+                            "_network_editor_layout": {"x": 680, "y": 700},
+                        },
+                    },
+                    "label": "reference existing atomic activity",
+                },
+            ],
+        },
+    )
+    assert commit_response.status_code == 200, commit_response.text
+    data = commit_response.json()
+    assert data["applied_change_count"] == 3
+
+    parent_activity = (
+        await db_session.execute(select(ActivityNode).where(ActivityNode.code == "VA_NEW_PARENT"))
+    ).scalar_one()
+    child_package = (
+        await db_session.execute(select(ActivityNode).where(ActivityNode.code == "VA_NEW_CHILD"))
+    ).scalar_one()
+    assert child_package.parent_id == parent_activity.id
+    assert child_package.level == 2
+
+    created_ref = (
+        await db_session.execute(
+            select(ActivityPackageAtomicRef).where(
+                ActivityPackageAtomicRef.activity_node_id == child_package.id,
+                ActivityPackageAtomicRef.atomic_activity_id == ids["atomic_id"],
+            )
+        )
+    ).scalar_one()
+    assert created_ref.metadata_json["ref_note"] == "existing-atomic-on-new-package"
+    assert created_ref.metadata_json["_network_editor_layout"] == {"x": 680, "y": 700}
+
+    reloaded = await _load_network_graph(client, ids["machine_type_id"], activity_scope_node_ids=[parent_activity.id], activity_depth=0)
+    referenced_atomic = next(
+        node for node in reloaded["activity_nodes"]
+        if node.get("reference_id") == created_ref.id
+    )
+    assert referenced_atomic["atomic_activity_id"] == ids["atomic_id"]
+    assert referenced_atomic["parent_graph_id"] == f"activity_node:{child_package.id}"
+    assert referenced_atomic["metadata_json"]["_network_editor_layout"] == {"x": 680, "y": 700}
+
+
+@pytest.mark.asyncio
+async def test_network_editor_commit_normalizes_object_id_payloads(client, db_session):
+    ids = await _seed_network_editor_graph(client)
+    review_state = await _post_json(
+        client,
+        f"/api/v1/machine-types/{ids['machine_type_id']}/state-nodes",
+        {
+            "machine_type_id": ids["machine_type_id"],
+            "parent_id": ids["root_state_id"],
+            "level": 2,
+            "code": "STATE_OBJECT_ID_REVIEW",
+            "name": "Object id review",
+            "feature_key": "review_flag",
+            "operator": "eq",
+            "target_value": "true",
+            "state_kind": "atomic",
+            "sort_order": 80,
+            "is_active": True,
+            "metadata_json": None,
+        },
+    )
+    graph = await _load_network_graph(client, ids["machine_type_id"])
+
+    response = await client.post(
+        f"/api/v1/machine-types/{ids['machine_type_id']}/network-editor/commit",
+        json={
+            "base_revision": graph["revision"],
+            "validate_after_apply": False,
+            "allow_warnings": True,
+            "validation_payload": {
+                "state_root_ids": [],
+                "activity_scope_node_ids": [],
+                "view_mode": "implementation",
+                "include_inactive": True,
+                "state_depth": 0,
+                "activity_depth": 0,
+            },
+            "changes": [
+                {
+                    "client_id": "object-id-binding",
+                    "entity_type": "activity_state_binding",
+                    "operation": "create",
+                    "payload": {
+                        "machine_type_id": ids["machine_type_id"],
+                        "atomic_activity_id": {"atomic_activity_id": ids["atomic_id"]},
+                        "activity_node_id": None,
+                        "op_rule_id": {"id": ids["op_rule_id"]},
+                        "state_node_id": {"state_node_id": f"state_node:{review_state['id']}:ref:999"},
+                        "binding_role": "input",
+                        "covered_leaf_state_ids": [{"state_node_id": f"state_node:{review_state['id']}"}],
+                        "is_inherited": False,
+                        "is_active": True,
+                        "metadata_json": {"binding_note": "object-id-normalized"},
+                    },
+                    "label": "object id binding",
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    created_binding = (
+        await db_session.execute(
+            select(ActivityStateBinding).where(
+                ActivityStateBinding.state_node_id == review_state["id"],
+                ActivityStateBinding.atomic_activity_id == ids["atomic_id"],
+            )
+        )
+    ).scalar_one()
+    assert created_binding.op_rule_id == ids["op_rule_id"]
+    assert created_binding.covered_leaf_state_ids == [review_state["id"]]
+
+
+@pytest.mark.asyncio
+async def test_blockage_reason_options_come_from_global_feature_definition(client, db_session):
+    db_session.add(
+        FeatureDefinition(
+            feature_key="blockage_reason",
+            value_type="enum",
+            allowed_values=["none", "hardware_fault", "material_shortage"],
+            description="Configured Strategy B reasons",
+        )
+    )
+    await db_session.commit()
+
+    response = await client.get("/api/v1/features/blockage-reasons")
+
+    assert response.status_code == 200
+    assert response.json() == ["hardware_fault", "material_shortage"]
+
+
+@pytest.mark.asyncio
+async def test_network_editor_commit_rejects_stale_base_revision_before_writing(client, db_session):
+    ids = await _seed_network_editor_graph(client)
+    graph = await _load_network_graph(client, ids["machine_type_id"])
+
+    await _post_json(
+        client,
+        f"/api/v1/machine-types/{ids['machine_type_id']}/state-nodes",
+        {
+            "machine_type_id": ids["machine_type_id"],
+            "parent_id": ids["root_state_id"],
+            "level": 2,
+            "code": "STATE_EXTERNAL",
+            "name": "External change",
+            "feature_key": "review_flag",
+            "operator": "eq",
+            "target_value": "false",
+            "state_kind": "atomic",
+            "sort_order": 99,
+            "is_active": True,
+            "metadata_json": None,
+        },
+    )
+
+    response = await client.post(
+        f"/api/v1/machine-types/{ids['machine_type_id']}/network-editor/commit",
+        json={
+            "base_revision": graph["revision"],
+            "validate_after_apply": False,
+            "allow_warnings": True,
+            "validation_payload": {},
+            "changes": [
+                {
+                    "client_id": "stale-update",
+                    "entity_type": "state_node",
+                    "operation": "update",
+                    "entity_id": ids["ready_state_id"],
+                    "payload": {
+                        "parent_id": ids["root_state_id"],
+                        "level": 2,
+                        "code": "STATE_READY",
+                        "name": "Should not persist",
+                        "feature_key": "ready_flag",
+                        "operator": "eq",
+                        "target_value": "true",
+                        "state_kind": "atomic",
+                        "sort_order": 10,
+                        "is_active": True,
+                        "metadata_json": None,
+                    },
+                    "label": "stale update",
+                },
+            ],
+        },
+    )
+    assert response.status_code == 409
+    error_payload = response.json()["error_message"]
+    assert error_payload["base_revision"] == graph["revision"]
+    assert error_payload["current_revision"] != graph["revision"]
+
+    ready_state = await db_session.get(StateNode, ids["ready_state_id"])
+    assert ready_state.name == "Ready leaf"
+
+
+@pytest.mark.asyncio
+async def test_network_editor_validation_review_rolls_back_unaccepted_changes(client, db_session):
+    ids = await _seed_network_editor_graph(client)
+    graph = await _load_network_graph(client, ids["machine_type_id"])
+
+    response = await client.post(
+        f"/api/v1/machine-types/{ids['machine_type_id']}/network-editor/commit",
+        json={
+            "base_revision": graph["revision"],
+            "validate_after_apply": True,
+            "allow_warnings": False,
+            "validation_payload": {
+                "state_root_ids": [ids["root_state_id"]],
+                "activity_scope_node_ids": [],
+                "view_mode": "implementation",
+                "include_inactive": True,
+                "state_depth": 0,
+                "activity_depth": 0,
+            },
+            "changes": [
+                {
+                    "client_id": "duplicate-state",
+                    "entity_type": "state_node",
+                    "operation": "create",
+                    "payload": {
+                        "machine_type_id": ids["machine_type_id"],
+                        "parent_id": ids["root_state_id"],
+                        "level": 2,
+                        "code": "STATE_READY_DUP",
+                        "name": "Ready leaf",
+                        "feature_key": "review_flag",
+                        "operator": "eq",
+                        "target_value": "true",
+                        "state_kind": "atomic",
+                        "sort_order": 40,
+                        "is_active": True,
+                        "metadata_json": {"_network_editor_layout": {"x": 240, "y": 440}},
+                    },
+                    "label": "duplicate state warning",
+                },
+            ],
+        },
+    )
+    assert response.status_code == 422
+    error_payload = response.json()["error_message"]
+    assert error_payload["warning_count"] > 0
+    assert any(
+        issue["code"] == "DUPLICATE_STATE_NAME"
+        for issue in error_payload["validation"]["modeling_issues"]
+    )
+
+    duplicate_state = (
+        await db_session.execute(select(StateNode).where(StateNode.code == "STATE_READY_DUP"))
+    ).scalar_one_or_none()
+    assert duplicate_state is None
+
+
+@pytest.mark.asyncio
+async def test_state_node_template_dimension_creates_concrete_feature_def(client, db_session):
+    machine_resp = await client.post(
+        "/api/v1/machine-types",
+        json={"code": "TEMPLATE_DIM_MT", "name": "Template Dimension MT"},
+    )
+    assert machine_resp.status_code == 201
+    machine_type_id = machine_resp.json()["id"]
+
+    template_resp = await client.post(
+        f"/api/v1/machine-types/{machine_type_id}/feature-defs",
+        json={
+            "machine_type_id": machine_type_id,
+            "feature_key": "module_dim_installed",
+            "feature_name": "Module installed",
+            "value_type": "enum",
+            "allowed_values": ["false", "true"],
+        },
+    )
+    assert template_resp.status_code == 201
+
+    state_resp = await client.post(
+        f"/api/v1/machine-types/{machine_type_id}/state-nodes",
+        json={
+            "machine_type_id": machine_type_id,
+            "parent_id": None,
+            "level": 1,
+            "code": "STATE_MODULE_A_INSTALLED",
+            "name": "Module A",
+            "feature_key": "module_dim_installed__module_a",
+            "operator": "eq",
+            "target_value": "true",
+            "state_kind": "atomic",
+            "sort_order": 10,
+            "is_active": True,
+            "metadata_json": {
+                "dimension_template_key": "module_dim_installed",
+                "state_object_name": "Module A",
+            },
+        },
+    )
+    assert state_resp.status_code == 201, state_resp.text
+
+    concrete = (
+        await db_session.execute(
+            select(StateFeatureDef).where(
+                StateFeatureDef.machine_type_id == machine_type_id,
+                StateFeatureDef.feature_key == "module_dim_installed__module_a",
+            )
+        )
+    ).scalar_one()
+    assert concrete.feature_name == "Module A / Module installed"
+    assert concrete.allowed_values == ["false", "true"]
+    global_def = await db_session.get(FeatureDefinition, "module_dim_installed__module_a")
+    assert global_def is not None
+    assert global_def.allowed_values == ["false", "true"]
+
+
+@pytest.mark.asyncio
+async def test_state_node_template_dimension_keeps_chinese_objects_distinct(client):
+    machine_resp = await client.post(
+        "/api/v1/machine-types",
+        json={"code": "TEMPLATE_DIM_CN_MT", "name": "Template Dimension CN MT"},
+    )
+    assert machine_resp.status_code == 201
+    machine_type_id = machine_resp.json()["id"]
+
+    template_resp = await client.post(
+        f"/api/v1/machine-types/{machine_type_id}/feature-defs",
+        json={
+            "machine_type_id": machine_type_id,
+            "feature_key": "cn_dim_installed",
+            "feature_name": "安装状态",
+            "value_type": "enum",
+            "allowed_values": ["未安装", "已安装"],
+        },
+    )
+    assert template_resp.status_code == 201
+
+    module_resp = await client.post(
+        f"/api/v1/machine-types/{machine_type_id}/state-nodes",
+        json={
+            "machine_type_id": machine_type_id,
+            "parent_id": None,
+            "level": 1,
+            "code": "STATE_MODULE_B_INSTALLED",
+            "name": "模块B已安装",
+            "feature_key": "cn_dim_installed__u6a21_u5757_b",
+            "operator": "eq",
+            "target_value": "已安装",
+            "state_kind": "atomic",
+            "sort_order": 10,
+            "is_active": True,
+            "metadata_json": {
+                "dimension_template_key": "cn_dim_installed",
+                "state_object_name": "模块B",
+            },
+        },
+    )
+    assert module_resp.status_code == 201, module_resp.text
+
+    fixture_resp = await client.post(
+        f"/api/v1/machine-types/{machine_type_id}/state-nodes",
+        json={
+            "machine_type_id": machine_type_id,
+            "parent_id": None,
+            "level": 1,
+            "code": "STATE_FIXTURE_B_INSTALLED",
+            "name": "工装B已安装",
+            "feature_key": "cn_dim_installed__u5de5_u88c5_b",
+            "operator": "eq",
+            "target_value": "已安装",
+            "state_kind": "atomic",
+            "sort_order": 20,
+            "is_active": True,
+            "metadata_json": {
+                "dimension_template_key": "cn_dim_installed",
+                "state_object_name": "工装B",
+            },
+        },
+    )
+    assert fixture_resp.status_code == 201, fixture_resp.text
+
+    stale_key_resp = await client.post(
+        f"/api/v1/machine-types/{machine_type_id}/state-nodes",
+        json={
+            "machine_type_id": machine_type_id,
+            "parent_id": None,
+            "level": 1,
+            "code": "STATE_BAD_FIXTURE_B_INSTALLED",
+            "name": "错误工装B已安装",
+            "feature_key": "cn_dim_installed__b",
+            "operator": "eq",
+            "target_value": "已安装",
+            "state_kind": "atomic",
+            "sort_order": 30,
+            "is_active": True,
+            "metadata_json": {
+                "dimension_template_key": "cn_dim_installed",
+                "state_object_name": "工装B",
+            },
+        },
+    )
+    assert stale_key_resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_state_node_template_dimension_rejects_invalid_target(client):
+    machine_resp = await client.post(
+        "/api/v1/machine-types",
+        json={"code": "TEMPLATE_DIM_INVALID_MT", "name": "Template Dimension Invalid MT"},
+    )
+    assert machine_resp.status_code == 201
+    machine_type_id = machine_resp.json()["id"]
+    template_resp = await client.post(
+        f"/api/v1/machine-types/{machine_type_id}/feature-defs",
+        json={
+            "machine_type_id": machine_type_id,
+            "feature_key": "pipe_dim_connected",
+            "feature_name": "Pipe connected",
+            "value_type": "enum",
+            "allowed_values": ["false", "true"],
+        },
+    )
+    assert template_resp.status_code == 201
+
+    state_resp = await client.post(
+        f"/api/v1/machine-types/{machine_type_id}/state-nodes",
+        json={
+            "machine_type_id": machine_type_id,
+            "parent_id": None,
+            "level": 1,
+            "code": "STATE_PIPE_CONNECTED",
+            "name": "Pipe A",
+            "feature_key": "pipe_dim_connected__pipe_a",
+            "operator": "eq",
+            "target_value": "done",
+            "state_kind": "atomic",
+            "sort_order": 10,
+            "is_active": True,
+            "metadata_json": {
+                "dimension_template_key": "pipe_dim_connected",
+                "state_object_name": "Pipe A",
+            },
+        },
+    )
+    assert state_resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_network_editor_commit_reuses_exact_template_state_as_reference(client, db_session):
+    machine_resp = await client.post(
+        "/api/v1/machine-types",
+        json={"code": "TEMPLATE_DIM_REUSE_MT", "name": "Template Dimension Reuse MT"},
+    )
+    assert machine_resp.status_code == 201
+    machine_type_id = machine_resp.json()["id"]
+    feature_resp = await client.post(
+        f"/api/v1/machine-types/{machine_type_id}/feature-defs",
+        json={
+            "machine_type_id": machine_type_id,
+            "feature_key": "fixture_dim_ready",
+            "feature_name": "Fixture ready",
+            "value_type": "enum",
+            "allowed_values": ["false", "true"],
+        },
+    )
+    assert feature_resp.status_code == 201
+
+    parent_a = (
+        await client.post(
+            f"/api/v1/machine-types/{machine_type_id}/state-nodes",
+            json={
+                "machine_type_id": machine_type_id,
+                "parent_id": None,
+                "level": 1,
+                "code": "PKG_A",
+                "name": "Package A",
+                "feature_key": None,
+                "operator": "eq",
+                "target_value": None,
+                "state_kind": "aggregate",
+                "sort_order": 1,
+                "is_active": True,
+                "metadata_json": None,
+            },
+        )
+    ).json()
+    parent_b = (
+        await client.post(
+            f"/api/v1/machine-types/{machine_type_id}/state-nodes",
+            json={
+                "machine_type_id": machine_type_id,
+                "parent_id": None,
+                "level": 1,
+                "code": "PKG_B",
+                "name": "Package B",
+                "feature_key": None,
+                "operator": "eq",
+                "target_value": None,
+                "state_kind": "aggregate",
+                "sort_order": 2,
+                "is_active": True,
+                "metadata_json": None,
+            },
+        )
+    ).json()
+    existing = (
+        await client.post(
+            f"/api/v1/machine-types/{machine_type_id}/state-nodes",
+            json={
+                "machine_type_id": machine_type_id,
+                "parent_id": parent_a["id"],
+                "level": 2,
+                "code": "STATE_FIXTURE_A_READY",
+                "name": "Fixture A",
+                "feature_key": "fixture_dim_ready__fixture_a",
+                "operator": "eq",
+                "target_value": "true",
+                "state_kind": "atomic",
+                "sort_order": 10,
+                "is_active": True,
+                "metadata_json": {
+                    "dimension_template_key": "fixture_dim_ready",
+                    "state_object_name": "Fixture A",
+                },
+            },
+        )
+    ).json()
+
+    graph = await _load_network_graph(client, machine_type_id)
+    response = await client.post(
+        f"/api/v1/machine-types/{machine_type_id}/network-editor/commit",
+        json={
+            "base_revision": graph["revision"],
+            "validate_after_apply": False,
+            "allow_warnings": True,
+            "validation_payload": {
+                "state_root_ids": [],
+                "activity_scope_node_ids": [],
+                "view_mode": "implementation",
+                "include_inactive": True,
+                "state_depth": 0,
+                "activity_depth": 0,
+            },
+            "changes": [
+                {
+                    "client_id": "exact-state",
+                    "entity_type": "state_node",
+                    "operation": "create",
+                    "payload": {
+                        "machine_type_id": machine_type_id,
+                        "parent_id": parent_b["id"],
+                        "level": 2,
+                        "code": "STATE_FIXTURE_A_READY_DUP",
+                        "name": "Fixture A",
+                        "feature_key": "fixture_dim_ready__fixture_a",
+                        "operator": "eq",
+                        "target_value": "true",
+                        "state_kind": "atomic",
+                        "sort_order": 20,
+                        "is_active": True,
+                        "metadata_json": {
+                            "dimension_template_key": "fixture_dim_ready",
+                            "state_object_name": "Fixture A",
+                        },
+                    },
+                    "label": "reuse exact state",
+                },
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["results"][0]["result"]["id"] == existing["id"]
+
+    same_name_states = (
+        await db_session.execute(
+            select(StateNode).where(
+                StateNode.machine_type_id == machine_type_id,
+                StateNode.name == "Fixture A",
+            )
+        )
+    ).scalars().all()
+    assert len(same_name_states) == 1
+    ref = (
+        await db_session.execute(
+            select(StateNodeReference).where(
+                StateNodeReference.state_node_id == existing["id"],
+                StateNodeReference.parent_state_node_id == parent_b["id"],
+            )
+        )
+    ).scalar_one()
+    assert ref.metadata_json["_network_editor_reuse"]["source"] == "atomic_state_library_create"

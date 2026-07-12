@@ -2,25 +2,25 @@
 -- Seed Data for State-Driven Process Planning System
 -- MVP Demo: CNC Lathe Machine State Transition Scenario
 -- ============================================================
--- 
+--
 -- Scenario: CNC Lathe needs to transition from "Cold Standby" to "Ready for Production"
--- 
+--
 -- Current State: temperature_level=cold, clean_level=dirty, calibration=off
 -- Target State:  temperature_level=hot, clean_level=clean, calibration=on
--- 
+--
 -- Operations:
 --   1. OP_WARMUP:    cold → hot (30 min, needs TECHNICIAN)
 --   2. OP_CLEANING:  dirty → clean (20 min, needs CLEANER)
 --   3. OP_CALIBRATE: off → on (15 min, needs TECHNICIAN, requires hot)
 --   4. OP_COOLDOWN:  hot → cold (25 min, needs TECHNICIAN)
 --   5. OP_INSPECT:   no state change (10 min, needs INSPECTOR)
--- 
+--
 -- RAG Construction:
 --   - OP_WARMUP: precondition cold (satisfied by current state) → no predecessor
 --   - OP_CLEANING: precondition dirty (satisfied by current state) → no predecessor
 --   - OP_CALIBRATE: precondition hot (needs OP_WARMUP's effect) → depends on OP_WARMUP
 --   - OP_WARMUP and OP_CLEANING can run in parallel (no mutual dependency)
--- 
+--
 -- ============================================================
 
 -- ============================================================
@@ -108,10 +108,10 @@ INSERT INTO machine_state_feature (machine_state_id, feature_key, feature_value)
 -- 5. Resources (3 types)
 -- ============================================================
 
-INSERT INTO resource (id, code, name, resource_type, capacity, is_available, meta) VALUES
-(1, 'TECH-01', 'Technician Alice', 'TECHNICIAN', 1, true, '{"skills": ["lathe", "mill", "calibration"]}'),
-(2, 'TECH-02', 'Technician Bob', 'TECHNICIAN', 1, true, '{"skills": ["lathe", "cleaning"]}'),
-(3, 'CLEAN-01', 'Cleaning Robot', 'CLEANER', 1, true, '{"type": "automated"}');
+INSERT INTO resource (id, machine_id, code, name, resource_type, capacity, is_available, meta) VALUES
+(1, 1, 'TECH-01', 'Technician Alice', 'TECHNICIAN', 1, true, '{"skills": ["lathe", "mill", "calibration"]}'),
+(2, 1, 'TECH-02', 'Technician Bob', 'TECHNICIAN', 1, true, '{"skills": ["lathe", "cleaning"]}'),
+(3, 1, 'CLEAN-01', 'Cleaning Robot', 'CLEANER', 1, true, '{"type": "automated"}');
 
 -- ============================================================
 -- 6. Operation Rules (5 rules with preconditions, effects, and resource requirements)

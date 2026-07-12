@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>MS010 分段计划报告 — 中部模块安装 → 外防护安装</title>
+<style>
+* {margin:0;padding:0;box-sizing:border-box}
+body {font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:#f5f7fa;color:#1E293B;line-height:1.6}
+.container {max-width:1200px;margin:0 auto;padding:20px}
+.header {background:#fff;padding:30px;border-radius:12px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1)}
+.header h1 {font-size:24px;margin-bottom:8px;color:#1E293B}
+.header .meta {font-size:13px;color:#64748B}
+.stats {display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:20px}
+.stat {background:#fff;padding:20px;border-radius:10px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
+.stat .num {font-size:28px;font-weight:700;color:#1565C0;margin:4px 0}
+.stat .lbl {font-size:12px;color:#64748B}
+.section {background:#fff;border-radius:10px;padding:24px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
+.section h2 {font-size:16px;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid #E2E8F0;color:#334155}
+table {width:100%;border-collapse:collapse;font-size:13px}
+th,td {padding:10px 12px;text-align:left;border-bottom:1px solid #E2E8F0}
+th {background:#F8FAFC;font-weight:600;color:#475569;font-size:12px}
+tr:hover {background:#F8FAFC}
+tr.critical {border-left:3px solid #D32F2F}
+tr.critical td:first-child {padding-left:9px}
+.gantt {overflow-x:auto;margin-top:12px}
+.gantt-row {display:flex;align-items:center;margin-bottom:6px;min-width:800px;height:32px}
+.gantt-label {width:220px;flex-shrink:0;font-size:12px;color:#475569;padding-right:10px;text-align:right}
+.gantt-track {flex:1;height:24px;background:#F1F5F9;border-radius:4px;position:relative}
+.gantt-bar {height:100%;border-radius:4px;position:absolute;top:0;display:flex;align-items:center;padding:0 8px;font-size:11px;color:white;font-weight:500;white-space:nowrap;overflow:hidden}
+.timeline {display:flex;justify-content:space-between;margin:12px 0;padding:8px 0;border-top:1px dashed #CBD5E1;border-bottom:1px dashed #CBD5E1;font-size:11px;color:#64748B}
+.alert {background:#FEF3C7;border-left:3px solid #F59E0B;padding:12px 16px;border-radius:0 6px 6px 0;margin-bottom:10px;font-size:13px}
+.alert.danger {background:#FEE2E2;border-left-color:#EF4444}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+<h1>MS010 机台计划报告（分段）</h1>
+<div class="meta">当前状态：主机中部模块安装前准备结束（OPS003完成） | 目标状态：外防护安装结束（OPS027完成） | Plan ID: 272 | Schedule ID: 275</div>
+</div>
+
+<div class="stats">
+<div class="stat"><div class="lbl">分段总工期</div><div class="num">20天8.3小时</div></div>
+<div class="stat"><div class="lbl">工序数量</div><div class="num">24</div></div>
+<div class="stat"><div class="lbl">总工期（完整）</div><div class="num">26天8.8小时</div></div>
+<div class="stat"><div class="lbl">关键路径工序</div><div class="num">17</div></div>
+</div>
+
+<div class="section">
+<h2>关键路径（本段）</h2>
+<p style="font-size:13px;color:#64748B;margin-bottom:12px">从 OPS004 开始，到 OPS027 结束的关键工序链：</p>
+<div style="font-family:monospace;font-size:13px;background:#F8FAFC;padding:16px;border-radius:6px;line-height:2;color:#334155">
+OPS004 主机中部模块安装 (56.0小时) → <br>OPS005 顶部拖链模块主体安装 (15.0小时) → <br>OPS017 顶部计量框架安装 (19.0小时) → <br>OPS009 光源连接模块安装与调节 (52.0小时) → <br>OPS006 供气盒模块安装 (29.0小时) → <br>OPS015 中框气体分析模块安装 (13.5小时) → <br>OPS013 光学传感器组件安装 (16.0小时) → <br>OPS014 热屏蔽板安装 (23.0小时) → <br>OPS025 底部运动台安装 (53.7小时) → <br>OPS019 大气机械臂2安装与调节 (32.8小时) → <br>OPS026 整机管路安装 (28.0小时) → <br>OPS020 真空机械臂2安装与调节 (54.3小时) → <br>OPS027 外防护安装 (96.0小时) → <br>OPS021 机械支柱安装 (18.0小时) → <br>OPS022 顶部运动台安装与调节 (12.0小时) → <br>OPS023 顶部拖链模块及机械支柱功能调试安装 (30.0小时) → <br>OPS024 顶部区域真空抽排管路安装 (3.5小时)
+</div>
+</div>
+
+<div class="section">
+<h2>甘特图（OPS004 → OPS027）</h2>
+<div class="timeline">
+<span>分段起点 (OPS003结束)</span>
+<span>约 Day 8</span>
+<span>约 Day 16</span>
+<span>约 Day 24</span>
+</div>
+<div class="gantt">
+
+<div class="gantt-row">
+<div class="gantt-label">OPS004 主机中部模块安装 🔴CP</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:0.0%;width:11.5%;background:#37474F;">56.0小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS005 顶部拖链模块主体安装 🔴CP</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:11.5%;width:3.1%;background:#37474F;">15.0小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS008 光源导轨精调节</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:14.5%;width:3.5%;background:#37474F;">17.2小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS017 顶部计量框架安装 🔴CP</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:14.5%;width:3.9%;background:#263238;">19.0小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS009 光源连接模块安装与调节 🔴CP</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:18.4%;width:10.6%;background:#37474F;">52.0小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS006 供气盒模块安装 🔴CP</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:29.1%;width:5.9%;background:#37474F;">29.0小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS012 动态气体开关安装</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:29.1%;width:7.2%;background:#F57C00;">35.0小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS015 中框气体分析模块安装 🔴CP</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:35.0%;width:2.8%;background:#37474F;">13.5小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS013 光学传感器组件安装 🔴CP</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:37.8%;width:3.3%;background:#37474F;">16.0小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS018 中框公共线缆布线</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:37.8%;width:18.8%;background:#2E7D32;">92.0小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS014 热屏蔽板安装 🔴CP</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:41.1%;width:4.7%;background:#37474F;">23.0小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS025 底部运动台安装 🔴CP</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:45.8%;width:11.0%;background:#37474F;">53.7小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS016 机械臂1推入恢复</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:56.6%;width:0.6%;background:#2E7D32;">3.0小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS019 大气机械臂2安装与调节 🔴CP</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:56.8%;width:6.7%;background:#37474F;">32.8小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS007 中框真空系统前级管路安装</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:57.2%;width:1.4%;background:#2E7D32;">7.0小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS010 光源主体对准</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:58.7%;width:8.6%;background:#00838F;">42.0小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS026 整机管路安装 🔴CP</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:63.5%;width:5.7%;background:#37474F;">28.0小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS011 光源组件对准</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:67.3%;width:16.0%;background:#78909C;">78.0小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS020 真空机械臂2安装与调节 🔴CP</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:69.2%;width:11.1%;background:#37474F;">54.3小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS027 外防护安装 🔴CP</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:80.3%;width:19.7%;background:#37474F;">96.0小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS021 机械支柱安装 🔴CP</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:100.0%;width:3.7%;background:#37474F;">18.0小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS022 顶部运动台安装与调节 🔴CP</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:103.7%;width:2.5%;background:#37474F;">12.0小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS023 顶部拖链模块及机械支柱功能调试安 🔴CP</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:106.1%;width:6.1%;background:#37474F;">30.0小时</div>
+</div>
+</div>
+<div class="gantt-row">
+<div class="gantt-label">OPS024 顶部区域真空抽排管路安装 🔴CP</div>
+<div class="gantt-track">
+<div class="gantt-bar" style="left:112.3%;width:0.7%;background:#37474F;">3.5小时</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="section">
+<h2>工序详情</h2>
+<table>
+<thead><tr>
+<th>序号</th><th>工序</th><th>名称</th><th>工期</th><th>开始~结束</th><th>资源</th><th>前置</th>
+</tr></thead>
+<tbody>
+<tr class="critical">
+<td><b>OPS004</b></td>
+<td>MS010-OPS004</td>
+<td>主机中部模块安装</td>
+<td>56.0小时</td>
+<td>0.0小时 ~ 2天8.0小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#37474F;color:white;margin-right:4px;">工人</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#263238;color:white;margin-right:4px;">行吊</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#1565C0;color:white;margin-right:4px;">主机台右侧维护位</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#0277BD;color:white;margin-right:4px;">主机台左侧维护位</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#F57C00;color:white;margin-right:4px;">主机台中部-下腔内</span></td>
+<td>OPS003</td>
+</tr><tr class="critical">
+<td><b>OPS005</b></td>
+<td>MS010-OPS005</td>
+<td>顶部拖链模块主体安装</td>
+<td>15.0小时</td>
+<td>2天8.0小时 ~ 2天23.0小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#37474F;color:white;margin-right:4px;">工人</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#263238;color:white;margin-right:4px;">行吊</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#00838F;color:white;margin-right:4px;">光源工作位</span></td>
+<td>OPS004</td>
+</tr><tr class="critical">
+<td><b>OPS006</b></td>
+<td>MS010-OPS006</td>
+<td>供气盒模块安装</td>
+<td>29.0小时</td>
+<td>5天22.0小时 ~ 7天3.0小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#37474F;color:white;margin-right:4px;">工人</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#263238;color:white;margin-right:4px;">行吊</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#2E7D32;color:white;margin-right:4px;">主机台中部-腔外</span></td>
+<td>OPS005</td>
+</tr><tr >
+<td><b>OPS007</b></td>
+<td>MS010-OPS007</td>
+<td>中框真空系统前级管路安装</td>
+<td>7.0小时</td>
+<td>11天15.5小时 ~ 11天22.5小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#2E7D32;color:white;margin-right:4px;">主机台中部-腔外</span></td>
+<td>OPS006</td>
+</tr><tr >
+<td><b>OPS008</b></td>
+<td>MS010-OPS008</td>
+<td>光源导轨精调节</td>
+<td>17.2小时</td>
+<td>2天23.0小时 ~ 3天16.2小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#37474F;color:white;margin-right:4px;">工人</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#00838F;color:white;margin-right:4px;">光源工作位</span></td>
+<td>OPS004,OPS005</td>
+</tr><tr class="critical">
+<td><b>OPS009</b></td>
+<td>MS010-OPS009</td>
+<td>光源连接模块安装与调节</td>
+<td>52.0小时</td>
+<td>3天18.0小时 ~ 5天22.0小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#37474F;color:white;margin-right:4px;">工人</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#263238;color:white;margin-right:4px;">行吊</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#00838F;color:white;margin-right:4px;">光源工作位</span></td>
+<td>OPS008</td>
+</tr><tr >
+<td><b>OPS010</b></td>
+<td>MS010-OPS010</td>
+<td>光源主体对准</td>
+<td>42.0小时</td>
+<td>11天22.5小时 ~ 13天16.5小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#00838F;color:white;margin-right:4px;">光源工作位</span></td>
+<td>OPS009,OPS007</td>
+</tr><tr >
+<td><b>OPS011</b></td>
+<td>MS010-OPS011</td>
+<td>光源组件对准</td>
+<td>78.0小时</td>
+<td>13天16.5小时 ~ 16天22.5小时</td>
+<td><span style="color:#999;font-size:11px;">无特定空间</span></td>
+<td>OPS010</td>
+</tr><tr >
+<td><b>OPS012</b></td>
+<td>MS010-OPS012</td>
+<td>动态气体开关安装</td>
+<td>35.0小时</td>
+<td>5天22.0小时 ~ 7天9.0小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#F57C00;color:white;margin-right:4px;">主机台中部-下腔内</span></td>
+<td>OPS009,OPS004</td>
+</tr><tr class="critical">
+<td><b>OPS013</b></td>
+<td>MS010-OPS013</td>
+<td>光学传感器组件安装</td>
+<td>16.0小时</td>
+<td>7天16.5小时 ~ 8天8.5小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#37474F;color:white;margin-right:4px;">工人</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#263238;color:white;margin-right:4px;">行吊</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#F57C00;color:white;margin-right:4px;">主机台中部-下腔内</span></td>
+<td>OPS012</td>
+</tr><tr class="critical">
+<td><b>OPS014</b></td>
+<td>MS010-OPS014</td>
+<td>热屏蔽板安装</td>
+<td>23.0小时</td>
+<td>8天8.5小时 ~ 9天7.5小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#37474F;color:white;margin-right:4px;">工人</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#F57C00;color:white;margin-right:4px;">主机台中部-下腔内</span></td>
+<td>OPS013</td>
+</tr><tr class="critical">
+<td><b>OPS015</b></td>
+<td>MS010-OPS015</td>
+<td>中框气体分析模块安装</td>
+<td>13.5小时</td>
+<td>7天3.0小时 ~ 7天16.5小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#37474F;color:white;margin-right:4px;">工人</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#263238;color:white;margin-right:4px;">行吊</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#2E7D32;color:white;margin-right:4px;">主机台中部-腔外</span></td>
+<td>OPS004</td>
+</tr><tr >
+<td><b>OPS016</b></td>
+<td>MS010-OPS016</td>
+<td>机械臂1推入恢复</td>
+<td>3.0小时</td>
+<td>11天12.5小时 ~ 11天15.5小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#2E7D32;color:white;margin-right:4px;">主机台中部-腔外</span></td>
+<td>OPS015,OPS004</td>
+</tr><tr class="critical">
+<td><b>OPS017</b></td>
+<td>MS010-OPS017</td>
+<td>顶部计量框架安装</td>
+<td>19.0小时</td>
+<td>2天23.0小时 ~ 3天18.0小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#263238;color:white;margin-right:4px;">行吊</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#455A64;color:white;margin-right:4px;">主机台中部-上腔内</span></td>
+<td>OPS004</td>
+</tr><tr >
+<td><b>OPS018</b></td>
+<td>MS010-OPS018</td>
+<td>中框公共线缆布线</td>
+<td>92.0小时</td>
+<td>7天16.5小时 ~ 11天12.5小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#2E7D32;color:white;margin-right:4px;">主机台中部-腔外</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#455A64;color:white;margin-right:4px;">主机台中部-上腔内</span></td>
+<td>OPS017</td>
+</tr><tr class="critical">
+<td><b>OPS019</b></td>
+<td>MS010-OPS019</td>
+<td>大气机械臂2安装与调节</td>
+<td>32.8小时</td>
+<td>11天13.2小时 ~ 12天22.0小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#37474F;color:white;margin-right:4px;">工人</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#263238;color:white;margin-right:4px;">行吊</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#6A1B9A;color:white;margin-right:4px;">主机台前部</span></td>
+<td>OPS018</td>
+</tr><tr class="critical">
+<td><b>OPS020</b></td>
+<td>MS010-OPS020</td>
+<td>真空机械臂2安装与调节</td>
+<td>54.3小时</td>
+<td>14天2.0小时 ~ 16天8.3小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#37474F;color:white;margin-right:4px;">工人</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#263238;color:white;margin-right:4px;">行吊</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#6A1B9A;color:white;margin-right:4px;">主机台前部</span></td>
+<td>OPS019</td>
+</tr><tr class="critical">
+<td><b>OPS021</b></td>
+<td>MS010-OPS021</td>
+<td>机械支柱安装</td>
+<td>18.0小时</td>
+<td>20天8.3小时 ~ 21天2.3小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#37474F;color:white;margin-right:4px;">工人</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#263238;color:white;margin-right:4px;">行吊</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#2E7D32;color:white;margin-right:4px;">主机台中部-腔外</span></td>
+<td>OPS020</td>
+</tr><tr class="critical">
+<td><b>OPS022</b></td>
+<td>MS010-OPS022</td>
+<td>顶部运动台安装与调节</td>
+<td>12.0小时</td>
+<td>21天2.3小时 ~ 21天14.3小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#37474F;color:white;margin-right:4px;">工人</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#263238;color:white;margin-right:4px;">行吊</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#455A64;color:white;margin-right:4px;">主机台中部-上腔内</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#2E7D32;color:white;margin-right:4px;">主机台中部-腔外</span></td>
+<td>OPS021</td>
+</tr><tr class="critical">
+<td><b>OPS023</b></td>
+<td>MS010-OPS023</td>
+<td>顶部拖链模块及机械支柱功能调试安装</td>
+<td>30.0小时</td>
+<td>21天14.3小时 ~ 22天20.3小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#37474F;color:white;margin-right:4px;">工人</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#263238;color:white;margin-right:4px;">行吊</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#00838F;color:white;margin-right:4px;">光源工作位</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#2E7D32;color:white;margin-right:4px;">主机台中部-腔外</span></td>
+<td>OPS022</td>
+</tr><tr class="critical">
+<td><b>OPS024</b></td>
+<td>MS010-OPS024</td>
+<td>顶部区域真空抽排管路安装</td>
+<td>3.5小时</td>
+<td>22天20.3小时 ~ 22天23.8小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#37474F;color:white;margin-right:4px;">工人</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#263238;color:white;margin-right:4px;">行吊</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#2E7D32;color:white;margin-right:4px;">主机台中部-腔外</span></td>
+<td>OPS023</td>
+</tr><tr class="critical">
+<td><b>OPS025</b></td>
+<td>MS010-OPS025</td>
+<td>底部运动台安装</td>
+<td>53.7小时</td>
+<td>9天7.5小时 ~ 11天13.2小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#37474F;color:white;margin-right:4px;">工人</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#263238;color:white;margin-right:4px;">行吊</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#F57C00;color:white;margin-right:4px;">主机台中部-下腔内</span></td>
+<td>OPS014</td>
+</tr><tr class="critical">
+<td><b>OPS026</b></td>
+<td>MS010-OPS026</td>
+<td>整机管路安装</td>
+<td>28.0小时</td>
+<td>12天22.0小时 ~ 14天2.0小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#37474F;color:white;margin-right:4px;">工人</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#263238;color:white;margin-right:4px;">行吊</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#2E7D32;color:white;margin-right:4px;">主机台中部-腔外</span></td>
+<td>OPS025,OPS016</td>
+</tr><tr class="critical">
+<td><b>OPS027</b></td>
+<td>MS010-OPS027</td>
+<td>外防护安装</td>
+<td>96.0小时</td>
+<td>16天8.3小时 ~ 20天8.3小时</td>
+<td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#37474F;color:white;margin-right:4px;">工人</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#263238;color:white;margin-right:4px;">行吊</span><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:#2E7D32;color:white;margin-right:4px;">主机台中部-腔外</span></td>
+<td>OPS026</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div class="section">
+<h2>风险提示</h2>
+<div class="alert danger"><b>长工期工序：</b>OPS004 (56.0小时), OPS009 (52.0小时), OPS018 (92.0小时), OPS025 (53.7小时), OPS011 (78.0小时), OPS020 (54.3小时), OPS027 (96.0小时) — 建议提前确认人力和资源</div><div class="alert danger"><b>SPACE_OUT 资源瓶颈：</b>11个工序共享腔外空间，包括外防护安装(96h)，存在排队风险</div><div class="alert"><b>并行机会：</b>OPS004之后有4条并行分支（光源/下腔内/上腔内/腔外），合理调配可压缩总工期</div>
+</div>
+
+<div class="section">
+<h2>数据调用流程说明</h2>
+<div style="font-size:13px;line-height:2;color:#475569">
+<p><b>1. 用户输入解析</b> → 提取 machine_code=MS010, 当前/目标状态标签</p>
+<p><b>2. 输入校验</b> → 查询 PostgreSQL 数据库(machine/machine_state/op_rule表)，确认状态和工序存在</p>
+<p><b>3. 构建 RAG</b> → 读取 op_rule_precond(前置条件) + op_rule_effect(后置效果)，自动推导依赖图(plan_id=272)</p>
+<p><b>4. CP-SAT 求解</b> → 输入资源约束(WORKER/行吊/空间资源)，运行 Google OR-Tools 求解最优排程(schedule_id=275)</p>
+<p><b>5. 结果校验</b> → 检查 makespan>0, 任务数量, 资源冲突, 关键路径</p>
+<p><b>6. 报告生成</b> → 将 schedule JSON → 甘特图/资源统计/风险分析/关键路径可视化</p>
+</div>
+</div>
+
+<div style="text-align:center;padding:20px;color:#94A3B8;font-size:12px">
+Generated by OpenClaw Agent | Solver Demo v0.2 | 2026-05-16
+</div>
+</div>
+</body>
+</html>

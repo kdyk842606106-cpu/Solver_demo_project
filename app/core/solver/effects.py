@@ -1,7 +1,7 @@
 """
 Effect registry for state transitions.
 
-Provides 3 Effect implementations (set/increment/decrement) via decorator registration.
+Provides Effect implementations via decorator registration.
 All effect application must go through EffectRegistry - no if/elif dispatch.
 """
 
@@ -40,9 +40,8 @@ class Effect(ABC):
 
         Args:
             current_value: Current value of the feature in state, None if not set
-            new_value: Target value to set (for 'set' effect type, this is the result;
-                       for increment/decrement, pass None)
-            delta_value: op_rule_effect.delta_value (only used for increment/decrement)
+            new_value: Target value to set/reset.
+            delta_value: op_rule_effect.delta_value (used for increment/decrement/sub)
 
         Returns:
             str: New feature value (统一返回字符串)
@@ -115,7 +114,7 @@ class IncrementEffect(Effect):
             base = float(current_value) if current_value else 0.0
         except ValueError:
             base = 0.0
-        delta = delta_value if delta_value is not None else 0.0
+        delta = float(delta_value) if delta_value is not None else 0.0
         return _round_to_max_2_decimal(base + delta)
 
 
@@ -135,5 +134,27 @@ class DecrementEffect(Effect):
             base = float(current_value) if current_value else 0.0
         except ValueError:
             base = 0.0
-        delta = delta_value if delta_value is not None else 0.0
+        delta = float(delta_value) if delta_value is not None else 0.0
         return _round_to_max_2_decimal(base - delta)
+
+
+@register_effect("sub")
+class SubEffect(DecrementEffect):
+    @property
+    def effect_type(self) -> str:
+        return "sub"
+
+
+@register_effect("reset")
+class ResetEffect(Effect):
+    @property
+    def effect_type(self) -> str:
+        return "reset"
+
+    def apply(
+        self,
+        current_value: str | None,
+        new_value: str | None,
+        delta_value: float | None,
+    ) -> str:
+        return new_value if new_value is not None else ""

@@ -1,0 +1,927 @@
+# CURRENT STATE: V0.3
+
+> Update 2026-07-12: TICKET-085 completed. Network Editor state-transition rendering now expands every visible ancestor state-package frame bottom-up to contain the complete bounds of its expanded descendant containers, including transition relays owned by those descendants. The bounds roll-up runs only after final node shifts and relay collision placement, preserves ancestor top-left coordinates, and does not enter ELK input, layout signatures, drafts, persisted metadata, or commit payloads; folding the nested package therefore restores the parent frame and sibling positions automatically. The high-parallel E2E fixture now covers nine state cards and nine complete relay transitions, asserting inner/outer containment, fixed expansion anchoring, sibling restoration, frame restoration, and no layout draft. Verification: focused containment regression passed 1 test; state expansion/relay/proxy/auto-arrange regression passed 13 tests; `npm.cmd run build` passed with the existing Vite chunk-size warning; `git diff --check` passed with existing LF/CRLF conversion warnings only. No backend API, database, projection contract, Scheduler, or RAGBuilder changes. ANCHOR check: no violations.
+
+> Update 2026-07-11 follow-up: TICKET-083 local state expansion and layout isolation is complete. State-transition package expansion now uses graph-instance-local `expandedStateGraphIds` without rewriting `selectedStateRootIds`; the staged canvas always preserves unrelated high-level roots and siblings and reveals direct children one level at a time. Nested auto arrange scopes ELK input, routes, signatures, caches, and drafts to the active package, keeps the package anchor fixed, and writes only descendant positions plus the active container size. Relay layout ownership follows the nearest common expanded output package, and X6 container bounds include owned relays while parent layout uses the child-package header as a stable collapsed-size anchor. This prevents relays from escaping above/below their target package, child layout drafts from moving parent/sibling nodes, and nested titles from being hidden by parent titles. Projection counts, package AND/snapshot semantics, commit payloads, backend API/schema, Scheduler, and RAGBuilder remain unchanged. Verification: focused Network Editor Playwright regression passed 13 tests covering staged expansion, independent roots, local auto arrange, relay ownership, high-parallel proxy geometry, fallback layout, and collapsed proxies; `npm.cmd run build` passed with the existing Vite chunk-size warning; `git diff --check` passed with existing LF/CRLF warnings only. ANCHOR check: no violations.
+
+> Update 2026-07-11: TICKET-082 proxy routing and spacing implementation is complete, with final in-app visual handoff still partial. State-transition fallback, expanded-container, and ELK layouts now share balanced spacing metrics; the high-parallel state packages retain at least 88px horizontal and 72px vertical visible clearance while expanded containers grow with their content. Folded package proxies now use X6 Manhattan obstacle routing from right output ports to left input ports, excluding container backgrounds but avoiding nodes and container titles; stale ELK routes that intersect visible obstacles fall back to the same route. Proxy labels are offset into routing channels with an opaque background, while edges remain below nodes. No projection, backend API, database, Scheduler, or RAGBuilder semantics changed. Verification: focused Network Editor E2E passed 24 tests; the high-parallel geometry test confirms 6 packages, 8 proxies, 0 hidden relays, no proxy path entering a non-endpoint node, no proxy label/node overlap, and 88px/72px minimum gaps; `npm.cmd run build`, JavaScript syntax checks, and `git diff --check` passed with existing warnings only. The in-app browser refused the local `127.0.0.1` page under its URL safety policy, so no final manual visual screenshot was captured.
+
+> Update 2026-07-10 follow-up 2: TICKET-081 package-level state-transition projection implementation is complete, with repository-wide verification still partial. The frontend now builds full semantic relay groups first, renders a relay only when an output target is visible, aggregates fully folded transitions into one visible package-to-package proxy, suppresses same-package self-loops into internal-transition badges, and preserves explicit state-package snapshot bindings as one semantic edge with `complete` / `partial` / `stale` coverage labels. Relay, proxy, coverage, focus, and layout fields remain UI-only; no database, API, Scheduler, or RAGBuilder changes were made. The `MECH_INTEGRATION_HIGH_PARALLEL` in-app browser check shows 6 level-2 packages, 8 package proxies, and 0 hidden relays after expanding the level-1 package. Verification: focused state-transition/package E2E passed 24 tests; `npm.cmd run build`, `node --check`, and `git diff --check` passed (existing Vite chunk-size and LF/CRLF warnings only). Backend Network Editor pytest could not start because `.venv` references a removed Python 3.12 installation. The full `network-editor.spec.ts` run is 46 passed / 15 failed, predominantly from tests retaining pre-staged expansion visibility or legacy container geometry expectations; those assertions were not broadened into TICKET-081.
+
+> Update 2026-07-10: TICKET-080 completed. Network Editor activity focus/reveal paths now preserve staged expansion instead of silently entering expand-all mode: virtual activity focus, validation activity reveal, and atomic activity resource selection use `activityDepth = 2`, while only the explicit "expand all" action keeps `activityDepth = 0`. E2E now covers focus canvas entry on a level-1 activity showing the level-2 activity while keeping nested atomic activity hidden. Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- e2e/tests/network-editor.spec.ts --grep "activity packages one level|focus canvas|folded package descendants|collapsed proxy"` passed 4 tests; `git diff --check` passed with LF/CRLF warnings only.
+
+> Update 2026-07-10 follow-up: TICKET-080 state-transition preview depth fixed. Positive `activity_depth` now preserves the staged UI semantics across frontend filtering and backend graph projection: expanding a level-1 activity scope to depth 2 shows the level-1 activity plus direct level-2 activity packages, but does not surface nested atomic/level-3 activities; selecting a level-2 activity scope with depth 2 still shows its atomic activities. Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- e2e/tests/network-editor.spec.ts --grep "activity packages one level|focus canvas"` passed 2 tests; `.venv\Scripts\python.exe -m pytest tests\integration\test_master_data_api.py::test_network_editor_activity_depth_two_hides_nested_atomic_refs -q` passed 1 test with the existing SQLite drop-order warning; `.venv\Scripts\python.exe -m py_compile app\services\network_editor.py tests\integration\test_master_data_api.py` passed.
+
+> Update 2026-07-09: Network Editor staged activity expansion and state-transition projection Phase 1 completed in commit `9b58addf`. Activity canvas now defaults to top-level activities, expands a level-1 activity to direct level-2 children, and expands a selected level-2 activity to third-level/atomic activities while explicit expand-all still uses unlimited depth. `networkEditorStateTransitionProjection.js` now centralizes relay groups, canonical/visible state ids, transition details, and warning maps. TICKET-078 started for Phase 2 read-only state-package group boundary projection and projection-owned folded proxy edges; no backend API/schema/Scheduler/RAGBuilder changes are planned.
+
+> Update 2026-07-09 follow-up: TICKET-078 completed. State-transition projection now returns state-package `groupsByGraphId`, relay `backboneEdges`, folded package `proxyEdges`, and projection-owned `visibleEdges`; the state-transition canvas consumes those visible edges directly, while raw X6 state visibility is computed before transition summary decoration to avoid projection/UI dependency loops. Projection proxy edges remain UI-only but are allowed into nested auto-layout edge normalization; ordinary aggregate edges are still excluded. Added E2E coverage for a folded nested state package producing projection proxy edges and relation badges. Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- e2e/tests/network-editor.spec.ts --grep "state-transition|collapsed proxy|activity expansion|referenced atomic library states"` passed 18 tests; `git diff --check` passed with LF/CRLF warnings only.
+
+> Update 2026-07-09 follow-up 2: TICKET-079 completed. State-transition projection now owns selected-state detail objects via `detailsByStateId` / `detailsByGraphId` / `selectedDetails`, including display graph id, canonical state id, package/reference path ids, realizer activities, precondition rows, warnings, and draft-vs-committed source status. The Network Editor right panel now reads selected transition detail and precondition rows from projection output while preserving the existing semantic draft actions for adding/removing realizers and preconditions. E2E now asserts canonical/display ids for normal and referenced state instances plus draft source status after transition edits. Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- e2e/tests/network-editor.spec.ts --grep "state-transition|referenced atomic library states|new transition realizers"` passed 17 tests; `git diff --check` passed with LF/CRLF warnings only.
+
+> Update 2026-07-08 follow-up: Fixed the remaining Network Editor post-submit auto-arrange mismatch. Root cause: auto arrange in edit mode also keeps a transient ELK route/relay layout plan (`stateTransitionAutoLayout` / `relationAutoLayout`), but successful submit reloaded the graph and `reloadGraph()` unconditionally cleared that plan, so preview mode could fall back to different relay/edge routing even when node metadata was committed. Pure layout submits now preserve the just-applied auto-layout plan across the commit reload; normal refresh, cancel, view changes, and non-layout commits still clear it. Added E2E coverage to ensure state-transition auto arrange keeps ELK routes after unified submit. Verification: `npm.cmd run test:e2e -- e2e/tests/network-editor.spec.ts --grep "auto arrange alternates state columns"` passed 1 test; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-07-08: Network Editor 7/7+ workspace source recovered after an accidental fallback to an older 2026-07-03 backup. `frontend/src/views/DataManagement/NetworkEditorWorkspace.vue` was restored from Git loose object `66fdcc166ca620d63772c6efe5887bc4eb05e63f` (timestamp 2026-07-08 10:47:59), preserving the 7/7 nested container auto-layout integration with `frontend/src/views/DataManagement/networkEditorAutoLayout.js`. Reapplied the current UX fixes on top: layout-only draft changes are grouped as one `布局调整：N 项` row, grouped undo clears layout/container drafts, commit payload strips the UI-only `draft_kind`, and unified submit reloads committed data before leaving edit mode to avoid preview layout reverting. Recovery snapshots are saved under `output/recovered_network_editor/`. Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning; `git diff --check` only reported existing LF/CRLF warnings; focused Network Editor E2E grep `layout|draft|commit|edit session` passed 35/40, with the remaining 5 failures matching stale test expectations for removed direct virtual-activity creation and the intentionally grouped layout draft text.
+
+> Update 2026-07-07 follow-up: Network Editor high-parallel auto-layout width control completed. Oversized expanded state containers now compact their direct children into bounded rank columns instead of preserving ELK's single very wide parallel row; stale saved container widths are capped during no-edge/manual child wrapping and container-size preservation. In the `Mechanical Integration High-Parallel Cell` browser check, the largest expanded state package shrank from about 22405px wide to about 2496px, with inner oversized packages capped around 2400px; screenshot saved at `output/network-editor-high-parallel-compact-auto-layout-v2.png`. Verification: `node --check frontend/src/views/DataManagement/networkEditorAutoLayout.js` passed; `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- e2e/tests/network-editor.spec.ts --grep "auto arrange|container|state-transition"` passed 23 tests.
+
+> Update 2026-07-07: Network Editor iterative container-aware auto layout follow-up completed. Added a bottom-up nested layout path in `frontend/src/views/DataManagement/networkEditorAutoLayout.js`: direct children are laid out per expanded container, child containers become fixed-size parent items, container sizes are recomputed bottom-up, deep edges are projected to direct-child proxy edges, and state-transition relay nodes are assigned to the deepest common expanded state container for layout while remaining transient/non-committed. `NetworkEditorWorkspace.vue` now routes auto arrange through the nested layout result, writes state/activity/reference positions plus container sizes through the existing draft helpers, keeps ELK failure fallback behavior, and removed unreachable legacy auto-arrange code. Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- e2e/tests/network-editor.spec.ts --grep "auto arrange|container|state-transition"` passed 23 tests.
+
+> Update 2026-07-06: TICKET-077 follow-up fixed the Network Editor submit false-error UX. The commit API now opts into the existing `silentError` path so the first intentional 422 "validation requires review" response is handled by `NetworkEditorWorkspace`'s review dialog instead of being surfaced by the global Axios interceptor as a raw HTTP 422 error. Real commit failures are still reported by the workspace with the preserved server detail. Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning. Backend pytest could not be run because the local `.venv\Scripts\python.exe` points at a missing Python 3.12 install and the bundled Codex Python does not include pytest.
+
+> Update 2026-07-03 follow-up 3: TICKET-077 Network Editor regression fixed. Referenced atomic state library bodies no longer appear as top-level canvas cards on initial load: X6 visibility now hides level-1 parentless atomic library bodies even when they have package references, while preserving legacy directly placed atomic states. State-transition detail lookup now parses reference graph ids such as `state_node:30:ref:901` back to the underlying state id, and binding edge projection prefers the visible reference instance so realizer/precondition panels stay populated. Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "referenced atomic library states"` passed 1 test; the focused state-transition/reflexive/new-realizer suite passed 13 tests; the TICKET-077 state-reference/opposite/library/draft-reference suite passed 6 tests; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-07-03 follow-up 2: TICKET-077 solve-page regression fixed. After atomic states became library objects, the Solve page layered target tree and layered solve state-lane grouping still had direct-parent assumptions. SolvePage now loads `state_node_reference` data and projects referenced library states under their state package in the layered target selector; layered expansion now derives each goal `source_path` by walking the reference-aware children graph from the selected target root to the leaf, so Gantt state lanes keep the intended state package ancestry. Verification: `.venv\Scripts\python.exe -m pytest tests\integration\test_state_group_continuity.py -q` passed 5 tests with existing SQLite drop-order warnings; `npm.cmd run test:e2e -- solve.spec.ts --project=chromium` passed 6 tests; `npm.cmd run build` passed with the existing Vite chunk-size warning; `git diff --check` on touched files only reported existing LF/CRLF warnings.
+
+> Update 2026-07-03 follow-up: TICKET-077 completed. Network Editor atomic states now follow the library/reference model: template-backed atomic creates produce library `state_node` objects with `parent_id = null` and `level = 1`; adding one to a state package queues `state_node_reference:create` with layout on reference metadata; binary template creates also auto-create the opposite target-value library object without placing it on the canvas. X6 canvas visibility now hides unreferenced atomic library objects while resource/reference selectors can still use them. The backend Network Editor commit path normalizes legacy-style atomic `state_node:create` payloads with `parent_id` into library state creation plus package reference creation, without schema changes or historical data migration. Verification: `.venv\Scripts\python.exe -m pytest tests\integration\test_master_data_api.py -k network_editor -q` passed 6 tests with existing SQLite drop-order warnings; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "state reference|opposite state|atomic state library"` passed 3 tests; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "unified submit|draft states to atomic activities|same state dimension"` passed 3 tests; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "state package reference|draft referenced state|nested containers"` passed 3 tests; `npm.cmd run build` passed with the existing Vite chunk-size warning; `git diff --check` on touched files only reported existing LF/CRLF warnings. New ticket: `docs/TICKET_077.md`.
+
+> Update 2026-07-03: TICKET-076 completed. Network Editor state-transition canvas now renders frontend-only activity relay chips between state cards instead of direct `STATE_FLOW` state-to-state arrows. Relay groups are derived from existing input/output bindings, rendered as non-editable X6 activity chips, and connected with blue `state -> relay` precondition edges plus green `relay -> state` result edges; clicking a relay selects the underlying real activity while focus highlighting includes the relay and all related edges. State-transition auto arrange now alternates state columns and relay columns while only drafting real state layout updates. X6 routing treats relay branches as fork/join candidates, and expanded state-container layout infers state-to-state ranks from relay edges for layout only, without drawing old direct arrows. New ticket: `docs/TICKET_076.md`. Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "state-transition"` passed 11 tests; full `network-editor.spec.ts` passed 43/44 with one pre-existing expanded-container geometry assertion failing because the fixture persists `_network_editor_container: {width: 920, height: 760}` while asserting a compact container under 560x430; `git diff --check` on touched files only reported existing LF/CRLF warnings.
+
+> Update 2026-07-02 follow-up 17: TICKET-075 completed. Solve page layered target-state selection now allows state packages, including top-level packages such as `机械集成完成`; the previous `disabled: node.level < 2` rule incorrectly made root state packages unselectable. Added a stable test id to the layered target tree select, expanded Solve page E2E mocks to return layered state/activity nodes and maintenance templates through the real API paths, and added an E2E regression that selects `PKG_MECH_DONE` and verifies `target_state_node_ids: [10]` is submitted to `/api/v1/solve/layered`. Verification: focused top-level state package E2E passed; full `solve.spec.ts` passed 5 tests; `npm.cmd run build` from `frontend/` passed with the existing Vite chunk-size warning.
+
+> Update 2026-07-02 follow-up 16: TICKET-074 completed. Network Editor atomic state creation now separates display state name from the concrete state object: the drawer has an explicit `状态对象` field, and both Network Editor and State Target generate template-backed concrete `feature_key` values with a Unicode-safe `uXXXX` token rule so Chinese objects such as `模块B` and `工装B` no longer collapse to the same `__b` fact. Backend template-state validation now requires `metadata_json.state_object_name`, verifies the exact derived concrete key, rejects duplicate concrete facts, and Network Editor exact reuse also checks the concrete key. Added and ran `scripts/repair_test1_state_feature_keys.py` against local TEST1 data, splitting `模块B/工装B` and `管路/线路` facts, synchronizing state nodes, op-rule preconditions/effects, machine-state features, feature definitions, and metadata; old collapsed keys have zero references. A direct TEST1/T-1 layered solve after repair returned status `done`, latest schedule makespan `150`, and includes `安装模块B` plus `连接线路`. Verification: `py_compile app\api\v1\master_data.py scripts\repair_test1_state_feature_keys.py` passed; `pytest tests\integration\test_master_data_api.py -k "template_dimension" -q` passed 3 tests with the existing SQLite drop-order warning; `npm.cmd run build` from `frontend/` passed with the existing Vite chunk-size warning; focused Network Editor E2E for same-dimension, exact-template reuse, and state-name search passed 3 tests.
+
+> Update 2026-07-02 follow-up 15: TICKET-073 completed. Layered solve blank activity scope now means "use all active atomic activities" instead of resolving to all top-level activity scopes. `solve_layered()` passes an empty `activity_scope_node_ids` through to expansion; `expand_layered_context()` enumerates active atomic activities globally, preserving package path and inherited Scope Guard preconditions for package-referenced atomics while still including standalone atomics with no package ref. Explicit activity-scope selections remain scoped. Solve page placeholder and layered request schema descriptions now state that blank activity range uses all atomic activities. Verification: `.venv\Scripts\python.exe -m py_compile app\services\layered_expansion.py app\services\layered_solve.py app\db\schemas.py` passed; `.venv\Scripts\python.exe -m pytest tests\integration\test_state_group_continuity.py -q` passed 4 tests with the existing SQLite drop-order warning; `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- solve.spec.ts --project=chromium` passed 4 tests with the existing SQLite drop-order warning in the web server log. TICKET-064 remains planned and was not advanced.
+
+> Update 2026-07-02 follow-up 10: TICKET-071 completed. Network Editor `新建达成活动` no longer inherits a previously selected level-2 activity package when opened from the state-transition panel. `openCreateTransitionRealizer()` now calls `openCreateAtomicActivity()` with `useSelectedPackage: false`, so the draft submit creates only the atomic activity and state bindings instead of also attaching it to the selected activity package. E2E coverage now includes the regression path of selecting an activity package first, then selecting a target state and creating a transition realizer; the existing reflexive-precondition fixture was corrected so opposite true/false states share the same concrete feature key. Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "new transition realizers"` passed 2 tests; `npm.cmd run build` passed with the existing Vite chunk-size warning; `git diff --check` on touched files only reported existing LF/CRLF warnings. TICKET-064 remains planned and was not advanced.
+> Update 2026-07-02 follow-up 11: TICKET-071 visual follow-up completed. State-transition canvas now keeps realizer atomic activities out of the X6 canvas entirely; selected target states still show realizer names and preconditions through state cards/right-panel details, while the state-to-state backbone/active flow lines remain visible. Full graph debug mode is unchanged. Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "state-transition"` passed 10 tests; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "new transition realizers"` passed 2 tests; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+> Update 2026-07-02 follow-up 12: TICKET-071 rule follow-up completed. The `缺规则` warning after adding a transition realizer's target/precondition was caused by `新建达成活动` setting `skipAutoRule: true`, which created state bindings but no `op_rule`; the warning checks rule linkage rather than graph binding presence. Transition-created atomic activities now use the normal auto-rule path when target states can produce rule effects, and draft binding edges carry `op_rule_id` so state cards stop showing `缺规则` immediately in the edit session. Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "new transition realizers"` passed 2 tests with op-rule assertions; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "state-transition"` passed 10 tests; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+> Update 2026-07-02 follow-up 13: TICKET-071 existing-binding rule repair completed. The remaining `缺规则` badge could still appear for transition realizer bindings created before the auto-rule path, because those output/input bindings already existed but had no `op_rule_id`. Entering edit mode, selecting a target state, adding a realizer, or adding/removing a transition precondition now repairs those transition bindings by reusing the single enabled rule when available, or creating one `op_rule` draft from the current input/output state facts and attaching both draft and committed bindings to it. Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "reflexive precondition"` passed 4 tests; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "state-transition"` passed 10 tests; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+> Update 2026-07-02 follow-up 14: TICKET-072 completed. Data Management now exposes the existing machine state snapshot maintenance page as a `状态快照` tab between `状态目标` and `活动能力`, restoring the UI path for creating `current` snapshots that the Solve page reads through `current_state_id`. This only wires the existing `StatePage.vue` back into `DataManagement/index.vue`; no backend, solver, database, or Network Editor behavior changed. Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-07-01: 用户可见术语第二批收口后新增术语防回流守护。`scripts/check_terminology.py` 会扫描 Network Editor 用户可见前端与配套文档，阻止“可执行活动 / 叶子 / 旧版可执行活动”和非技术场景“特征键”等旧口径回流，并允许 FeatureDef/Rule/StateHierarchy 的技术维护标签继续保留“特征键”。同时完成“原子状态”判定逻辑审计并新增 `docs/TICKET_064.md`，记录当前后端/前端在 `state_kind`、`feature_key + target_value`、无子节点和 `is_leaf` 之间的分散口径；下一步应按 TICKET-064 单独统一判定逻辑，不在本轮术语收口中改行为。
+
+> Update 2026-06-30 follow-up 16: TICKET-063 follow-up fixed draft states missing from the state drawer reference selector. `引用已有` now lists committed states plus `state_node:create` drafts in the current edit session; exact duplicate draft states can auto-fill that selector as well. Frontend commit serialization already emits draft state refs for `state_node_reference:create`, and backend unified commit now resolves `_draft_ref` in `state_node_reference.state_node_id`, `state_node_reference.parent_state_node_id`, and nested `state_package_fork.added_state.state_node_id` reuse payloads. A small label cleanup also prevents draft states without codes from displaying as `null 状态名`. Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "draft states in the state reference entry|state reference entry|same-name|same state dimension|atomic reference entry"` 6 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 27 passed; `.venv\Scripts\python.exe -m pytest tests/integration/test_master_data_api.py -k network_editor -q` 5 passed, 1 deselected with the existing SQLite DROP foreign-key-cycle warning; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-30 follow-up 15: TICKET-063 completed. Network Editor atomic state creation now mirrors the atomic activity reference workflow. The `新建状态` drawer includes a `引用已有` selector and `引用到状态包` action; when an exact same-name/same-code committed state blocks creation, the drawer stays open and auto-fills that existing state into the selector. Clicking the reference action queues `state_node_reference:create`, keeps the state body single-source, and projects the referenced state under the selected state package immediately. Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "same-name|same state dimension|state reference entry|atomic reference entry"` passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 26 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-30 follow-up 14: TICKET-062 completed. Network Editor atomic activity creation now has an explicit existing-atomic reference path. The `新建原子活动` drawer includes a `引用已有` selector and `引用到活动包` action; when exact same-name/same-code atomic activity creation is blocked, the drawer stays open and auto-fills the matching existing atomic activity into that selector. Clicking the reference action queues `activity_package_atomic_ref:create`, serializes draft package/atomic refs correctly, and projects the referenced atomic activity under the target package immediately in X6 and the resource tree. This keeps atomic activity identity single-source while allowing package-level reuse from the same workflow. Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "atomic reference entry"` passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "same-name|same state dimension|atomic reference entry"` passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 25 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-30 follow-up 13: TICKET-061 follow-up fixed exact duplicate detection inside a single Network Editor edit session. The first implementation rejected exact same-name/same-code states only against committed `stateNodes`, so creating two same-name atomic draft states before unified submit could bypass the warning. `findDuplicateStateCandidates()` now checks `allStateNodes` so committed and draft state creates share the same exact duplicate rejection path, while similar-name review and same-dimension/different-name creation remain unchanged. E2E coverage added `rejects exact same-name draft states in the same edit session`. Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "same-name|same state dimension"` passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 24 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-30 follow-up 12: TICKET-061 completed. Network Editor exact duplicate state creation now rejects immediately instead of auto-reusing or opening the duplicate review path. Exact same-name or same-code candidates are treated as blocking duplicates; the editor keeps the drawer open, queues no draft, and shows a message naming the existing state and telling the user to reference it. The duplicate-state dialog is now reserved for similar-name review only, while same-dimension/different-name creation remains allowed because state dimensions classify facts rather than identity. X6 state node metadata also labels referenced state instances as `引用实例`. E2E coverage added `rejects exact same-name states and asks users to reference the existing state`. Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "same-name|same state dimension"` passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 23 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-30 follow-up 11: TICKET-060 completed. Network Editor now renders draft state references inside their target state package containers during an edit session. The bug was that `state_node_reference:create` changes were queued and would commit correctly, but the frontend draft graph projection only created visible X6 nodes for `state_node:create`; therefore the target package had no draft child path and no container projection. The Workspace now projects draft state references as unique reference-instance graph nodes, preserves the referenced `state_node_id`, includes the target `parent_state_node_id` in `path_ids`, provides a default child layout for reference-form adds, and lets draft reference layout updates merge back into the same draft change. E2E coverage added `renders a draft referenced state inside its target state package`, proving the node appears inside the container before submit and commits as `state_node_reference:create`. Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "draft referenced state"` passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "referenced state package|draft referenced state"` passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 22 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-30 follow-up 10: TICKET-059 completed. Verified the Network Editor unified commit path for adding an atomic activity reference to a newly created activity node/package. A new integration test now creates a draft level-1 virtual activity, a draft level-2 activity package under it, then creates an `activity_package_atomic_ref` pointing an existing atomic activity to that draft level-2 package. The commit resolves the package draft ref, persists the ref-owned layout metadata, and graph reload projects the referenced atomic activity under the new package. Verification: `.venv\Scripts\python.exe -m pytest tests/integration/test_master_data_api.py::test_network_editor_commit_adds_atomic_ref_to_new_activity_package -q` passed; `.venv\Scripts\python.exe -m pytest tests/integration/test_master_data_api.py -k network_editor -q` 5 passed, 1 deselected, with the existing SQLite DROP foreign-key-cycle warning.
+
+> Update 2026-06-30 follow-up 9: TICKET-058 completed. Network Editor duplicate-state reuse semantics were corrected: state dimensions (`feature_key/operator/target_value`) provide the binary fact choice and classification for an atomic state, but they are not identity for deciding reuse. Frontend duplicate detection now treats exact code and exact name as certain duplicate signals, keeps similar name as a review candidate, and no longer auto-reuses or opens duplicate candidates solely because the atomic fact/dimension matches. User guide, acceptance matrix, and the main Network Editor requirements document now state the same product rule. E2E coverage added `does not reuse a state solely because it has the same state dimension and value`, proving same dimension/value with a different name queues a new state draft. Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "same state dimension"` passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 21 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-30 follow-up 8: TICKET-057 completed. The Network Editor state-transition MVP now supports the full planned right-panel loop: users select a target state, inspect its realizer activity and preconditions, add/select a realizer through an `output` binding draft, add precondition states through `input` binding drafts, and remove preconditions without leaving the unified edit session. Removing a committed precondition queues an `activity_state_binding:delete` draft and immediately hides that edge from the state-transition projection; removing a newly added precondition cancels the create draft. The MVP remains frontend projection only: backend `view_mode` stays `implementation`, database/schema/API/solver contracts are unchanged, one-to-one realizer exceptions stay warning-only, and the old full graph remains test/debug-only through `?networkEditorFullGraph=1` or localStorage `network-editor-full-graph=1`. `docs/TICKET_057.md`, `docs/superpowers/plans/2026-06-30-network-editor-state-transition-mvp.md`, the user guide, and the acceptance matrix now record completion. Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "state-transition"` passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 20 passed; `npm.cmd run test:e2e -- network-editor-full-flow.spec.ts --project=chromium` 3 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-30 follow-up 7: TICKET-057 first slice completed. Network Editor now defaults the `implementation` projection to a business-facing `状态转移` view: state cards are the canvas backbone, cards show realizer/precondition/warning metadata, activity nodes and dense edges stay hidden until a selected-state diagnostic path needs them, and the old full state/activity graph is available only through `?networkEditorFullGraph=1` or localStorage `network-editor-full-graph=1` for regression/debugging. The right panel now shows selected target-state transition details and, in edit mode, can draft an `output` binding for an existing/new realizer activity and an `input` binding for a precondition state; package preconditions default to currently active leaf coverage. New docs: `docs/TICKET_057.md` and `docs/superpowers/plans/2026-06-30-network-editor-state-transition-mvp.md`; user guide and acceptance matrix were updated with the state-transition MVP evidence. The right-panel remove-precondition affordance was completed in follow-up 8. Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "state-transition"` passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "folded package descendants"` passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 20 passed; `npm.cmd run test:e2e -- network-editor-full-flow.spec.ts --project=chromium` 3 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-30 follow-up 6: TICKET-056 completed. Network Editor X6 folded parent-node moves now keep descendant layouts in sync, preventing oversized containers after expansion. The bug was that collapsed package dragging updated only the parent layout while child state/activity nodes kept old absolute coordinates; expanding then computed container bounds across the moved parent and unmoved descendants. X6 now moves currently rendered descendant cells during drag, emits batched `layout-change.updates` plus drag delta for expandable moved parents, and Workspace completes the batch from the full state/activity trees so descendants not currently rendered in X6 are also translated in `layoutDraft` and draft updates. E2E coverage now uses a graph response where child state/activity nodes are absent while folded, drags the folded state package and folded virtual activity, then expands and verifies the containers stay bounded. Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "folded package descendants"` passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 19 passed; `npm.cmd run test:e2e -- network-editor-full-flow.spec.ts --project=chromium` 3 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-30 follow-up 5: TICKET-055 completed. Network Editor X6 edit-mode action buttons no longer start accidental connection drags. The root cause was that `handleCanvasPointerDown` tried `startConnectionDragFromPort()` before recognizing action controls, and the output-port hit tolerance could treat top-right expand/focus buttons as nearby output ports. Action controls now bypass the pointerdown pan/move/connection path, `startConnectionDragFromPort()` has its own exclusion guard for buttons and move handles, temporary connection edges have a stable test id, and the host/X6 click path still marks handled action events to avoid double dispatch. E2E coverage now holds down state-package expand and virtual-activity focus/expand buttons in edit mode and asserts no temporary or pending binding edge appears while the intended action still works. Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "edit-mode action buttons"` passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 18 passed; `npm.cmd run test:e2e -- network-editor-full-flow.spec.ts --project=chromium` 3 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-30 follow-up 4: TICKET-054 completed. A reusable Network Editor demo dataset was added and loaded into the local PostgreSQL database. `seeds/009_network_editor_demo_seed.sql` creates the `NETWORK_EDITOR_DEMO_CELL` machine type and `NED-DEMO-001` machine with state feature definitions, current/target snapshots, state hierarchy, one referenced state instance, activity packages, six atomic activities, package-ref layout metadata, op rules, resources, and semantic activity-state bindings. The seed is idempotent and replaces only this demo dataset on rerun. `scripts/load_seed_data.py` now executes seed statements through `exec_driver_sql()` so JSON layout metadata such as `"x":80` is not parsed as a SQLAlchemy bind parameter. Verification: `.venv\Scripts\python.exe scripts\test_db_connection.py` passed; `.venv\Scripts\python.exe scripts\load_seed_data.py --file seeds\009_network_editor_demo_seed.sql` executed 65 statements successfully; service-level graph projection returned 13 state instances, 9 activity nodes, 19 bindings, 32 edges, and a revision; validation has 0 blocking issues and solver precheck status is `ready`.
+
+> Update 2026-06-30 follow-up 3: TICKET-053 completed. Network Editor machine-type graph load and write-back are now hardened around the existing graph/commit API pair. Backend graph projection now returns package atomic reference identity and ref-owned layout metadata for atomic graph nodes while preserving base `atomic_metadata_json`; commit now supports `activity_package_atomic_ref:update`, draft-ref resolution for package refs, package-ref layout metadata during atomic creation, stale revision `409` protection, and rollback before validation-review `422` responses. Frontend draft serialization now sends package atomic ref layout updates when graph nodes carry `reference_id`, stores package atomic create layout in `package_ref_metadata_json`, clears pending layout state after commit/type reload, and redraws from the DB graph response after successful commit. Verification: `.venv\Scripts\python.exe -m pytest tests/integration/test_master_data_api.py -k network_editor` 4 passed, 1 deselected with the existing SQLite DROP foreign-key-cycle warning; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 17 passed; `npm.cmd run test:e2e -- network-editor-full-flow.spec.ts --project=chromium` 3 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-30 follow-up 2: TICKET-052 completed. Network Editor canvas cleanup now renders the active X6 board through a single plain wrapper instead of the legacy `.canvas` surface, renames the pane title to `网络画板`, and keeps collapsed side panes as floating edge rails so the center board takes the released space. X6 sizing now combines viewport bounds with content bounds, observes the wrapper viewport with `ResizeObserver`, and applies the graph size back to the host surface so the grid fills the visible board while far-right/far-bottom nodes still expand the scrollable graph. E2E coverage now asserts there is one X6 canvas, no legacy canvas DOM, the corrected title, and X6 host/wrapper fill after pane collapse. Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 16 passed; `npm.cmd run test:e2e -- network-editor-full-flow.spec.ts --project=chromium` 3 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-30 follow-up: Local dev launch PostgreSQL port collision fixed. Windows had reserved TCP port range `55393-55492`, so the workspace default `DB_PORT=55432` failed with PostgreSQL `could not bind ... Permission denied` even though no process was listening on that port. Local `.env` now uses `DB_PORT=55500`, and `deploy/scripts/launch_dev.ps1` now starts `.postgres-data` using the configured `.env` `DB_PORT` instead of hard-coding 55432. Verification: `pg_ctl -D .postgres-data -l .postgres-logs/postgres.log -o "-p 55500" start` succeeded; `Get-NetTCPConnection -LocalPort 55500` showed IPv4/IPv6 listeners; `.venv\Scripts\python.exe scripts\test_db_connection.py` passed sync and async connection checks; `git diff --check -- deploy/scripts/launch_dev.ps1 .env` passed with the existing LF/CRLF warning.
+
+> Update 2026-06-30: TICKET-051 completed. Network Editor workspace is now board-first: duplicate top-toolbar create buttons were removed, state/virtual activity/atomic activity creation lives in the resource-pane `新建` menu plus the existing blank-canvas right-click menu, and secondary actions are grouped under a compact `更多` menu or the validation status strip. The resource and properties panes are narrower and collapsible, the X6 board takes the released space, validation/precheck details are collapsed behind a status strip by default, and the summary metrics now render as compact key chips with overflow details. X6 rendering now keeps edges below node/title cells and expands port hit tolerance so hover add actions and compact-layout port targets remain reliable. E2E coverage now asserts the top toolbar no longer contains duplicate create buttons, the resource create menu opens the existing drawers, the board stays dominant, side/validation panels toggle correctly, and the existing right-click creation, left-drag panning, port, proxy-edge, hover-add, and draft flows still work. Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 16 passed; `npm.cmd run test:e2e -- network-editor-full-flow.spec.ts --project=chromium` 3 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-29 follow-up 6: TICKET-050 completed. Network Editor X6 canvas panning now uses left-button hold-and-drag instead of right-button drag, so right-click is reserved for blank add menus and node context behavior again. The left-pan candidate starts from blank canvas and container background areas while skipping nodes, container title rows, edges, ports, action buttons, resize handles, and form controls, preserving node movement, container movement, port binding drags, and proxy edge interactions. Port dragging was hardened after the pan change: SVG/HTML ports are excluded from panning, SVG ports resolve back to their X6 cells reliably, connection drag listeners run in capture phase, and mouseup near an input port snaps to the nearest port so pending binding previews continue to appear. E2E coverage now asserts left-drag canvas panning and keeps the right-click creation/menu flow intact. Verification: `git diff --check -- frontend/src/views/DataManagement/components/NetworkEditorX6Canvas.vue frontend/e2e/tests/network-editor-full-flow.spec.ts frontend/e2e/tests/network-editor.spec.ts docs/TICKET_050.md docs/STATE_V0.3.md` passed with existing LF/CRLF warnings; `npm.cmd run test:e2e -- network-editor-full-flow.spec.ts --project=chromium` 3 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 15 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-29 follow-up 5: TICKET-049 completed. Network Editor X6 expanded containers now split the container background cell from the title/action cell, so parent state/activity text is rendered once in the title layer while the background layer only draws the frame, ports, and resize affordance. Right-button pan now starts as a whole-board candidate before X6 handles node events, applies to blank space, nodes, edges, and container backgrounds while skipping action buttons, ports, and form controls, and suppresses browser context/aux/drag/select tail events without blocking the next right-drag gesture. X6 native node movement is disabled in favor of the existing draft-aware custom movement path, and graph bounds continue expanding from render, node/container drag, resize, and far-position draft creation so newly added far nodes stay inside the graph. E2E coverage now asserts no duplicated expanded parent title, right-drag pan from nodes/container backgrounds/blank space, no blank menu after right drag, and full graph containment for far right-click-created nodes. Verification: `git diff --check -- frontend/src/views/DataManagement/components/NetworkEditorX6Canvas.vue frontend/e2e/tests/network-editor.spec.ts frontend/e2e/tests/network-editor-full-flow.spec.ts docs/TICKET_049.md docs/STATE_V0.3.md` passed with existing LF/CRLF warnings; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 15 passed; `npm.cmd run test:e2e -- network-editor-full-flow.spec.ts --project=chromium` 3 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-29 follow-up 4: TICKET-048 completed. Network Editor X6 now preserves hidden child relationships after parent collapse by resolving hidden state/activity/atomic endpoints to their nearest visible parent and rendering dashed collapsed proxy edges with count labels. Parent nodes show lightweight hidden input/output/internal badges, same-parent hidden relations are summarized as internal badges instead of self-loops, and proxy edge clicks/double-clicks select or expand the relevant parent context without changing backend APIs or commit payloads. X6 container hover-add hit testing was also tightened by keeping container add buttons inside the title row, preserving the hover affordance while making clicks stable. E2E coverage now exercises folded child state/activity endpoints, parent badges, proxy label disappearance after expansion, and the existing right-click, drag, port, hover-add, and container flows. Verification: `git diff --check -- frontend/src/views/DataManagement/NetworkEditorWorkspace.vue frontend/src/views/DataManagement/components/NetworkEditorX6Canvas.vue frontend/e2e/tests/network-editor.spec.ts frontend/e2e/tests/network-editor-full-flow.spec.ts docs/TICKET_048.md docs/STATE_V0.3.md` passed with existing LF/CRLF warnings; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 15 passed; `npm.cmd run test:e2e -- network-editor-full-flow.spec.ts --project=chromium` 3 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-29 follow-up 3: TICKET-047 completed. Network Editor X6 node text clipping was fixed. Node cells now calculate stable dimensions from code/name/meta text length, wrap text with `overflow-wrap: anywhere` instead of single-line ellipsis, and expose full text through `title` attributes. Container bounds and title height now use actual node dimensions so expanded packages still wrap their children and titles. The create-child hover bridge remains below the button layer so add buttons stay clickable. E2E coverage now asserts a long right-click-created state label renders without ellipsis clipping. Verification: `git diff --check -- frontend/src/views/DataManagement/components/NetworkEditorX6Canvas.vue frontend/e2e/tests/network-editor-full-flow.spec.ts docs/TICKET_047.md` passed with existing LF/CRLF warnings; `npm.cmd run test:e2e -- network-editor-full-flow.spec.ts --project=chromium` 3 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "referenced state package"` 1 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 14 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-29 follow-up 2: TICKET-046 completed. Network Editor X6 canvas regressions after TICKET-044/045 were fixed. X6 graph bounds now track content padding during full render, node drag, container drag, and container resize so far-right/far-bottom nodes are not clipped to the old initial canvas. The hover child-create affordance now has an invisible bridge from node/container title to the button, so moving the pointer down to the button keeps it visible. Right-button blank-canvas panning now enters the grab state only after the drag threshold is crossed, and context-menu paths clean up right-pan listeners. E2E coverage now checks hover reachability, right long-press-before-drag behavior, and expanded graph bounds. Verification: `git diff --check -- frontend/src/views/DataManagement/components/NetworkEditorX6Canvas.vue frontend/e2e/tests/network-editor.spec.ts frontend/e2e/tests/network-editor-full-flow.spec.ts docs/TICKET_046.md` passed with existing LF/CRLF warnings; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 14 passed; `npm.cmd run test:e2e -- network-editor-full-flow.spec.ts --project=chromium` 3 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-29 follow-up: TICKET-045 completed. Network Editor X6 nodes now use top-right icon affordances for expansion (`➕`) and collapse (`➖`), node editing is triggered by double-click instead of the inline edit action, aggregate child creation uses a hover-revealed add button beneath the node, and state nodes render as ellipses. Existing context menus, port binding drags, layout drags, and container movement remain intact. E2E coverage now asserts the state ellipse styling, hover add behavior, and double-click edit drawer. Verification: `git diff --check -- frontend/src/views/DataManagement/components/NetworkEditorX6Canvas.vue frontend/e2e/tests/network-editor.spec.ts frontend/e2e/tests/network-editor-full-flow.spec.ts docs/TICKET_045.md` passed with existing LF/CRLF warnings; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 14 passed; `npm.cmd run test:e2e -- network-editor-full-flow.spec.ts --project=chromium` 3 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-29: TICKET-044 completed. Network Editor X6 canvas now supports right-button blank-canvas panning, blank right-click creation menu, and click-position draft creation for state nodes, virtual activities, and atomic activities. Virtual/atomic activity create drafts now persist `_network_editor_layout` metadata like state drafts, while new-node layout no longer clamps to the legacy fixed canvas width so X6 can expand to content bounds. E2E coverage was added to `frontend/e2e/tests/network-editor-full-flow.spec.ts` for right-click creation, right-drag pan suppression, and far-right draft layout. Verification: `git diff --check -- frontend/src/views/DataManagement/components/NetworkEditorX6Canvas.vue frontend/src/views/DataManagement/NetworkEditorWorkspace.vue frontend/e2e/tests/network-editor-full-flow.spec.ts docs/TICKET_044.md` passed with existing LF/CRLF warnings; `npm.cmd run test:e2e -- network-editor-full-flow.spec.ts --project=chromium` 3 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 14 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-28 follow-up 15: TICKET-043 follow-up fixed first-child projection for state/activity parent containers in the Network Editor. Saving a newly created child state now automatically expands the parent state container locally and clears that parent container's folded key; saving a new child virtual activity or atomic activity does the same for the activity parent/package. This makes the first child created through a parent node action render inside its parent container immediately, without requiring a manual expand click first. The standalone full-flow E2E now covers creating a parent state package and first child state plus a parent virtual activity and first child activity, asserting each child is inside the visible parent container on first save. Verification: `git diff --check -- frontend/src/views/DataManagement/NetworkEditorWorkspace.vue frontend/e2e/tests/network-editor-full-flow.spec.ts` passed; `npm.cmd run test:e2e -- network-editor-full-flow.spec.ts --project=chromium` 2 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 14 passed.
+
+> Update 2026-06-28 follow-up 14: TICKET-043 follow-up added a standalone Network Editor full-flow E2E script. `frontend/e2e/tests/network-editor-full-flow.spec.ts` starts from an empty editor fixture, enters edit mode, creates two draft atomic state nodes, creates a draft virtual activity node and a draft atomic activity node, drags canvas ports to create both `context_input` and `declared_output` draft binding edges, then asserts the unified submit payload contains the expected `state_node`, `activity_node`, `atomic_activity`, and `activity_state_binding` changes with `_draft_ref` serialization. Verification: `git diff --check -- frontend/e2e/tests/network-editor-full-flow.spec.ts` passed; `npm.cmd run test:e2e -- network-editor-full-flow.spec.ts --project=chromium` 1 passed.
+
+> Update 2026-06-28 follow-up 13: TICKET-043 follow-up fixed impact-analysis requests when connecting draft atomic activity outputs to draft state inputs in the Network Editor. Impact analysis now only posts committed state IDs and committed activity graph IDs; draft state IDs, draft atomic activity graph IDs, and other non-committed selections reset the local impact panel without calling `/network-editor/impact`, avoiding the backend integer-parse error for `draft-state:*`. The atomic-activity draft E2E now captures impact POST payloads while dragging a draft atomic output to a draft state input and asserts no `draft-state:` or `draft-atomic-activity:` temporary IDs are sent. Verification: `git diff --check -- frontend/src/views/DataManagement/NetworkEditorWorkspace.vue frontend/e2e/tests/network-editor.spec.ts` passed; `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "offers draft states"` 1 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 14 passed.
+
+> Update 2026-06-28 follow-up 12: TICKET-043 follow-up fixed independent high-level state expand/collapse preservation in the Network Editor. `selectedStateRootIds` now behaves as a multi-root expanded set when using root-level canvas toggles, so expanding or collapsing one top-level state no longer overwrites the expansion state of another top-level state. X6 container expansion now accepts multiple state roots, nested state-container collapse only uses the local folded path when the node is actually inside another expanded root, and graph reload now prunes stale folded-container keys instead of clearing all local folded state. E2E added `preserves independent state root expansion while toggling another root`, covering expand A -> expand B -> collapse B while A remains expanded, then expand B -> collapse A while B remains expanded. Verification: `git diff --check -- frontend/src/views/DataManagement/NetworkEditorWorkspace.vue frontend/src/views/DataManagement/components/NetworkEditorX6Canvas.vue frontend/e2e/tests/network-editor.spec.ts` passed; `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "independent state root"` 1 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 14 passed.
+
+> Update 2026-06-28 follow-up 11: TICKET-043 follow-up completed draft atomic-activity projection in the Network Editor. `atomic_activity:create` draft changes now project to `draft-atomic-activity:*` X6 nodes and resource-tree atomic leaves before unified submit, including package ancestry from real or draft virtual activity packages. Draft atomic binding endpoints now resolve `{ "_draft_ref": ... }` to the temporary atomic graph node, layout drags write back to the same atomic draft payload, and commit serialization can convert draft atomic refs back to `_draft_ref`. The draft virtual activity E2E now covers root container -> child virtual container -> draft atomic node nesting, local child collapse hiding the atomic node, parent collapse hiding all descendants, resource-tree projection, and commit payload package refs. Verification: `git diff --check -- frontend/src/views/DataManagement/NetworkEditorWorkspace.vue frontend/e2e/tests/network-editor.spec.ts` passed; `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "draft virtual activities"` 1 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 13 passed.
+
+> Update 2026-06-28 follow-up 10: TICKET-043 follow-up aligned Network Editor atomic-state creation with state dimensions. The state drawer no longer asks users to type a raw `feature_key`; it loads machine-type `StateFeatureDef` rows through `getFeatureDefs`, renders a searchable state-dimension select, and renders target values from the selected dimension's `allowed_values` when available. Selecting a binary dimension defaults the atomic state's target value to `true`, while dimensions without configured values still allow temporary manual target entry for compatibility. Save validation now says "state dimension / target value" and blocks values outside configured `allowed_values`. E2E fixtures now expose binary state dimensions and fill atomic-state facts through the real Element Plus selects. Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "(offers draft states|queues drawer saves|referenced state package)"` 3 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 13 passed; `git diff --check -- frontend/src/views/DataManagement/NetworkEditorWorkspace.vue frontend/e2e/tests/network-editor.spec.ts docs/STATE_V0.3.md docs/TICKET_043.md` reported only the existing STATE LF/CRLF warning.
+
+> Update 2026-06-28 follow-up 9: TICKET-043 follow-up fixed draft state availability in atomic-activity creation and aligned default state semantics. Network editor state selectors now use a draft-inclusive `stateSelectOptions`, so newly queued draft states appear in atomic activity input/output dropdowns before unified submit. Atomic activity input/output states are optional and may be supplied later by canvas bindings; saving an atomic activity with no boundary states no longer blocks the drawer. New state creation now defaults to an atomic leaf state, with upper-level branch nodes explicitly selected as state packages. Unified submit serializes draft state refs in activity-state bindings and covered leaf lists, and backend commit resolves those draft state refs before validation. E2E covers draft-state options in atomic activity forms plus empty-boundary atomic activities. Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning; `python -m py_compile app\api\v1\master_data.py` passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "(offers draft states|queues drawer saves|referenced state package)"` 3 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 13 passed.
+
+> Update 2026-06-28 follow-up 8: TICKET-043 follow-up fixed the binding-drag regressions reported after the X6 port-direction change. Impact analysis now calls the frontend API wrapper with `silentError` and treats 404/`HTTP_404` as an ignorable unavailable-impact-panel response while preserving other errors. Draft/pending binding previews are now projected into `visibleEdges`, so choosing prefill keeps a dashed pending edge on the canvas and adding the binding to the draft queue replaces it with a dashed draft edge instead of making the line disappear. Pending previews are cleared when edit sessions, machine type, refresh, or successful submit reset local draft state. E2E now defaults the impact endpoint fixture to 404 and covers both prefill-to-form and confirm-to-draft drag flows. Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "pending edge|confirming a dropped binding"` 2 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 12 passed.
+
+> Update 2026-06-28 follow-up 7: TICKET-043 follow-up fixed X6 semantic port direction and visible-port connection dragging. `NetworkEditorX6Canvas.vue` now uses left input / right output labels for state and activity nodes, anchors rendered edges from right output ports to left input ports, exposes real X6 ports, and adds a visible port drag path that emits `connect-nodes` back to the workspace. `NetworkEditorWorkspace.vue` maps state->activity drags to input/context_input bindings and activity->state drags to output/declared_output bindings through the existing draft confirmation flow, without API/backend/schema changes. E2E added `creates bindings by dragging from right output ports to left input ports`. Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "creates bindings by dragging"` 1 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 11 passed.
+
+> Update 2026-06-27 follow-up 6: TICKET-043 追加修复虚拟活动与状态节点同类的草稿可视化问题。前端现在将 `activity_node:create` 草稿投影为 `draft-activity:*` 资源节点和 X6 图节点；连续新建时，第二个虚拟活动可以默认挂到刚创建的 draft 一级活动下，父活动下拉和资源树会立即刷新。X6 活动路径判断改为字符串安全比较，draft 虚拟活动展开后会渲染容器并包住子活动，折叠 draft 根或内层活动容器时会本地过滤后代节点而不向后端发送 draft scope。统一提交会把 draft 活动父级、活动绑定目标和原子活动 package 引用序列化为 `_draft_ref`；后端 `/network-editor/commit` 已在 `activity_node.parent_id` 和 `atomic_activity.package_id` 校验前解析 draft refs。E2E 新增 draft virtual activities 场景并覆盖父包刷新、容器包裹、折叠隐藏和 commit payload。Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning; `python -m py_compile app\api\v1\master_data.py` passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "draft virtual activities"` 1 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 10 passed; `git diff --check` reported only existing LF/CRLF warnings.
+
+> Update 2026-06-27 follow-up 5: TICKET-043 追加修复引用状态包嵌套容器的内层折叠行为。点击展开根下的内层引用状态包“折叠”时，前端不再把图焦点切到该内层状态包并重新请求后端；改为维护本地 `collapsedStateContainerKeys`，仅在当前 X6 视图中过滤该容器后代，保留外层容器和内层折叠后的状态包节点。再次点击该节点“展开”会移除本地折叠状态并恢复内层容器/子节点；后端图 reload、切换焦点、展开根时会清空本地折叠集合。E2E 引用状态包场景已覆盖内层折叠后子状态隐藏、外层容器仍可见、再次展开恢复。Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "referenced state package"` 1 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "queues drawer saves"` 1 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 9 passed; `python -m py_compile app\api\v1\master_data.py` passed.
+
+> Update 2026-06-27 follow-up 4: TICKET-043 追加修复“状态包作为高级状态的引用实例，再在该状态包下新增状态”时无法呈现外层容器 -> 引用状态包容器 -> 子状态节点嵌套的问题。X6 画布的状态包含判断现在会从子状态真实父包回溯当前画布里的所有父包实例，并识别引用实例的 `path_ids`；展开某个状态根时，其下级聚合状态实例也会渲染为嵌套容器。草稿状态投影避免重复追加父 ID 到 `path_ids`。E2E 新增引用状态包场景，mock `state_node:1:ref:900` 位于 `state_node:4` 下，并断言新增草稿状态被内层引用包容器包住、内层容器被外层容器包住。Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "referenced state package"` 1 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "queues drawer saves"` 1 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 9 passed; `python -m py_compile app\api\v1\master_data.py` passed.
+
+> Update 2026-06-27 follow-up 3: TICKET-043 追加修复草稿状态包折叠时子状态仍留在 X6 画布的问题。前端在生成 `x6VisibleStateNodes` 时识别“折叠中的 `draft-state:*` 根节点”，仅保留该根状态包自身并过滤其草稿后代；真实后端图的 depth/reload 语义不变。E2E `queues drawer saves as drafts and commits only from unified submit` 现在断言折叠后 draft child 和 draft nested state 均隐藏。Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "queues drawer saves"` 1 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 8 passed; `python -m py_compile app\api\v1\master_data.py` passed.
+
+> Update 2026-06-27 follow-up 2: TICKET-043 追加修复嵌套草稿状态包的画布包裹与展开/折叠。前端现在按草稿顺序迭代生成 `draft-state:*` 图节点，使草稿子状态继承完整祖先 `path_ids`；X6 接收 `stateRootIds` 并对草稿/真实根 ID 做字符串比较，向后端请求图数据时过滤 `draft-state:*` 根节点，切换草稿状态包展开时不再触发后端 reload。X6 容器渲染拆成低层 body 和高层 title/action cell，避免容器背景遮挡包内节点拖拽，同时保证包头“折叠/添加”点击稳定。Verification: `npm.cmd run build` passed with the existing Vite chunk-size warning; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "queues drawer saves"` 1 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 8 passed; `python -m py_compile app\api\v1\master_data.py` passed.
+
+> Update 2026-06-27 follow-up: TICKET-043 追加修复连续新建状态时“所在状态包”不刷新。前端将 draft aggregate state 纳入 `stateParentOptions` / `stateById` / 状态树来源，创建第一个草稿状态包后再次新建状态时可直接选择或默认使用该草稿状态包；统一提交 payload 会把 `draft-state:*` 父级序列化为 `{ "_draft_ref": "<client_id>" }`，后端 `/network-editor/commit` 在 `StateNodeCreate` / `StateNodeUpdate` 校验前解析 `state_node.parent_id` draft refs。Verification: `npm.cmd run build` passed with existing Vite chunk-size warning; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "queues drawer saves"` 1 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 8 passed; `python -m py_compile app\api\v1\master_data.py` passed.
+
+> Update 2026-06-27: TICKET-043 已完成。修复网络编辑器编辑模式下“新建状态”保存为草稿后只出现在草稿列表、没有立即显示在中间 X6 画布的问题：前端将 `state_node:create` 草稿投影为 `draft-state:*` 临时图节点并合并进可见状态节点；带父状态包和 `_network_editor_layout` 的新状态会按路径/布局显示在画布或容器内；拖动临时状态会把布局回写到同一个 create 草稿；X6 状态选中判断改为字符串比较，避免临时 ID 被数值化误选。未修改 API、后端 commit 语义、数据库结构或求解器契约。Verification: `npm.cmd run build` passed with existing Vite chunk-size warning; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "queues drawer saves"` 1 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 8 passed. Active ticket: `docs/TICKET_043.md`.
+
+> Update 2026-06-26: TICKET-042 已完成。网络编辑器 X6 画布恢复展开状态包/虚拟活动容器整体移动：拖动 `.container-move-handle` 时容器和内部节点同步平移，`mouseup` 前快照 root/child 最终坐标并逐项写入 `layoutDraft`；父组件把 `layoutDraft` 叠回传给 X6 props，避免 DOM 重渲染后草稿坐标丢失。E2E drag helper 对 X6 handle 使用所属 `[data-cell-id]` 作为真实鼠标目标并处理 detach 竞态，内部节点自由移动用例改拖真实 `.layout-handle`。范围只覆盖审查 P1，不修改 API/后端数据模型，不处理 service 分层、pytest warning 和前端包体积 P2/P3。Verification: `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "moves expanded containers"` 1 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "moves internal nodes freely"` 1 passed; `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` 8 passed; `npm.cmd run build` passed with existing Vite chunk-size warning. Active ticket: `docs/TICKET_042.md`.
+
+> Update 2026-06-25: 网络编辑器 X6 单画布重构文档先行。按最新产品判断，当前手写 DOM/SVG 状态-活动二部图壳子、状态列/活动列分区和“高层普通节点 + 容器外框”的展示仅作为历史过渡实现保留，不能作为完全自由白板最终验收口径。`docs/状态活动网络图编辑器_需求设计文档.md` 新增 `X6 单画布原则`，明确中间区域只有一张 X6 大画布；折叠时高级对象是节点，展开时同一对象变成容器；状态包容器只收状态/状态引用，虚拟活动容器只收虚拟/原子活动；X6 只负责画布交互，重复状态识别、同步/分叉、求解预检和一次性提交仍由现有业务层负责；`network-editor/graph`、`network-editor/commit`、`network-editor/solver-precheck` 协议不变。主设计 spec、新用户说明、验收矩阵和 TICKET-041 已同步；下一步应实现 X6 单画布，而不是继续修补旧二部图画板。Verification: 文档阶段，无代码和依赖变更；targeted `rg` confirmed X6/单画布/统一提交决策已落到主需求、主 spec、用户说明、验收矩阵和 TICKET；旧画板词命中仅为历史记录或明确过渡说明；`git diff --check` passed with existing STATE LF/CRLF warning only。
+
+> Update 2026-06-25: 网络编辑器浏览器回归完整执行通过。`frontend/e2e/tests/network-editor.spec.ts` 的内部节点自由拖动用例改为读取画布节点 `style.left/top`，避免页面布局流导致 viewport `boundingBox` 误判；该断言现在直接覆盖“内部节点画布坐标变化、容器根节点画布坐标不变”。完整执行 `npm run test:e2e -- network-editor.spec.ts --project=chromium` 8 passed，覆盖预览只读、预览态展开/折叠、虚拟活动专注预览、取消编辑丢弃草稿、抽屉保存仅入草稿且统一提交才调用 commit、容器内部节点自由拖动、容器整体移动、容器隔离、汇总线点击展开和语义线中文标签。验收矩阵和 TICKET-041 当前浏览器证据已更新为 8 passed。Verification: sandboxed Playwright run failed with `spawn EPERM`; escalated local browser run passed 8；targeted `git diff --check` passed with existing STATE LF/CRLF warning only。
+
+> Update 2026-06-25: 网络编辑器主设计冻结文档一次性提交状态机补齐。`docs/superpowers/specs/2026-06-23-state-activity-network-editor-design.md` 新增 `Unified Edit Commit` 和 `Page state machine`，明确页面默认和非编辑会话均为预览模式；只有点击 `enter edit` 后才可编辑画板；抽屉保存、拖拽、连线、容器调整、覆盖刷新和同步/分叉选择只进入可见草稿；`network-editor/commit` 是画板唯一写库入口；取消编辑丢弃草稿并回到预览模式。验收矩阵证据索引新增主设计冻结文档锚点，TICKET-041 已同步。Verification: 定向 `rg` confirmed `Unified Edit Commit`、`Page state machine`、`network-editor/commit` 已在主 spec 中存在；`git diff --check -- docs/superpowers/specs/2026-06-23-state-activity-network-editor-design.md docs/network-editor-acceptance-matrix.md docs/TICKET_041.md docs/STATE_V0.3.md frontend/e2e/tests/network-editor.spec.ts` passed with existing STATE LF/CRLF warning only。
+
+> Update 2026-06-25: 网络编辑器容器内部节点自由拖动回归证据补强。`frontend/e2e/tests/network-editor.spec.ts` 新增 `moves internal nodes freely inside expanded containers`，在编辑模式下展开状态包后拖动包内状态引用实例，断言内部状态移动但状态包根节点不被一起拖走；展开虚拟活动后拖动内部原子活动，断言原子活动移动但虚拟活动根节点不被一起拖走；草稿列表出现 `调整状态位置` 和 `调整原子活动位置`，继续通过统一提交路径保存布局。验收矩阵和 TICKET-041 当前浏览器回归证据已更新为完整 8 passed。Verification: `npm run test:e2e -- --list network-editor.spec.ts --project=chromium` 8 tests listed；随后完整执行 `npm run test:e2e -- network-editor.spec.ts --project=chromium` 8 passed。
+
+> Update 2026-06-25: 网络编辑器前置设计链术语同步收口。继前端页面和验收矩阵后，继续把仍被当前工单引用的设计/前置文档同步到最新需求口径：`docs/TICKET_040.md` 标题和主体从“导出预览”改为“求解预检与求解器准备交接”，保留旧 `export-preview` 仅 deprecated 兼容别名；`docs/TICKET_037.md` / `docs/TICKET_038.md` 把“多父状态/主父级/引用父级”改为“状态包成员引用/默认所在状态包/成员引用”；英文 design freeze spec 把 `export preview`、`multi-parent state` 和不持久化拖拽布局的旧 MVP 边界改为 solver precheck、state package member references 和 unified submit layout metadata；业务说明书、浏览器复核记录和 edit-session plan 也同步为“多状态包出现 / 求解预检 / 独立 JSON 与求解模板下载不提供”。Verification: 精确 `rg` 旧词在当前设计链中无命中，剩余命中仅为 STATE/TICKET-041 历史审计记录对旧词的说明；`git diff --check -- docs/TICKET_037.md docs/TICKET_038.md docs/TICKET_039.md docs/TICKET_040.md docs/TICKET_041.md docs/STATE_V0.3.md docs/network-editor-acceptance-matrix.md docs/business_user_manual_layered_planning.md docs/network-editor-browser-flow-review-2026-06-24.md docs/superpowers/plans/2026-06-24-network-editor-edit-session-refactor.md docs/superpowers/specs/2026-06-23-state-activity-network-editor-design.md frontend/src/views/DataManagement/NetworkEditorWorkspace.vue frontend/e2e/tests/network-editor.spec.ts docs/network-editor-user-guide.md` passed with the existing STATE LF/CRLF warning only。
+
+> Update 2026-06-25: 网络编辑器求解预检旧导出口径继续收口。前端求解就绪 warning 标题从 `导出前需复核` 改为 `提交/求解前需复核`，求解预检阻塞项按钮 test id 从 `network-editor-export-blocking-issue-*` 改为 `network-editor-solver-precheck-blocking-issue-*`；`docs/network-editor-acceptance-matrix.md` 把“导出将虚拟活动放入 group/WBS metadata / 导出只输出原子活动”改为求解预检与求解交接口径；`docs/TICKET_039.md` 的早期 MVP 摘要同步从 `导出预览`、`主父级/引用父级`、`父状态/子状态` 收口为 `求解预检`、`所在状态包/其他出现位置`、`状态包成员引用`。Verification: `npm run build` passed with the existing Vite chunk-size warning；`npm run test:e2e -- --list network-editor.spec.ts --project=chromium` 7 tests listed；精确 `rg` 未在当前页面、用户说明、验收矩阵和 TICKET-039 中发现 `导出前需复核`、`network-editor-export-blocking`、`导出将`、`导出只输出`、`导出预览`、`主父级`、`引用父级`、`父级状态`、`父子状态`、`主父级状态` 残留，命中仅为 STATE/TICKET-041 历史审计记录对旧词的说明。
+
+> Update 2026-06-25: 网络编辑器一次性提交浏览器收集证据补强。`frontend/e2e/tests/network-editor.spec.ts` 新增 `queues drawer saves as drafts and commits only from unified submit`，进入编辑后通过状态抽屉 `保存` 创建 `新建状态：一次性提交状态` 草稿，断言抽屉保存后未发送 `network-editor/commit`，再点击顶部 `统一提交` 后才发送唯一一次 commit 请求，并校验 payload 中只有该状态创建草稿。`docs/network-editor-user-guide.md` 同步把模糊取消表述收窄为 `提交前复核` 中点击 `返回编辑`，避免与顶部 `取消编辑` 的丢弃草稿语义混淆；验收矩阵和 TICKET-041 当时浏览器收集证据已更新为 7 条用例。Verification: `npm run test:e2e -- --list network-editor.spec.ts --project=chromium` 7 tests listed；完整浏览器执行仍因此前 Codex usage limit 暂未复跑。
+
+> Update 2026-06-25: 网络编辑器验收矩阵证据索引去脆弱行号。`docs/network-editor-acceptance-matrix.md` 第 7 节从 `行级证据索引` 调整为稳定 `证据索引`，保留后端/测试关键锚点，同时把前端工作区证据从易漂移的 `NetworkEditorWorkspace.vue:<line>` 改为 `data-testid`、函数名、API 调用名和 e2e 用例名，方便继续审计一次性提交、预览态只读、容器移动、展开/折叠、专注画布和求解预检等成品流。Verification: `rg --line-number "NetworkEditorWorkspace\\.vue:[0-9]+" docs/network-editor-acceptance-matrix.md` no matches；`git diff --check -- docs/network-editor-acceptance-matrix.md docs/STATE_V0.3.md docs/TICKET_041.md` passed with the existing STATE LF/CRLF warning only。
+
+> Update 2026-06-25: 网络编辑器浏览器回归证据口径同步。`docs/network-editor-acceptance-matrix.md` 中的前端浏览器回归证据已从旧口径更新为当时 `network-editor.spec.ts` 可收集 6 条用例，并明确覆盖预览只读、预览态展开/折叠、虚拟活动专注预览、details-only 问题定位、取消编辑丢弃草稿和容器整体移动；完整浏览器执行仍因此前 Codex usage limit 暂未复跑，该次证据只代表 Playwright 收集通过。Verification: `npm run test:e2e -- --list network-editor.spec.ts --project=chromium` 6 tests listed；`git diff --check -- docs/network-editor-acceptance-matrix.md docs/STATE_V0.3.md docs/TICKET_041.md` passed with the existing STATE LF/CRLF warning only。
+
+> Update 2026-06-25: 网络编辑器一次性提交与归属术语收口。按最新确认再次核对：页面默认且非编辑会话均为 `预览模式`，只有点击 `进入编辑` 后才能编辑画板，编辑完后通过 `统一提交` 一次性写入现有数据库接口。前端校验建议中的旧父级文案已改为 `活动归属关系`，避免把活动包/活动归属误解成父子所有权；主需求文档、用户说明和验收矩阵中当前一次性提交口径已保持一致。Verification: `npm run build` passed with the existing Vite chunk-size warning；`npm run test:e2e -- --list network-editor.spec.ts --project=chromium` 6 tests listed；`git diff --check -- frontend/src/views/DataManagement/NetworkEditorWorkspace.vue docs/STATE_V0.3.md docs/TICKET_041.md` passed with the existing STATE LF/CRLF warning only；`rg` confirmed the current front-end suggestion text uses `活动归属关系` while historical STATE/TICKET records may still mention earlier terminology as audit history。
+
+> Update 2026-06-25: 网络编辑器画布缩放和平移查看补强。中间画布动作条新增缩小、百分比重置和放大控件，支持 `Ctrl/Alt + 滚轮` 快速缩放；`.canvas` 保持滚动容器承担平移查看，内部 `canvas-surface/canvas-content` 只缩放视觉层，节点/容器布局 metadata 仍保持原始画布坐标。双击新建、右键菜单、节点拖动、容器移动和容器尺寸调整均按缩放比例反算坐标或增量，缩放/平移只改变查看状态，不进入编辑草稿、不写库。`network-editor.spec.ts` 补充默认 `100%`、放大到 `110%`、重置回 `100%` 的收集断言；主需求文档、用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning；`npm run test:e2e -- --list network-editor.spec.ts --project=chromium` 6 tests listed；`git diff --check` passed with the existing STATE LF/CRLF warning only。
+
+> Update 2026-06-25: 网络编辑器 details-only 校验问题定位兜底补强。前端 `issueStateLabel`、`issueActivityLabel` 和 `inspectIssue` 现在优先使用 `related_state_ids` / `related_activity_ids`，缺失时会从 `details.state_node_id`、`details.activity_node_id`、`details.node_type/node_id`、`details.op_rule_id` 等字段推导可定位对象，补齐 `layered-expansion` / `layered-health-check` 诊断只带 details 时的定位体验。`network-editor.spec.ts` 新增 mock validate 问题，只提供 `node_type=atomic_activity` 和 `node_id=20`，断言问题表显示 `完成原子活动`，点击 `定位` 后选中对应原子活动。验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning；`npm run test:e2e -- --list network-editor.spec.ts --project=chromium` 6 tests listed；`git diff --check` passed with the existing STATE LF/CRLF warning only。
+
+> Update 2026-06-25: 网络编辑器复杂连线汇总线点击展开补强。SVG 汇总线现在额外渲染透明命中路径，只有 `N 个输入` / `N 个输出` 汇总线可点击或键盘触发；触发后复用活动选中逻辑选中对应活动，`renderedEdges` 随即展开该活动的具体输入/输出边，普通 SVG 线和标签仍不阻挡画布节点/容器操作。`network-editor.spec.ts` 夹具新增 6 个同一原子活动输入状态，断言预览态先显示 `6 个输入` 汇总线，点击后汇总标签消失并选中该原子活动。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning；`npm run test:e2e -- --list network-editor.spec.ts --project=chromium` collected at that point；`git diff --check` passed with the existing STATE LF/CRLF warning only。
+
+> Update 2026-06-25: 网络编辑器虚拟活动专注画布容器隔离断言补强。`frontend/e2e/tests/network-editor.spec.ts` 在预览态进入虚拟活动 `专注` 后，新增断言：专注条显示 `上下文` / `输出` 边界状态，但 `network-editor-virtual-activity-container-activity_node:10` 仍只显示虚拟活动容器内容，不显示上下文状态或声明输出状态名称。验收矩阵同步说明该断言已被测试框架收集，完整浏览器执行仍待 usage limit 恢复后复跑。Verification: `npm run test:e2e -- --list network-editor.spec.ts --project=chromium` collected; `git diff --check` passed with the existing STATE LF/CRLF warning only。
+
+> Update 2026-06-25: 网络编辑器一次性提交语义澄清。主需求文档修正“取消编辑”与“提交前复核取消”的区别：提交失败或用户在提交前复核中取消时，草稿保留在当前编辑会话内；用户点击 `取消编辑` 并确认 `丢弃草稿` 时，草稿必须被丢弃并回到 `预览模式`。Verification: `rg` confirmed no remaining reverse stale wording in key docs；`git diff --check` passed with the existing STATE LF/CRLF warning only。
+
+> Update 2026-06-25: 网络编辑器完全自由白板新建状态落点补强。画布空白处双击新建状态不再限制在左半状态区，`newStateLayoutFromCanvasPoint` 和状态包节点内 `添加状态` 默认落点都按全画布宽度夹取；状态包容器自身空白双击现在会直接预填该状态包为所在状态包，并按双击坐标作为新状态初始布局。主需求文档、用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning；`npm run test:e2e -- --list network-editor.spec.ts --project=chromium` collected at that point。
+
+> Update 2026-06-25: 网络编辑器取消编辑丢弃草稿回归用例补强。取消编辑和编辑态刷新确认框按钮明确为 `丢弃草稿` / `返回编辑`；`frontend/e2e/tests/network-editor.spec.ts` 新增 `cancels edit session and restores submitted layout without committing drafts`，通过拖动状态节点产生 `调整状态位置` 草稿，再点击 `取消编辑` 确认丢弃，断言页面回到 `预览模式`、`统一提交` 隐藏且节点恢复已提交坐标。Verification: `npm run build` passed with the existing Vite chunk-size warning；`npm run test:e2e -- --list network-editor.spec.ts --project=chromium` collected。尝试执行 focused browser e2e 时被 Codex usage limit 拦截，最近一次实际浏览器执行仍为 4 passed，完整浏览器执行待额度恢复后复跑。
+
+> Update 2026-06-25: 网络编辑器虚拟活动专注画布预览态补强。`network-editor.spec.ts` 的 mock 图补入虚拟活动 `declared_output` 夹具，浏览器回归验证预览模式下点击虚拟活动 `专注` 后，顶部专注条显示活动面包屑、`上下文` 状态、`输出` 声明输出状态和 `实现 1/1` 覆盖；退出后页面仍保持 `预览模式`，不显示 `统一提交`，不产生编辑草稿。用户说明、验收矩阵和 TICKET-041 已同步；SVG 语义线子元素也显式禁用 pointer events，避免线标签挡住容器/节点操作。Verification: `npm run test:e2e -- network-editor.spec.ts --project=chromium` 4 passed；`npm run build` passed with the existing Vite chunk-size warning。
+
+> Update 2026-06-25: 网络编辑器自由白板容器整体移动补强。状态包容器和虚拟活动容器在编辑模式下新增左上角移动手柄；拖动状态包容器会批量移动状态包节点和内部状态引用实例，拖动虚拟活动容器会批量移动虚拟活动节点和内部活动节点，内部节点相对坐标保持不变，所有节点位置仍通过 `metadata_json._network_editor_layout` 进入编辑草稿并由 `统一提交` 写入既有数据库接口。用户说明、验收矩阵和 TICKET-041 已同步；`network-editor.spec.ts` 新增真实拖动回归，验证容器移动后内部节点坐标变化、草稿出现且 `统一提交` 可用。Verification: `npm run test:e2e -- network-editor.spec.ts --project=chromium` 3 passed；`npm run build` passed with the existing Vite chunk-size warning。
+
+> Update 2026-06-25: 网络编辑器一次性提交模式复核、语义线与展开/折叠浏览器回归、设计结论审计补强。已按最新确认再次核对“未点击 `进入编辑` 一律为预览模式，点击后才打开画板编辑会话，编辑完通过 `统一提交` 一次性写入既有数据库接口”的产品状态机；现有前端 `canMutate` / `requireEditMode` / `queueDraftChange` 已覆盖写入口二次拦截，状态包节点的 `添加状态` 快捷入口也改为只在编辑模式显示，预览态仅保留 `展开/折叠` 查看动作。前端语义线补强为状态包绑定和跨层级绑定显示中文短标签，普通语义线 hover 标题也从 raw binding role 改为中文角色；新增并扩展 `frontend/e2e/tests/network-editor.spec.ts`，用 mock API 打开真实网络编辑器页面并验证预览只读、预览态展开/折叠、预览态隐藏状态包写入口、进入编辑后写入口启用、无草稿时统一提交禁用、状态包容器显示包内状态数量且不混入活动名、虚拟活动容器不混入状态名，以及合法虚拟活动 `context_input` 夹具下的 `状态包上下文 / 跨层级`、原子活动 `output` 夹具下的 `产出 / 跨层级` SVG 标签渲染；验收矩阵新增需求文档第 19 节 40 条关键设计结论逐条覆盖审计。Verification: `npm run test:e2e -- network-editor.spec.ts --project=chromium` 2 passed；`npm run build` passed with the existing Vite chunk-size warning；`git diff --check -- frontend\src\views\DataManagement\NetworkEditorWorkspace.vue frontend\e2e\tests\network-editor.spec.ts docs\network-editor-acceptance-matrix.md docs\STATE_V0.3.md docs\TICKET_041.md` passed with existing LF/CRLF warning only。
+
+> Update 2026-06-25: 网络编辑器验收矩阵证据索引刷新。`docs/network-editor-acceptance-matrix.md` 的当前验证从旧的 19 passed 更新为最新网络编辑器集成回归 20 passed，并把行级证据索引改为当前代码中的稳定函数/测试锚点，补入引用实例独立布局与聚焦状态包语义边端点投影的回归证据；TICKET-041 顶部验证计数同步更新。Verification: 文档同步，无代码变更；`git diff --check -- docs\network-editor-acceptance-matrix.md docs\TICKET_041.md` passed.
+
+> Update 2026-06-25: 网络编辑器状态包引用实例独立布局与端点投影落地。后端 `network-editor/graph` 现在为 `state_node_reference` 输出带 `reference_id` 的独立状态图节点，并保留真实状态统计去重；`network-editor/commit` 支持 `state_node_reference` update，用于保存引用实例布局 metadata。前端拖动状态引用实例或调整引用状态包容器尺寸时，会更新对应引用实例 metadata，不再污染真实状态本体布局；同一真实状态在其他状态包中的位置保持不变。聚焦状态包时，指向该真实状态的状态-活动语义边会优先落到当前状态包内的引用实例端点，并通过 `canonical_source_id` / `canonical_target_id` 保留真实状态端点供校验和求解语义使用。主需求文档、用户说明、验收矩阵和 TICKET-041 已同步。Verification: `python -m py_compile app\services\network_editor.py app\api\v1\master_data.py app\db\schemas.py` passed; `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_unified_commit_batches_changes_and_rolls_back -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 20 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-25: 网络编辑器一次性提交与引用状态包术语最终收口。主需求文档再次明确“未点击 `进入编辑` 一律为预览模式，点击后才打开编辑草稿，编辑完画板后通过 `统一提交` 一次性写入现有数据库接口”；同时把主需求文档、验收矩阵和 TICKET-041 中的 `父子状态`、`主父级状态`、`Impact`、`多父引用显示`、`导出模板` 等残留旧口径改为 `层级所有权`、`状态包成员引用`、`影响分析`、`多状态包出现显示`、`求解预检模板`。Verification: 文档同步，无代码变更。
+
+> Update 2026-06-25: 网络编辑器求解预检正式接口命名收口。后端新增 `POST /api/v1/machine-types/{machine_type_id}/network-editor/solver-precheck` 作为求解预检 canonical API，旧 `network-editor/export-preview` 标记为 deprecated 兼容别名；前端 `求解预检` 按钮改用 `precheckNetworkEditorSolver` 调新接口，集成测试主路径同步切换并保留旧路径 smoke；工作区内部求解预检状态、样式、payload helper 和浏览器测试锚点命名已同步收口到 `solverPrecheck` / `solver-precheck`；后端 summary helper 和集成测试主路径变量也改为 solver precheck 语义，旧 export 命名仅保留在兼容响应/路由/wrapper。验收矩阵更新为“正式 solver-precheck、旧 export-preview 仅兼容”，继续符合“不导出独立数据文件、求解器通过既有数据库接口读取”的产品口径。Verification: `python -m py_compile app\api\v1\master_data.py app\db\schemas.py app\services\network_editor.py` passed; solver-precheck focused backend tests 5 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 20 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-25: 网络编辑器状态包成员引用与求解预检术语继续收口。TICKET-041、当前 STATE、浏览器流程记录和验收矩阵中的早期 `父状态`、`子状态`、`多父状态`、`父级`、`导出预览`、`State groups` 等用户可读旧口径已改为 `状态包`、`状态包成员引用`、`所在状态包`、`求解预检`、`状态包聚合` 等当前成品页面术语；仅保留必要接口名、测试名和历史技术字段。Verification: 文档同步，无代码变更。
+
+> Update 2026-06-25: 网络编辑器浏览器流程记录同步当前成品页面文案。早期复核记录中的深度控制、快捷连线、绑定创建和问题定位描述已改为当前 `状态深度`、`活动深度`、`状态 -> 上下文`、`活动 -> 产出`、`绑定创建已加入草稿`、`定位` / `已定位` 等中文口径；验收矩阵锚点也改为“前端问题定位自动展开”。Verification: 文档同步，无代码变更。
+
+> Update 2026-06-25: 网络编辑器问题建议兜底中文化。前端问题表和提交前复核现在优先按 issue code 展示精确中文建议；未知 issue code 不再直接透出后端英文 `suggested_action`，改为中文通用建议，后端字段仅作为接口协议和排查信息保留。用户说明、验收矩阵、TICKET-041 和浏览器流程记录已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-25: 网络编辑器影响分析命名继续收口。当前用户说明、验收矩阵和浏览器流程记录把右侧影响面板统一改为 `影响分析`；早期浏览器流程中的状态/虚拟活动/原子活动抽屉和编码/名称/类型/所在状态包/排序/启用字段说明同步改为当前中文按钮和字段，`Impact` 仅保留在接口名、变量名或历史技术记录中。Verification: 文档同步，无代码变更。
+
+> Update 2026-06-25: 网络编辑器异常兜底与字段说明文案继续中文化。前端草稿入队异常不再展示 `Queue state change failed`、`Reuse state failed`、`Queue state package fork failed`、`Queue atomic activity change failed` 等英文动作名，统一改为中文；用户说明和验收矩阵将抽屉字段从 `Code` 收口为 `编码`，取消按钮说明从 `Cancel` 收口为 `取消`。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-25: 网络编辑器残留可见英文兜底清理。右侧状态详情中无所在状态包时不再显示 `Root`，改为 `未加入状态包`；网络编辑器批量加载失败时不再提示 `Load network editor data failed`，改为中文错误兜底。验收矩阵、TICKET-041 和浏览器流程记录已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-25: 一次性提交操作流按最新确认再次落文档。主需求文档明确“预览模式不是未保存编辑态、编辑模式不是自动保存态”，网络编辑器只有点击 `进入编辑` 后才允许编辑画板；抽屉保存、拖拽、连线、容器调整、自动整理、覆盖刷新和同步/分叉选择都只进入本次草稿，编辑完后点击 `统一提交` 才一次性写入现有数据库接口。用户说明、验收矩阵和 TICKET-041 已同步。Verification: 文档同步，无代码变更。
+
+> Update 2026-06-25: 画布连接方式引导补强。网络编辑器画布动作条现在按预览模式、无选择、只选状态、只选活动、状态+活动双选和拖拽中状态显示不同下一步提示；同时选中状态和活动后，会明确提示点击 `状态 -> 输入/上下文` 或 `活动 -> 产出/声明输出` 加入编辑草稿，降低首屏建网对端口拖拽经验的依赖。用户说明、验收矩阵、TICKET-041 和浏览器流程记录已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-25: 缺规则问题行跳转活动能力入口补强。网络编辑器建模校验、求解器准备和求解预检阻塞项中的规则类问题行新增 `规则` 动作，点击会先定位相关状态/活动/绑定对象，再通过 `open-workspace` 事件把数据管理页签切到 `活动能力`，方便为相关原子活动创建、启用或明确选择规则。用户说明、验收矩阵、TICKET-041 和浏览器流程记录已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-25: 前端请求去重与影响分析防抖补强。`frontend/src/api/masterData.js` 的 `getMachineTypes` 现在在 API 层共享缓存并合并 in-flight 请求，多个数据管理子页面并发加载设备类型时复用同一请求；创建、更新、删除设备类型成功后清缓存。网络编辑器 `NetworkEditorWorkspace.vue` 中影响分析自动刷新增加短防抖和请求序号保护，快速切换节点、焦点或图投影时旧响应不会覆盖新选择；顶部 `影响分析` 手动按钮保持即时刷新。验收矩阵、TICKET-041 和浏览器流程记录已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-25: 网络编辑器工作区布局与设备选择器体验补强。前端 `NetworkEditorWorkspace.vue` 为网络编辑器工作区新增明确内部滚动容器，左侧资源区、右侧属性区和底部校验 / 求解预检区各自滚动，画布在中间区域内伸缩，改善 720px 高度下的可见性；`solver_ready` 视图画布顶部新增求解投影说明，避免虚拟活动隐藏被误判；设备类型选择器保留搜索并按最近使用、业务设备类型、测试 / 样例设备类型分组，最近 5 个机型保存在本地。主需求文档、用户说明、验收矩阵、TICKET-041 和浏览器流程记录已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器浏览器可测性与隐藏 DOM 暴露问题补强。前端 `NetworkEditorWorkspace.vue` 为顶部工具栏、资源区、画布、属性区、校验区、问题表、抽屉/弹窗、关键按钮、状态/活动节点和容器补 `data-testid`；问题表定位/刷新按钮携带 `data-issue-code`；5 个 `el-segmented` 控件补 `aria-label`；状态、虚拟活动、原子活动抽屉，以及重复状态、共享状态包修改、批量绑定弹窗启用 `destroy-on-close`，避免关闭后隐藏表单 DOM 污染浏览器文本抽取。验收矩阵、TICKET-041 和浏览器流程记录已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器生产预览入口补强。后端 `/` 现在优先服务 `frontend/dist/index.html` 和 `/assets/*`，没有生产构建时回退到 `frontend/index.html`；前端新增 `npm run preview:api`，正式复用 `scripts/serve_frontend_dist_proxy.py` 服务 `frontend/dist` 并代理 `/api/*`，支持通过 `--backend` / `--port` 使用备用端口。README、验收矩阵、TICKET-041 和浏览器流程记录已同步。Verification: `python -m py_compile app\main.py scripts\serve_frontend_dist_proxy.py` passed; `npm run build` passed with the existing Vite chunk-size warning; TestClient confirmed `/`, `/frontend/network-editor`, and `/assets/index-*.js`.
+
+> Update 2026-06-24: 网络编辑器缺规则快捷连线闭环补强。前端右侧规则下拉、批量绑定、拖线确认和快捷连线现在统一只使用启用 `op_rule`；没有启用规则时提示先去活动能力或规则维护创建并启用规则，多条启用规则时提示在右侧规则下拉中明确选择，停用规则不会再被自动带入绑定草稿。用户说明、验收矩阵、TICKET-041 和浏览器流程记录已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器新建状态唯一重复自动复用补强。前端保存新状态时，若只有一个编码、名称或原子状态事实强匹配候选，会直接提示 `已发现相同状态，将复用` 并把已有状态作为引用加入当前状态包草稿；多个候选或仅名称相似时才弹出 `发现相似状态`，保留 `复用选中状态` / `仍然新建` 决策。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器求解预检数据库交接状态补强。后端 `solve_request_template` 新增 `handoff_mode`、`model_status`、`solver_handoff_ready` 和 `blocking_issue_count`，blocked 模型的 `/solve/layered` 区域只作为“仅预检摘要”展示，不再被误读为可直接求解输入；前端模板摘要 ready 显示“数据库交接就绪”，blocked 显示“仅预检摘要：阻塞 N 项”。主需求文档、用户说明、验收矩阵、TICKET-040、TICKET-041 和浏览器流程记录已同步为“无独立 JSON/求解模板下载，求解器通过既有数据库接口读取”。Verification: `python -m py_compile app\services\network_editor.py` passed; `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_graph_validation_and_solver_precheck -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 20 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器预览态写入防线补强。前端 `queueDraftChange` 中心草稿入口现在会在非编辑态/提交中拒绝入队，状态多选标记和端口拖放落点也补充 `requireEditMode` / `canMutate` 二次检查，避免后续新增入口绕过“进入编辑后才产生草稿”的页面级状态机。验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器原始状态值中文映射补强。前端绑定影响分析标签、绑定列表、覆盖快照、求解器准备状态、求解预检状态、运行时待补字段和共享状态包影响预览不再直接展示 `input/output/partial/stale/pending/none/ready` 等原始值，改为中文角色、覆盖状态和预检状态；验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器页面残留英文摘要中文化。前端 `NetworkEditorWorkspace.vue` 将顶部和资源区新建入口、状态/活动节点摘要、状态包/虚拟活动容器摘要、专注条边界标签、复杂连线汇总线和相关错误兜底统一改为中文；主需求文档、用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器统一提交保存边界与待补规则闭环对齐需求。后端 `network-editor/commit` 现在只用结构性建模 error 阻止保存；求解准备 error 会进入提交前复核，用户确认后可保存建模中的图，但求解预检继续 blocked。原子活动绑定允许零启用规则时 `op_rule_id=null`，前端在产出状态无法生成 effect fact 时按“待补规则”创建原子活动和两侧绑定草稿，不自动创建 `op_rule`；新增 focused 回归覆盖预检 422 不落库、确认后保存、绑定规则为空和求解预检 blocked。需求文档、用户说明、验收矩阵和 TICKET-041 已同步。Verification: `python -m py_compile app\api\v1\master_data.py` passed; `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_commit_allows_pending_rule_model_after_review -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_unified_commit_batches_changes_and_rolls_back -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_solver_ready_blocks_unusable_executable_exports -q` 1 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器统一提交复核提示接入中文 issue 展示。`统一提交` 预检只有 warning 时，`提交前复核` 弹窗现在列出最多 5 条中文问题摘要、对象和建议，再由用户选择 `继续提交` 或 `返回编辑`；存在 error 或 revision 冲突时，错误提示改为中文摘要并保留草稿。需求文档、用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器校验问题表用户可读化。建模校验、求解器准备和求解预检阻塞项现在按 issue code 映射为中文级别、中文问题类型、用户可读说明和建议操作，说明会补充相关状态、活动、绑定、覆盖状态、缺失叶子、规则 ID 和事实特征；后端 `layered-expansion` / `layered-health-check` 诊断的 `node_id/node_type` 会进入 issue details，状态和活动诊断会映射为问题表可定位对象。主需求文档、用户说明、验收矩阵和 TICKET-041 已同步。Verification: `python -m py_compile app\services\network_editor.py` passed; `python -m pytest tests\integration\test_layered_activity_state_api.py::test_layered_health_check_reports_provider_consumer_diagnostics -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_graph_validation_and_solver_precheck -q` 1 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器核心操作文案中文化。状态/虚拟活动/原子活动抽屉、影响分析、求解预检摘要、阻塞项定位/刷新、端口拖线提示和常见校验提示已统一为中文，减少成品操作流文档与实际页面的语言不一致；必要技术字段如 `feature_key`、`/solve/layered` 保留。验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器已有状态默认归属编辑增加共享状态包保护。状态抽屉的 `所在状态包` 继续用于维护状态本体默认归属，但如果用户编辑已有状态时试图把它加入或移出已被复用的状态包，前端会阻止直接保存，并提示改用左侧 `状态包成员` 表的 `添加` / `移除引用` 入口进入同步/分叉确认，避免绕过共享状态包决策。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器共享状态包成员添加/移除统一接入同步/分叉决策。右侧状态包成员表 `添加` 已有状态到共享状态包时不再直接排引用草稿，而是进入 `共享状态包修改确认`；`移除引用` 触及共享状态包时也会进入同一决策流。后端 `state_package_fork` 新增 `removed_state_node_id` 支持，分叉时复制原状态包直接成员但跳过被移除成员，并替换当前使用方引用；同步路径仍直接修改共享成员。Verification: `python -m py_compile app\api\v1\master_data.py` passed; `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_unified_commit_batches_changes_and_rolls_back -q` 1 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器共享状态包同步/分叉确认新增影响预览。`共享状态包修改确认` 弹窗现在会在用户确认前展示本次新增状态、受影响状态包、分叉时保持不变的状态包、相关绑定数量、需复核绑定和当前 partial/stale 覆盖缺口；选择同步/分叉仍只加入编辑草稿，统一提交才写库。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器一次性提交口径按最新要求再次收口。主需求文档、用户说明、验收矩阵和 TICKET-041 明确：默认和非编辑会话均为 `预览模式`；只有点击 `进入编辑` 后才打开本次画板编辑草稿；抽屉保存、节点拖动、容器尺寸、端口连线、自动整理、覆盖刷新和同步/分叉选择都只进入草稿；`统一提交` 是唯一写库动作。预览模式下的展开/折叠、聚焦、影响分析、校验和求解预检仅改变查看上下文或读取已提交数据，不创建草稿。前端同步修正节点级展开/折叠切换时先判断旧展开状态，再更新焦点，避免切换到新节点时误判。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器节点级展开 / 折叠入口补齐。状态包和虚拟活动节点右上角现在提供 `展开 / 折叠`，预览模式也可用；点击后更新当前图焦点和 `stateDepth` / `activityDepth`，展开显示完整内部成员，折叠回摘要层，不写入编辑草稿。顶部 Focus bar 同步中文化为 `聚焦选中`、`折叠选中`、`展开一层`、`展开全部`、`清除焦点`。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器状态层级 UI 口径收敛为状态包成员引用。前端不再在用户可见位置展示会强化父子状态区别的文案，统一改为 `所在状态包`、`其他出现位置`、`状态包成员`、`添加状态`；影响分析、状态抽屉、右侧成员表、右键菜单、资源树加号和草稿列表同步调整。底层 `state_node.parent_id` 仍作为兼容默认成员关系存在，不改变数据库结构。用户说明、验收矩阵、主需求文档和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `git diff --check` passed with existing LF/CRLF warning only.
+
+> Update 2026-06-24: 网络编辑器新建原子活动输入/产出必填校验补齐。前端原子活动抽屉在新建时要求至少选择一个输入状态和一个产出状态，否则不允许保存到编辑草稿；这与需求文档“前置状态或目标状态为空，应禁止保存”的口径一致。编辑已有原子活动的基础属性仍可单独维护，既有绑定通过右侧绑定区调整。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器自由白板复杂连线降噪补齐。前端画布保留真实 `visibleEdges` 作为语义边，不改变后端绑定；新增渲染层 `renderedEdges`，活动输入或输出超过 5 条时默认显示 `N inputs` / `N outputs` 汇总曲线，选中相关活动、相关状态或影响分析路径时展开具体边；具体边使用端口 lane offset 上下错开，避免同端点多线完全重叠。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `git diff --check` passed with existing LF/CRLF warning only.
+
+> Update 2026-06-24: 网络编辑器画布状态多选浮动工具条补齐，并收紧“非编辑即预览”行为。编辑模式下 `Ctrl` / `Shift` / `Cmd` 点击状态节点可多选，浮动工具条显示 `已选 / 前置 / 产出`，支持将当前批次设为前置或产出，再创建虚拟活动或原子活动并预填对应绑定状态；已暂存前置/产出的状态节点有不同底色提示。刷新已提交数据会结束编辑会话并回到预览模式。主需求文档、用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `git diff --check` passed with existing LF/CRLF warning only.
+
+> Update 2026-06-24: 网络编辑器画布节点右键菜单补齐。状态和活动节点现在支持右键菜单；状态菜单提供设为状态焦点、编辑状态、向状态包添加状态；活动菜单提供设为活动焦点、虚拟活动专注、编辑活动以及添加内部活动/原子活动，写操作继续受编辑模式和 `canMutate` 控制。主需求文档、用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `git diff --check` passed with existing LF/CRLF warning only.
+
+> Update 2026-06-24: 网络编辑器状态节点悬浮快捷操作补齐。编辑模式下状态节点显示 `编辑` 快捷入口，状态包节点显示 `添加状态` 快捷入口；点击 `添加状态` 会预填当前状态包，并给新增成员一个位于状态包容器内部的默认布局落点，继续走编辑草稿和统一提交。主需求文档、用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `git diff --check` passed with existing LF/CRLF warning only.
+
+> Update 2026-06-24: 网络编辑器画布空白处快速新建状态入口补齐。编辑模式下在画布空白处双击会打开新建状态抽屉；若双击位置落在展开状态包容器内部，会预填该状态包为所在状态包；保存后新状态草稿携带 `_network_editor_layout` 初始坐标，统一提交成功后按该位置显示。主需求文档、用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `git diff --check` passed with existing LF/CRLF warning only.
+
+> Update 2026-06-24: 网络编辑器虚拟活动和原子活动说明字段补齐。后端新增 `activity_node.description`、`atomic_activity.description` nullable 字段及迁移 `009_activity_descriptions`，schema、序列化、统一提交 CRUD 和 revision 指纹均透传；前端虚拟/原子活动抽屉新增 `说明` 文本框，原子活动新建时同批默认 `op_rule.description` 沿用该说明；集成测试补充 activity/atomic description 创建与更新断言。Verification: `python -m py_compile app\db\models.py app\db\schemas.py app\api\v1\master_data.py app\services\network_editor.py migrations\versions\009_activity_descriptions.py` passed; activity/atomic description focused test 1 passed; unified commit focused case 1 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器删除/移除文案按状态引用语义收紧。状态引用表操作从 `删除` 改为 `移除引用`，确认框明确真实状态不会被删除；属性区通用操作从 `Edit/Delete Selected` 改为中文 `编辑选中` 和上下文删除按钮，选中状态时显示 `删除状态本体` 并提示这不是移出状态包，选中活动时显示 `删除虚拟活动` / `删除原子活动`。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器新建原子活动产出状态包覆盖范围选择补强。原子活动抽屉的 `产出状态` 选到多叶子状态包后，会显示 `全部当前成员 / 选择部分成员`；partial 模式必须勾选叶子状态，自动生成的 output 绑定携带 `covered_leaf_state_ids`，同批 `op_rule` effect facts 也只按所选叶子生成；点击抽屉 `取消` 放弃本次草稿。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器绑定创建覆盖范围选择补强。右侧 `创建绑定` 表单在多叶子状态包场景显示 `全部当前成员 / 选择部分成员`；partial 模式必须勾选叶子状态并随绑定草稿提交 `covered_leaf_state_ids`。端口拖线确认状态包绑定时，主按钮为 `全部当前成员`，次按钮为 `选择部分成员`，选择 partial 后只预填表单不创建草稿；批量绑定继续默认全部当前启用叶子，partial 覆盖用单条绑定表单处理。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器一次性提交产品规则继续收紧。主需求文档、用户说明、验收矩阵和 TICKET-041 现在明确：未点击 `进入编辑` 时页面一律为只读 `预览模式`；点击 `进入编辑` 后才打开临时草稿；保存抽屉、拖动节点、调整容器、拖线连线、刷新覆盖和同步/分叉只进入草稿，不直接写库；编辑完画板后点击 `统一提交` 才是唯一写库动作，成功后结束编辑会话并回到预览模式。Verification: 文档同步，无代码变更。
+
+> Update 2026-06-24: 网络编辑器状态包分叉审计约束补强。`state_package_fork` 统一提交现在在后端强制要求分支名称 `branch.name` 和分叉说明 `reason` 非空；缺失时返回 422 并回滚，不创建状态包分支。前端原有分支名称/说明必填体验保持不变，用户说明、验收矩阵和 TICKET-041 已同步。Verification: `python -m py_compile app\api\v1\master_data.py` passed; `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_unified_commit_batches_changes_and_rolls_back -q` 1 passed.
+
+> Update 2026-06-24: 网络编辑器统一提交 warning 确认补强。前端点击 `统一提交` 时现在先以 `allow_warnings=false` 调用 `network-editor/commit` 做提交预检；后端若返回阻塞错误则回滚并保留草稿，若只有非阻断 warning，则前端展示提交前复核确认，用户点击 `继续提交` 后才以 `allow_warnings=true` 正式提交。用户取消确认时留在编辑模式且草稿保留。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `git diff --check` passed with existing LF/CRLF warnings only.
+
+> Update 2026-06-24: 网络编辑器编辑会话基线冲突保护补强。`network-editor/graph` 现在返回当前机型网络内容 revision，覆盖状态、状态引用、活动、原子活动、活动包引用、绑定和规则事实；前端点击 `进入编辑` 时记录该 revision，`统一提交` 时作为 `base_revision` 发送。后端在应用草稿前重新计算当前 revision，不一致则返回 409 并不应用任何草稿，前端保留草稿并展示冲突提示，用户可刷新已提交数据或取消编辑后重来。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `python -m py_compile app\db\schemas.py app\api\v1\master_data.py app\services\network_editor.py` passed; `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_unified_commit_batches_changes_and_rolls_back -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 19 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器语义端口拖放确认补强。状态/活动端口拖放现在先预填右侧 `创建绑定` 表单，并弹出端点、角色、规则和覆盖范围确认；用户点击 `加入草稿` 后才创建 `activity_state_binding` 草稿。原子活动存在多条规则时不再由拖线自动猜测，系统要求先在右侧选择规则后点击 `连接`；重复绑定或已在草稿中的绑定会提示并跳过。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `git diff --check` passed with existing LF/CRLF warnings only.
+
+> Update 2026-06-24: 网络编辑器新建原子活动自动规则与连线补强。原子活动抽屉现在支持在新建时选择多个输入状态、产出状态和规则时长；保存后同批次排入 `atomic_activity`、`op_rule`、`activity_state_binding` 草稿，通过 `_draft_ref` 在统一提交时解析真实原子活动和规则 ID。状态包选择会展开为规则 precondition/effect facts，但画布绑定仍保持到所选状态包，减少自由白板线条噪声。主需求文档、用户说明、验收矩阵和 TICKET-041 已同步。Verification: `python -m py_compile app\db\schemas.py app\api\v1\master_data.py` passed; `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_unified_commit_batches_changes_and_rolls_back -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 19 passed; `npm run build` passed with the existing Vite chunk-size warning; `git diff --check` passed with existing LF/CRLF warnings only.
+
+> Update 2026-06-24: 网络编辑器新建虚拟活动自动连线补强。统一提交新增草稿引用解析，`NetworkEditorDraftChange.client_id` 可被后续绑定 payload 的 `_draft_ref` 引用；新建虚拟活动抽屉现在可选择多个上下文输入和声明输出状态，保存后同批次创建虚拟活动并自动排入 `context_input/declared_output` 绑定草稿。Verification: `python -m py_compile app\db\schemas.py app\api\v1\master_data.py` passed; `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_unified_commit_batches_changes_and_rolls_back -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 19 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器已选活动批量连线补强。右侧绑定区新增 `批量绑定`，选中虚拟活动或原子活动后可一次选择多个前置状态和产出状态，批量排入 `activity_state_binding` 创建草稿；虚拟活动自动使用 `context_input/declared_output`，原子活动自动使用 `input/output` 并沿用规则选择，已存在或已在草稿中的重复绑定会跳过。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器语义端口连线补强。画布状态/活动节点在编辑模式下显示左右语义端口，右侧端口发起拖线、左侧端口接收拖放；状态右端口到虚拟/原子活动左端口创建 `context_input` / `input`，虚拟/原子活动右端口到状态左端口创建 `declared_output` / `output`，SVG 线端点同步到端口方向。节点本体不再作为业务连线发起点，布局移动仍走布局手柄。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器虚拟活动专注画布入口补强。虚拟活动节点现在显示 `专注` 入口并支持双击进入；进入后复用 `activity_scope_node_ids` 与完整活动深度展示内部活动，顶部专注条显示活动面包屑、`ctx` 上下文状态、`out` 声明输出和 `impl` 覆盖。编辑模式下一级虚拟活动节点可直接点 `子活动`，二级虚拟活动节点可点 `原子` 继续分解，保存仍进入统一提交草稿。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器一次性提交模式文档口径补强。主需求文档、用户说明、验收矩阵和 TICKET-041 已进一步明确：页面默认和非编辑会话均为 `预览模式`，只有显式点击 `进入编辑` 后画板写操作才可用；统一提交成功、取消编辑、刷新或切换设备后都回到预览模式，草稿只在编辑会话内存在。Verification: 文档同步；既有前端编辑会话和 `network-editor/commit` 回归已覆盖该行为。
+
+> Update 2026-06-24: 网络编辑器容器尺寸调整补强。状态包容器和虚拟活动容器现在在编辑模式显示右下角尺寸手柄，拖动后写入布局草稿；容器尺寸保存到节点 `metadata_json._network_editor_container`，与节点位置一起通过统一提交持久化，画布高度会随手动拉大的容器扩展。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_unified_commit_batches_changes_and_rolls_back -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 19 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器自动整理布局补强。顶部工具栏新增 `自动整理`，仅编辑模式可用；点击后按当前可见状态/活动节点的层级和顺序重新排布节点，批量写入布局草稿，继续通过 `metadata_json._network_editor_layout` 和统一提交持久化，补齐自由白板 MVP 中自动布局与节点防重叠入口。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器重复状态复用与状态包同步/分叉补强。前端新建状态保存前现在按编码、名称、原子状态 `feature_key/operator/target_value` 和相似名称识别候选；唯一强匹配会自动复用，多个候选或仅相似名称时才弹出 `发现相似状态`，可 `复用选中状态` 或 `仍然新建`；复用会创建 `state_node_reference` 草稿，把已有真实状态加入当前状态包，避免重复创建状态本体。修改已被其他状态包引用的状态包成员时会弹出 `共享状态包修改确认`，选择同步则影响所有引用方，选择分叉则提交新增 `state_package_fork` 变更；后端统一提交会复制原状态包直接成员、创建分支、把新增或复用状态加入分支，并替换当前引用方，其他引用方继续引用原状态包。Verification: `python -m py_compile app\db\schemas.py app\api\v1\master_data.py` passed; `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_unified_commit_batches_changes_and_rolls_back -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 19 passed; `python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器自由白板与一次性提交继续补强。主需求文档新增 `成品页面操作流总览（自由白板版本）`，明确页面顶部工具栏、左侧资源/草稿区、中间自由白板、右侧属性/影响区、底部校验区的预览/编辑流；预览模式只读查看和求解预检，进入编辑模式后布局拖动、节点编辑、连线、状态包成员变化、同步/分叉选择都先进入草稿，点击 `统一提交` 后才写入既有数据库接口承接的数据结构。前端状态/活动节点新增布局手柄，拖动位置保存到节点 `metadata_json._network_editor_layout`，同一节点的字段更新和布局更新会在草稿中合并；状态包/虚拟活动容器边界按成员实际坐标计算，虚拟活动容器仍只包含活动节点。Plan: `docs/superpowers/plans/2026-06-24-network-editor-edit-session-refactor.md` 已更新完成项。Verification: `python -m py_compile app\db\schemas.py app\api\v1\master_data.py` passed; `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_unified_commit_batches_changes_and_rolls_back -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 19 passed; `python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器预览/编辑/统一提交交互补强。`网络编辑器` 工作区现在默认进入只读 `预览模式`，顶部新增 `进入编辑` / `统一提交` / `取消编辑`；所有新增、编辑、删除、连线、覆盖刷新和状态引用维护先进入前端 `编辑草稿`，左侧显示草稿列表和未提交数量，点击 `统一提交` 后才调用新增的 `POST /api/v1/machine-types/{machine_type_id}/network-editor/commit` 批量提交端点。后端在同一次请求中按草稿顺序应用变更并执行网络编辑器校验，异常依赖 session rollback 避免半提交。前端求解交接入口命名为 `求解预检`，只展示求解器数据库读取前的预检摘要和模板信息，不再下载独立 JSON 或求解模板文件。Verification: `python -m py_compile app\db\schemas.py app\api\v1\master_data.py` passed; `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_unified_commit_batches_changes_and_rolls_back -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 19 passed; `python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 原始需求文档已按用户最新自由画布工作流升级为 V0.2。`docs/状态活动网络图编辑器_需求设计文档.md` 现在明确采用“自由画布 + 专注画布”作为交互层：有布局则读取既有画布，无布局则自上而下建立状态；用户通过选择任意层级前置状态和目标状态创建虚拟/原子活动；虚拟活动可进入专注画布递归分解；同一状态可在不同状态包中以引用实例出现；所有节点支持逐层展开并在展开后成为容器；视觉要求包括自动布局、节点防重叠、小巧节点、平滑曲线和准确箭头端口。文档同时补充 CanvasLayout、StateInstance、ActivityCreationDraft 等数据模型建议，并强调画布布局问题不阻止求解导出，底层仍落到状态-活动-状态绑定语义。Verification: markdown fence count even; `rg` confirmed updated free-canvas/focus-canvas requirements are present.
+
+> Update 2026-06-24: 网络编辑器浏览器流程检视完成。使用真实浏览器打开生产构建页面，实际走通设备类型选择、网络编辑器加载、虚拟活动上下文绑定创建、原子活动展开、缺规则快捷绑定拦截、校验、定位、影响分析、求解预检阻塞门禁、创建抽屉和求解视图切换；检视产生的临时绑定已删除。新增 `docs/network-editor-browser-flow-review-2026-06-24.md` 记录已验证功能、问题和 TICKET-042..046 建议，新增 `scripts/serve_frontend_dist_proxy.py` 作为 Vite dev server 不可用时的本地 dist + API 代理验收工具。发现主要改进点：后端 `/` 仍服务源码 `frontend/index.html` 而非 `frontend/dist`、缺规则快捷绑定文案和闭环需中文化/可跳转、720px 布局截断、segmented/隐藏抽屉 DOM 的无障碍与自动化稳定性、重复 machine-types 请求。Verification: browser flow completed against local backend `127.0.0.1:8012` and dist proxy `127.0.0.1:8013`; `python -m py_compile scripts\serve_frontend_dist_proxy.py` passed; `git diff --check` passed with existing LF/CRLF warnings only. 本轮未手动执行 `/health` 探活；页面自身服务状态请求正常返回。
+
+> Update 2026-06-24: 网络编辑器停用活动包引用影响分析归属补强。影响分析和求解分组归属现在按 `include_inactive` 过滤 `activity_package_atomic_ref`；默认 `owner_virtual_activities` 不再包含停用挂载的虚拟活动，`include_inactive=true` 仍可用于审计历史挂载。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_impact_excludes_inactive_atomic_package_refs_by_default -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 18 passed; `python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed; `python -m pytest -q` 324 passed; `npm run build` passed with the existing Vite chunk-size warning; `git diff --check` passed with existing LF/CRLF warnings only. 未启动后端服务，未执行 `/health` HTTP 探测。
+
+> Update 2026-06-24: 网络编辑器停用状态事实求解交接补强。求解预检的 binding leaf facts 现在与 solver-ready 图投影保持一致，默认只交接启用叶子对应的 `own_preconditions` / `own_effects` / `inherited_preconditions`；覆盖快照中残留停用叶子时不会进入默认求解交接，`include_inactive=true` 仍可用于审计停用 leaf facts。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_solver_precheck_excludes_inactive_binding_leaf_facts_by_default -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 17 passed; `python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed; `python -m pytest -q` 323 passed; `npm run build` passed with the existing Vite chunk-size warning. 未启动后端服务，未执行 `/health` HTTP 探测。
+
+> Update 2026-06-24: 网络编辑器停用规则投影补强。solver-ready 图投影、影响分析、校验和求解预检现在统一按 `include_inactive` 处理 legacy `op_rule`、活动包引用、上下文绑定和求解规则选择；默认视图只使用 active 规则/端点/状态事实，只有停用 `op_rule` 的原子活动不会再生成 legacy precondition/effect 边，也不会在求解预检中被自动填入停用 `op_rule_id`。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_solver_ready_excludes_inactive_legacy_rules_by_default -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 16 passed; `python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed; `python -m pytest -q` 322 passed; `npm run build` passed with the existing Vite chunk-size warning. 未启动后端服务，未执行 `/health` HTTP 探测。
+
+> Update 2026-06-24: 网络编辑器属性编辑完整性补强。状态、虚拟活动和原子活动抽屉现在均显示 `编码` 字段，创建时可留空继续由后端自动生成，编辑已有节点时可直接改码并复用后端唯一性校验；集成测试补充 state/activity/atomic update 显式改码断言，避免“节点可编辑”只覆盖名称和层级而不能维护编码。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py::test_layered_nodes_auto_generate_codes_and_preserve_them_on_update -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 15 passed; `python -m pytest -q` 321 passed; `npm run build` passed with the existing Vite chunk-size warning; `git diff --check` passed with existing LF/CRLF warnings only. 未启动后端服务，未执行 `/health` HTTP 探测。
+
+> Update 2026-06-24: 网络编辑器绑定规则同步 provenance 补强。`activity_state_binding` 现在在 `metadata_json._network_editor_managed_rule_facts` 中记录绑定层实际新增或共同接管的 `op_rule_precond/effect`，覆盖缩小、停用或删除绑定时只清理这些 managed facts；原本手写在 `op_rule` 上的同名 precondition/effect 会保留，避免图编辑器操作误伤 canonical 规则事实。TICKET-037、TICKET-041、用户说明和验收矩阵已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_activity_state_bindings_coverages_and_rule_sync -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 15 passed; `python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed; `python -m pytest -q` 321 passed; `npm run build` passed with the existing Vite chunk-size warning; `git diff --check` passed with existing LF/CRLF warnings only. 未启动后端服务，未执行 `/health` HTTP 探测。
+
+> Update 2026-06-24: 网络编辑器绑定问题定位补强。前端带 `binding_id` 的覆盖问题 `定位` / `刷新` 现在会自动展开绑定两端的状态和活动节点，再选中绑定或刷新覆盖；状态包覆盖缺口位于当前局部查看范围外时，不再只选中表格行而看不到画布节点。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `git diff --check` passed with existing CRLF warnings only. 未启动后端服务，未执行 `/health` HTTP 探测。
+
+> Update 2026-06-24: 网络编辑器求解模板 scope 推断补强。求解预检的 `/solve/layered` 请求模板现在在用户未选择活动范围时自动填入有可执行后代的顶层活动 scope，避免 ready 预检生成空候选活动的求解请求；未选择目标状态时将 `target_state_node_ids` 加入 `required_runtime_fields`，提示用户补齐目标。用户说明、验收矩阵、TICKET-040 和 TICKET-041 已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_graph_validation_and_solver_precheck -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 15 passed; `python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed; `python -m pytest -q` 321 passed; `npm run build` passed with the existing Vite chunk-size warning. 未启动后端服务，未执行 `/health` HTTP 探测。
+
+> Update 2026-06-24: 网络编辑器问题定位自动展开补强。前端底部校验表和求解预检阻塞项的 `定位` 现在如果遇到当前图投影不可见的状态或 `atomic_activity:*`，会自动设置对应状态根/活动范围、展开深度并刷新图投影，再选中目标节点；阻塞项不再因为默认折叠深度隐藏原子活动而无法定位。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `git diff --check` passed with existing CRLF warnings only. 未启动后端服务，未执行 `/health` HTTP 探测。
+
+> Update 2026-06-24: 网络编辑器 health 诊断定位补强。`layered-health-check` 返回的 `BROKEN_CHAIN` / `NO_PROVIDER` 等求解器准备诊断现在会在网络编辑器中通过 `op_rule_id` 映射回真实 `atomic_activity:*` 图节点，并在 issue details 中保留 `op_rule_id`、feature/operator/target/provider 信息；底部问题表和求解预检阻塞项的 `定位` 不再落到内部负数 activity id。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_graph_validation_and_solver_precheck -q` 1 passed; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 15 passed; `python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed; `python -m pytest -q` 321 passed; `npm run build` passed with the existing Vite chunk-size warning. 未启动后端服务，未执行 `/health` HTTP 探测。
+
+> Update 2026-06-24: 网络编辑器前端遗留路径清理。`NetworkEditorWorkspace.vue` 删除未被 UI 调用的旧 `createBinding` / `refreshCoverage` 函数，绑定创建和覆盖刷新统一使用当前带活动类型/角色矩阵、显式规则选择、异常兜底和派生结果失效的路径，降低后续维护误用风险。TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; 遗留函数扫描仅剩当前使用的 `createBindingFromForm` / `createBindingForActivity`; `git diff --check` passed with existing CRLF warnings only. 未启动后端服务，未执行 `/health` HTTP 探测。
+
+> Update 2026-06-24: 网络编辑器影响分析入口补强。顶部工具栏新增 `影响分析` 按钮，选中状态或活动后可手动重新拉取当前选择的影响分析，补齐需求草图中顶部工具栏“影响分析”的可发现入口；原有选中节点自动刷新右侧影响分析面板、画布节点/边高亮和右侧列表保持不变。用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `git diff --check` passed with existing CRLF warnings only. 未启动后端服务，未执行 `/health` HTTP 探测。
+
+> Update 2026-06-24: 网络编辑器 executable rule readiness 补强。求解器准备校验现在会阻断不可消费的可执行活动交接：可执行活动缺少输出状态会返回 `EXECUTABLE_MISSING_OUTPUT` error；没有启用 `op_rule` 返回 `EXECUTABLE_MISSING_RULE`；存在多个启用 `op_rule` 但绑定未显式选择返回 `EXECUTABLE_RULE_NOT_EXPLICIT`；绑定指向多个规则或无效规则分别返回 `EXECUTABLE_RULE_AMBIGUOUS` / `EXECUTABLE_RULE_BINDING_INVALID`。求解预检的 `ready/blocked` 状态会纳入这些问题，避免生成 `op_rule_id=null` 的 executable handoff。用户说明、验收矩阵、TICKET-038、TICKET-040 和 TICKET-041 已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 15 passed; `python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed; `python -m pytest -q` 321 passed; `npm run build` passed with the existing Vite chunk-size warning. 未启动后端服务，未执行 `/health` HTTP 探测。
+
+> Update 2026-06-24: 网络编辑器状态包成员引用显示 DAG 补强。`state_node_reference` 现在不仅用于显示引用标记，也参与状态包叶子展开：绑定覆盖快照、覆盖刷新、网络编辑器局部图投影、影响分析成员覆盖、求解聚合规则、`layered-expansion` 目标展开和 `layered-health-check` aggregate precondition 展开均按状态包成员引用 DAG 计算；引用所在状态包作为局部根、求解目标或绑定状态包时不再漏掉成员叶子。新增集成回归覆盖引用所在状态包图投影、目标 goal facts 和状态包绑定覆盖。用户说明、验收矩阵、TICKET-037、TICKET-038 和 TICKET-041 已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 14 passed; `python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed; `python -m pytest -q` 320 passed; `npm run build` passed with the existing Vite chunk-size warning. 未启动后端服务，未执行 `/health` HTTP 探测。
+
+> Update 2026-06-24: 网络编辑器求解交接补强。前端求解预检现在使用求解专用 payload，保留用户选择的目标状态根和活动范围，但固定 `view_mode=solver_ready`、`state_depth=0`、`activity_depth=0`，避免默认折叠深度把二级活动包下的原子活动裁剪出求解交接结果；求解预检只展示摘要、阻塞项和 `/solve/layered` 模板信息，不再提供独立 JSON 或求解模板下载入口。用户说明、验收矩阵、TICKET-040 和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 14 passed; `python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed; `git diff --check` passed with existing CRLF warnings only. 未启动后端服务，未执行 `/health` HTTP 探测。
+
+> Update 2026-06-24: 网络编辑器绑定机型身份保护补强。`PUT /activity-state-bindings/{id}` 现在拒绝改变已有绑定的 `machine_type_id`，避免一个绑定 ID 被跨机型迁移导致图编辑语义层和 canonical 主数据边界混乱；集成测试已新增跨机型更新 422 回归，验收矩阵、TICKET-037 和 TICKET-041 已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 14 passed; `python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器前端绑定角色预校验补强。`NetworkEditorWorkspace.vue` 的绑定表单、快捷输入/输出和拖拽建边现在复用活动类型/角色矩阵：虚拟活动只允许 `context_input` / `declared_output`，可执行活动只允许 `input` / `output`；可执行活动没有唯一 `op_rule` 时要求用户显式选择规则，避免提交后端必拒的绑定组合。验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 14 passed.
+
+> Update 2026-06-24: 网络编辑器虚拟活动绑定角色校验补强。后端 `_resolve_binding_payload` 现在拒绝 level 1/2 `activity_node` 使用普通 `input` / `output` 角色，只允许虚拟活动声明 `context_input` / `declared_output`；可执行 `atomic_activity` 仍只允许 `input` / `output`。集成测试已新增虚拟活动错误角色 422 回归，验收矩阵、TICKET-037 和 TICKET-041 已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 14 passed; `python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed; `python -m pytest -q` 320 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器前端 API 异常兜底补强。`NetworkEditorWorkspace.vue` 对初始机型加载、主数据加载、图刷新、影响分析、校验、求解预检、保存/删除、覆盖刷新和状态引用维护新增统一错误提示兜底；后端不可用或请求失败时页面显示操作失败消息，不再把 rejected Promise 冒泡到 Vue 事件链。TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器回归验证刷新。完成当前工作树下网络编辑器重点回归和全量后端回归：`python -m pytest tests\integration\test_layered_activity_state_api.py -q` 14 passed；`python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed；`python -m pytest -q` 320 passed；`npm run build` passed with the existing Vite chunk-size warning。未启动后端服务，未执行 `/health` HTTP 探测，避免复现用户反馈的 health check 卡住问题。验收矩阵和 TICKET-041 已同步最新测试计数。
+
+> Update 2026-06-24: 网络编辑器默认折叠深度补强。前端进入网络编辑器时默认 `状态深度 = 1`、`活动深度 = 2`，先展示高层状态和一级/二级虚拟活动，符合需求第 9.3 “系统默认折叠高层状态和虚拟活动”；用户仍可通过 `展开一层` 或 `展开全部` 逐层/完整展开。用户说明、验收矩阵、TICKET-039 和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器活动跨层级数量摘要补强。画布活动节点的跨层级提示从 `cross` 调整为 `cross N`，按该活动关联的跨层级绑定条数显示局部数量，补齐需求第 14 节总览节点“跨层级前置/绑定数量”的摘要口径。用户说明、验收矩阵、TICKET-039 和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器虚拟活动容器读图补强。画布虚拟活动容器新增 `ctx` 上下文前置数量和 `out 已实现/声明` 输出覆盖摘要，与虚拟活动节点 `impl` 指标共用声明输出和内部可执行 activity output 覆盖口径，补齐需求示意中虚拟活动展开容器的上下文前置与输出覆盖展示。用户说明、验收矩阵、TICKET-039 和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器折叠状态包摘要补强。画布状态包节点新增成员数、深度跨度和相关活动数摘要，并与既有 `pkg 已覆盖/当前叶子` 覆盖摘要一起补齐需求中折叠状态包“成员/深度/覆盖/关联活动”的节点形态。用户说明、验收矩阵、TICKET-039 和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器虚拟活动实现覆盖摘要补强。画布虚拟活动节点新增 `impl 已实现/声明` 摘要，按虚拟活动声明输出覆盖叶子与内部可执行活动 output 覆盖叶子的交集计算实现比例；缺口显示警示样式，完整实现显示成功样式，补齐需求中虚拟活动节点“状态：部分实现 2/3”和容器“输出覆盖”可视化口径。用户说明、验收矩阵、TICKET-039 和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器资源树成员创建补强。左侧状态包行内加号可直接添加状态成员，一级活动行内加号可直接新建二级虚拟活动，二级活动包行内加号可直接新建并挂载原子活动；保存后复用现有 `loadAll` 刷新资源树和图投影，使“活动树中新建内部活动 → 活动画布同步可编辑”的需求路径可直接操作。用户说明、验收矩阵、TICKET-039 和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器求解就绪提示补强。总览下方新增求解就绪状态条，按当前图投影 `validation_summary` 标记 `暂不可求解`、`预检前需复核` 或 `求解输入就绪`，让纲要/不完整模型“可保存、可展示，但不可直接求解”的状态在进入求解预检前可见。用户说明、验收矩阵、TICKET-039 和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器左侧活动树补强。`NetworkEditorWorkspace.vue` 现在会读取二级活动包的 `activity_package_atomic_ref`，把包下原子活动作为 `原子` 叶子显示在活动树中；点击原子叶子会定位画布中的可执行活动并展开到原子层，避免左侧资源树只能看到虚拟活动包而漏掉可执行活动入口。用户说明、验收矩阵、TICKET-039 和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning。
+
+> Update 2026-06-24: 网络编辑器未布置节点列表补强。左侧 `未布置节点` 现在完整渲染当前图视图中所有无可见连接边的状态和活动，并在列表内滚动承载大量条目，不再用 `+N more` 隐藏后续孤立节点；用户说明、验收矩阵和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器验收矩阵证据索引补强。`docs/network-editor-acceptance-matrix.md` 新增行级证据索引，覆盖状态包成员引用/绑定 API、图投影与求解器预检服务、前端画布交互、影响分析/求解预检入口和集成测试锚点，让后续审计可直接从文件位置复核“已实现”声明。TICKET-041 已同步。Verification: 文档同步，无代码变更。
+
+> Update 2026-06-24: 网络编辑器需求验收矩阵补强。新增 `docs/network-editor-acceptance-matrix.md`，按需求文档第 17 节 MVP 范围、关键规则、校验覆盖、影响分析、网络统计和明确不做项逐项登记当前实现证据；用户说明和 TICKET-041 已链接该矩阵，作为后续闭合审计入口。Verification: 文档同步；上一轮验证保持 `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 14 passed、`python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed、`npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器结构环预检补强。`network-editor/validate` 现在会对历史或导入脏数据中的状态包成员环、状态引用环、活动容器环分别返回 `STATE_AGGREGATION_CYCLE`、`STATE_REFERENCE_CYCLE`、`ACTIVITY_CONTAINER_CYCLE` 阻断问题，并新增 `ACTIVITY_SOLVER_PARTICIPATION_MISMATCH` 兜底检查虚拟/可执行活动求解参与标记；状态包成员更新继续阻止危险重挂，后端图投影和前端状态覆盖计算均增加叶子展开环防护，避免脏数据导致页面或图投影卡住。用户说明、TICKET-038 和 TICKET-041 已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 14 passed; `python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器活动影响分析列表补强。选中活动时，右侧影响分析面板现在以标签列表展示直接前置状态和产出状态，并与继承前置、所属虚拟活动、受影响状态包、下游活动和是否参与求解器一起覆盖需求 13.2 的活动影响信息；顶部数字只作为快速计数。用户说明、TICKET-039 和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed.
+
+> Update 2026-06-24: 网络编辑器跨层级绑定较多提示补强。求解器准备校验现在会在跨层级绑定超过 3 条时返回 `CROSS_LEVEL_BINDING_MANY` warning，补齐需求 12.2 中“跨层级绑定较多”的非阻断提示；逐条 `CROSS_LEVEL_BINDING_NOTICE` 建模提示仍保留，用于定位具体绑定。用户说明、TICKET-038 和 TICKET-041 已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器状态包大覆盖提示补强。求解器准备校验现在会对覆盖超过 8 个叶子状态的状态包绑定返回 `STATE_PACKAGE_COVERAGE_LARGE` warning，补齐需求 12.2 中“状态包覆盖范围过大”的非阻断提示；该阈值与前端覆盖标签的首屏展示上限对齐，用于提示复核而不阻止求解交接。用户说明、TICKET-038 和 TICKET-041 已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器循环依赖校验补强。求解器准备校验现在会检测当前图投影中的状态-活动有向环，并返回 `GRAPH_DEPENDENCY_CYCLE` error 阻止求解交接，补齐需求 12.2 中“存在循环依赖应阻止求解”的验收点。用户说明、TICKET-038 和 TICKET-041 已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器状态影响分析覆盖展示补强。选中状态时，右侧影响分析面板现在展示成员覆盖摘要，包括叶子状态数、状态包绑定数、绑定引用数和叶子状态标签，补齐需求 13.1 中“选择状态时显示成员覆盖情况”的可视化验收点。用户说明、TICKET-039 和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed.
+
+> Update 2026-06-24: 网络编辑器校验建议展示补强。底部建模校验和求解器准备校验表格现在按 issue code 显示中文 `建议` 列，让覆盖刷新、补充绑定、确认终点状态等处理动作直接出现在问题行中；后端 `suggested_action` 仅作为接口协议和排查字段保留。用户说明、TICKET-039 和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed.
+
+> Update 2026-06-24: 网络编辑器无下游产出提示补强。求解器准备校验现在会对产出后没有任何下游活动消费、且未作为当前目标状态的状态返回 `OUTPUT_STATE_UNUSED` warning，补齐需求 12.2 中“产出状态没有下游使用”的非阻断提示；当该状态或状态包被选为目标状态时会自动豁免，避免把终点误报为缺口。用户说明、TICKET-038 和 TICKET-041 已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器活动单侧连接校验补强。建模校验现在会对已有输出但无输入的活动返回 `ACTIVITY_MISSING_INPUT` warning，对已有输入但无输出的活动返回 `ACTIVITY_MISSING_OUTPUT` warning，补齐需求 12.1 中“活动缺少前置状态 / 活动缺少产出状态”的建模校验项；完全无连接活动仍由 `ORPHAN_ACTIVITY` 表达。用户说明、TICKET-038 和 TICKET-041 已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器虚拟活动未分解校验补强。`network-editor/validate` / `graph` 的建模校验现在会对没有任何可见后代可执行活动的虚拟活动返回 `VIRTUAL_ACTIVITY_NOT_DECOMPOSED` warning，补齐需求 12.1 中“虚拟活动未分解”校验项；该提示不直接阻塞导出，声明输出未实现仍由 `VIRTUAL_OUTPUT_NOT_IMPLEMENTED` 负责阻塞。用户说明、TICKET-038 和 TICKET-041 已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器虚拟活动节点摘要补强。画布活动节点现在对虚拟活动额外显示 `sub`（当前可见子活动数量）和 `d`（最大后代层级）徽标，补齐需求中虚拟活动节点“子活动/最大深度”展示口径；原有 `in`、`ctx`、`out`、`cross` 摘要保持不变。用户说明、TICKET-039 和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed.
+
+> Update 2026-06-24: 网络编辑器统计总览补强。顶部总览现在展示 `Partial V`（部分实现虚拟活动数量）和 `Cross`（跨层级绑定数量），补齐需求第 14 节“网络分布与深度分析”中对部分实现虚拟活动和跨层级绑定全局统计的要求。用户说明、TICKET-039 和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed.
+
+> Update 2026-06-24: 网络编辑器状态包容器补强。画布状态列现在会为有可见成员的状态包绘制容器背景，标出展开后的可见成员范围，并在选中状态包时高亮容器，满足需求中“展开状态包时，状态包作为容器保留”的视觉验收口径。用户说明、TICKET-039 和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed.
+
+> Update 2026-06-24: 网络编辑器左侧资源区补强。`网络编辑器` 工作区现在从当前图投影的可见边派生 `未布置节点` 列表，列出没有任何可见连接边的状态和活动，并跟随左侧搜索框按编码/名称过滤；点击条目可直接定位到画布节点，补齐需求中左侧资源区“未布置节点”的验收点。用户说明、TICKET-039 和 TICKET-041 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed.
+
+> Update 2026-06-24: 网络编辑器影响分析路径高亮补强。选中状态或活动后，右侧影响分析识别的相关状态、活动和连接边会在画布中高亮，补齐需求中“影响路径高亮”的可视化验收点。用户说明和 TICKET-039 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed.
+
+> Update 2026-06-24: 网络编辑器活动节点展示补强。画布活动节点现在显示 `in`、`ctx`、`out`、`cross` 摘要，分别表示自身输入、继承/上下文前置、产出和跨层级绑定提示，补齐需求中可执行活动节点“前置状态/产出状态/继承前置/跨层级绑定”可视化口径。用户说明和 TICKET-039 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed.
+
+> Update 2026-06-24: 网络编辑器求解预检元数据补强。求解预检返回 `state_aggregation_rules`（固定 `AND` 聚合、状态包成员和叶子状态）与 `virtual_activity_groups`（虚拟活动 group/WBS 元数据、内部活动和 descendant atomic ids），并在预检摘要显示状态包聚合和虚拟活动分组，满足需求中“求解交接保留状态聚合规则、虚拟活动仅作为 group/display metadata 保留”的验收口径。TICKET-040 和用户说明已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器前端绑定维护闭环补强。右侧绑定表单现在支持选中已有 `activity_state_binding` 后点击 `更新选中绑定`，可直接修改角色、状态、活动或规则并调用现有 PUT API；状态未变化时保留覆盖快照，换绑到新状态时重新默认覆盖新状态 active leaves。用户说明和 TICKET-039 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed.
+
+> Update 2026-06-24: 网络编辑器校验提示补强。`network-editor/validate` 现在补充 `DUPLICATE_STATE_NAME`、`MULTI_PARENT_STATE_NOTICE`、`MULTIPLE_OUTPUT_PROVIDERS`，覆盖需求中的重复状态名、状态包多处引用提示和多个可执行活动产出同一状态的非阻断质量检查；TICKET-038 和用户说明已同步。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed; `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-24: 网络编辑器状态包节点展示补强。画布状态节点现在会对直接绑定的状态包显示 `pkg 已覆盖/当前叶子` 与绑定数量，并在任一绑定为 `partial` / `stale` 时高亮节点，满足需求中“状态包节点直接提示覆盖缺口”的验收口径；用户说明和 TICKET-039 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed.
+
+> Update 2026-06-24: 网络编辑器前端局部展开/折叠补强。`网络编辑器` 工作区新增 `折叠选中`、`展开一层`、`展开全部` 操作，复用现有图投影 `state_depth/activity_depth` 与选中焦点，实现选中状态/活动的局部折叠、逐层展开和完整子树展开；用户说明和 TICKET-039 已同步。Verification: `npm run build` passed with the existing Vite chunk-size warning; `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed.
+
+> Update 2026-06-24: 网络编辑器同步闭环补强。`activity_state_binding` 更新、刷新、停用或删除时，会按当前 active executable bindings 重新对齐对应 `op_rule_precond/effect`，清理不再由任何绑定需要的旧 fact，避免编辑器绑定与 canonical solver rule 漂移。网络编辑器校验新增跨层级绑定建模提示 `CROSS_LEVEL_BINDING_NOTICE`，与已有跨层级统计对齐。Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed; `python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed; full backend `python -m pytest -q` 320 passed; frontend `npm run build` passed with the existing Vite chunk-size warning.
+
+> Update 2026-06-23: TICKET-037 through TICKET-041 implemented the state-activity network editor MVP. Added network-editor binding persistence (`state_node_reference`, `activity_state_binding`), CRUD APIs, package coverage snapshots, rule sync to `op_rule_precond/effect`, graph projection, modeling and solver-ready validation, impact analysis, depth-limited local expansion, solver precheck with `/solve/layered` request template, and a Data Management `网络编辑器` workspace. The MVP preserves V0.3 canonical solver data (`state_node`, `activity_node`, `atomic_activity`, `op_rule`) and keeps GraphEdge response-only. Documentation and acceptance guidance are in `docs/network-editor-user-guide.md`; ticket records are `docs/TICKET_037.md` through `docs/TICKET_041.md`. Verification: `python -m pytest tests\integration\test_layered_activity_state_api.py -q` 12 passed; `python -m pytest tests\integration\test_scenario_import_api.py -q` 9 passed; full backend `python -m pytest -q` 320 passed; frontend `npm run build` passed with the existing Vite chunk-size warning; Playwright screenshots under `output/network-editor-*.png`.
+
+> Update 2026-06-22: TICKET-036 implemented. State targets now support arbitrary-depth trees where active childless nodes expand as atomic states and aggregate nodes do not bind facts; atomic state writes auto-ensure global and per-machine-type feature definitions. Activity capability modeling now has reusable `atomic_activity` definitions, level-2 package references, `op_rule.atomic_activity_id`, migration `007_atomic_activity_refactor.py`, atomic activity/ref CRUD APIs, and compatibility for legacy level-3 activity nodes. Layered expansion, health checks, layered/maintenance solve, Scheduler metadata loading, and scenario import now understand atomic activity refs while preserving legacy paths. Data Management now uses a unified state target workspace and a package/ref/atomic-library activity capability workspace. Deferred: shared atomic activity ownership under Scheduler continuity objectives and full rule editing inside the new activity workspace. Verification: full backend `python -m pytest` 313 passed; frontend `npm run build` passed.
+
+> Update 2026-06-17: TICKET-035 completed. Layered and maintenance solve responses now include hierarchical `layered.activity_tree` and `layered.state_tree` fields while preserving the existing flat summaries. State replay goal results and level-3 state tree rows now expose the source activity or current-state source for satisfied target facts. Solve page now renders activity/state result trees, task details as an activity hierarchy, Gantt level-2 activity grouping/collapse controls, maintenance reuse/skip explanations, target-state source rows, and continuity explanation rows. Existing solve/blockage e2e specs were updated to target the visible task-detail tab so hidden explanation tables do not break old flows. Verification: focused layered/maintenance source tests 2 passed; layered API integration 6 passed; frontend e2e 7 passed after escalated rerun; full backend regression 309 passed; frontend `npm run build` passed after escalated rerun.
+
+> Update 2026-06-17: TICKET-034 completed. Scenario Excel import now supports optional `layered_health_checks` sheets for declared post-import diagnostics. Dry-run validates check scopes by code; successful import executes the declared checks after layered nodes, Scope Guards, maintenance intents, and rules are flushed, returning compact `post_import_health_checks` results. Failed and dry-run responses return an empty checks list. Data Management import dialog now shows declared diagnostic counts and post-import result rows. Verification: focused post-import diagnostic test 1 passed; scenario import integration 8 passed; layered API integration 6 passed; full backend regression 309 passed; frontend `npm run build` passed after escalated rerun.
+
+> Update 2026-06-17: TICKET-033 completed. Layered and maintenance solve success responses now expose `layered.preflight_health`, a compact solve-preflight view of the existing layered health check. The full payload remains available under `diagnostics.layered_health`. Solve page now shows preflight health status, goal/candidate/effective-rule/diagnostic counts, and diagnostic rows in the layered/maintenance explanation tab. Planner/Scheduler behavior and solve status semantics are unchanged. Verification: focused layered/maintenance preflight tests 2 passed; layered API integration 6 passed; full backend regression 309 passed; frontend `npm run build` passed after escalated rerun.
+
+> Update 2026-06-17: TICKET-032 completed. Scenario Excel import now supports optional `maintenance_intents` sheets for importing/upserting maintenance intent templates by `(machine_type_code, issue_type)`. Validation enforces level-2 maintenance scopes, same-machine-type target state and candidate activity node codes, known `eq` maintenance facts, and at least one goal. Imported templates are immediately available through the existing maintenance intent API and `/solve/maintenance`. Data Management import summary now shows maintenance intent counts. Verification: maintenance import/solve focused test 1 passed; scenario import integration 8 passed; layered API integration 6 passed; full backend regression 309 passed; frontend `npm run build` passed after escalated rerun.
+
+> Update 2026-06-17: TICKET-031 completed. Layered and maintenance solve responses now include `layered.activity_selection`, explaining every candidate effective rule as selected or skipped, including skip reasons for already-satisfied effects and non-demanded candidates. Selected providers now expose goal/downstream precondition consumers and mark `is_shared_provider=true` when one provider supports multiple consumers. Solve page now shows an `活动选择解释` table in the layered/maintenance explanation tab. Verification: focused maintenance selection test 1 passed; layered API integration 6 passed; full backend regression 308 passed; frontend `npm run build` passed after escalated rerun.
+
+> Update 2026-06-17: TICKET-030 completed. Layered scenario Excel import now supports optional `activity_nodes`, `state_nodes`, and `scope_guards` sheets, optional `rules.activity_node_code`, dry-run preview counts, strict layered validation, upsert of layered nodes/Scope Guards, and rule binding to level-3 activity nodes. Added integration coverage proving layered workbook import and `/solve/layered` use. Data Management import summary now shows layered counts. Verification: scenario import tests 7 passed; focused layered/import tests 13 passed; full backend regression 308 passed; frontend `npm run build` passed after escalated rerun.
+
+> Update 2026-06-16: TICKET-029 completed. Phase 5B Scheduler continuity soft costs are implemented. Scheduler now carries level-3 activity metadata and parent level-2 activity group metadata from `StepData` through task output and persisted schedule JSON. `ObjectiveRegistry` now builds one weighted CP-SAT objective expression and supports `minimize_makespan`, `minimize_activity_group_span`, `minimize_activity_group_gaps`, and `minimize_activity_group_interruptions`. Continuity remains soft only: no hard sequence, adjacency, or contiguous-window constraints. Solve diagnostics now expose objective terms and per-group span/gap/interruption summaries. Solve page exposes an optional continuity preference and weight for snapshot, layered, and maintenance modes. Verification: focused TICKET-029 tests 22 passed; full backend regression 306 passed; frontend `npm run build` passed after escalated rerun.
+
+> Update 2026-06-16: TICKET-028 completed. Phase 5A maintenance intent templates and joint maintenance solve are implemented. Added `maintenance_intent_template`, migration `005_maintenance_intent_template.py`, CRUD APIs under machine types, `POST /api/v1/solve/maintenance`, and `app/services/maintenance_solve.py`. `LayeredSolveRequest` now supports solve-only current-state overrides and direct goal facts, so maintenance intent templates merge into one layered Planner/Scheduler run instead of fixed sequences. Data Management now includes maintenance intent management, and Solve page includes maintenance mode. Deferred at that point: Scheduler continuity soft costs, setup reuse, hard maintenance sequences, history/manual/recommended ordering, shifts, and fact lifetime. Verification: layered/maintenance API test 6 passed; full backend regression 301 passed; frontend `npm run build` passed after escalated rerun.
+
+> Update 2026-06-16: TICKET-027 completed. Phase 4 layered Planner/Scheduler integration is implemented. Added `POST /api/v1/solve/layered`, `app/services/layered_solve.py`, `LayeredSolveRequest`, synthetic target-state persistence, POP consumption of effective Scope Guard preconditions, existing Scheduler persistence, layered activity/state summaries, effective-precondition explanations, and post-solve replay validation. Solve page now has `快照 / 分层` mode and a `分层解释` tab. Existing `/solve`, blockage, import, Planner, and Scheduler contracts remain compatible. Verification: focused layered API test 5 passed; focused regression 67 passed; full backend regression 300 passed; frontend `npm run build` passed after escalated rerun.
+
+> Update 2026-06-16: TICKET-026 completed. Phase 3 of layered activity/state reachability diagnostics is implemented as a side-effect-free health-check layer. Added `POST /api/v1/machine-types/{machine_type_id}/layered-health-check`, Provider/Consumer graph summaries, and structured diagnostics for `NO_PROVIDER`, `AMBIGUOUS_PROVIDER`, `BROKEN_CHAIN`, `SELF_DEPENDENCY`, and `CONFLICTING_GOAL`. Added Data Management `健康检查` tab. Existing `/solve`, Planner, Scheduler, blockage, and import contracts remain unchanged. Verification: full backend regression 299 passed; frontend `npm run build` passed.
+
+> Update 2026-06-16: TICKET-025 completed. Phase 2 of layered activity/state expansion is implemented as a preview layer. Added a side-effect-free expansion service and `POST /api/v1/machine-types/{machine_type_id}/layered-expansion`, expanding selected state nodes into level-3 goal facts, selected activity scopes into level-3 candidate activities, and Scope Guard inheritance into source-aware effective rule previews. Added Data Management `展开预览` tab. Existing `/solve`, Planner, Scheduler, blockage, and import contracts remain unchanged. Verification: full backend regression 298 passed; frontend `npm run build` passed.
+
+> Update 2026-06-16: TICKET-024 completed. Phase 1 of layered activity/state management is implemented. The system now has `activity_node`, `state_node`, `scope_guard`, and `scope_guard_precond` data foundations, nullable `op_rule.activity_node_id` binding for level-3 activities, master-data APIs with hierarchy validation, and Data Management UI tabs for 活动层级 / 状态层级 / 作用域约束. Existing `/solve`, Planner, Scheduler, blockage, and import contracts remain unchanged. Verification: full backend regression 297 passed; frontend `npm run build` passed.
+
+> Update 2026-06-01: TICKET-023 completed. Planner main strategy has been replaced by an instance-level Partial Order Planner in `app/core/planner/partial_order.py`; `build_rag()` now delegates to POP and `candidate_plan.search_method` is `partial_order`. The existing `/solve`, RAG, `candidate_plan_step.predecessor_ids`, Scheduler, blockage, and multi-resource contracts remain unchanged. Focused regression: 104 passed.
+
+> Update 2026-06-02: Effect-driven repeated activity re-provider has been implemented on top of POP. Registered effects now include `sub` and `reset`; POP performs state/effect replay and inserts re-provider instances for unmet downstream preconditions and repairable final goal drift, including numeric and non-numeric facts with direct providers. Excel import, RulePage configuration, planner helper semantics, and planner protocol docs have been synchronized. No database migration or bootstrap script change is required.
+
+> 本轮复核（2026-05-29）：文档入口与协议文档已系统性校准。当前主干能力已包含 Planner 正向 BFS、实例级阻塞定位、Scheduler 多资源约束/分配、关键路径图、内网/本地/Docker 启动入口。旧 `CONTEXT` 文档已归档到 `docs/archive/cleanup_20260529/outdated_notes/`；AI 上下文入口为 `ANCHOR + STATE + 最新 TICKET`。
+
+> 本轮新增（2026-05-27）：TICKET-022 已完成 Scheduler 多资源排程。`resource_reqs` 作为 canonical 资源需求输入，贯穿 CP-SAT cumulative 约束、具体资源分配、任务 JSON 持久化与 API 响应；`resource_type/resource_qty` 仅作为兼容 fallback。新增 `tests/unit/test_scheduler_multi_resource.py` 与 Pump Body 多资源集成断言。
+
+> 本轮新增（2026-05-26）：TICKET-021 已完成 Planner 正向 BFS 主策略改造。新增 `app/core/planner/bfs.py`；`build_rag()` 主流程已切换为 forward BFS；`numeric.py` 不再作为主流程分流；`search_method` 写入 `forward_bfs`；已通过 planner/API/blockage/numeric 相关 97 项回归。
+
+> 生成时间：2026-04-19
+> 前置阅读：必须先读 ANCHOR.md
+
+---
+
+## 本版本目标
+
+在 V0.2 稳定能力基础上，推进 V0.3 主线：求解可解释性深化、多目标优化、工序组能力、搜索策略演进。
+
+当前已完成两项原先阻断后续深化的底座改造：
+
+- Planner 已从旧的 delta-provider / 逆向依赖补齐，切换为正向 BFS 主策略。
+- Scheduler 已从单主资源建模，升级为 `resource_reqs` 驱动的多资源约束与分配。
+
+业务场景 Excel 导入包（TICKET-012）已完成；求解解释性（TICKET-011 / STEP 1）仍是下一阶段最自然的业务增强入口。
+
+---
+
+## 当前已完成（继承自历史版本）
+
+### V0.1 基础能力（已完成）
+
+- 完整两阶段求解链路：Planner（状态推导 RAG）+ Scheduler（CP-SAT 排程）
+- 主数据 CRUD、求解接口、健康检查与基础前端
+- 14 张核心表、Alembic 迁移与种子数据
+
+### V0.2 架构升级与阻塞重排（已完成）
+
+- 数据模型升级：`feature_definition`、`blockage_event`、`not_before`、`step_role`、版本链字段等落地
+- 领域层注册表化：`OperatorRegistry`、`EffectRegistry`、`ObjectiveRegistry`、`RuleEvaluator`
+- 策略 A/B/AB 阻塞处理闭环：状态注入 + 约束仲裁 + 事件记录
+- API 扩展：`/features`、`/plans/{id}/versions`、`/plans/{id}/diff/{other_id}`
+- 前端重构：Vue 3 + Element Plus + ECharts（含对比模式）
+- 展示增强：Gantt/任务表统一显示“步骤编号 + 活动编码 + 活动名称”
+
+---
+
+## 已知技术债（延续）
+
+1. 测试基础设施：`tests/e2e/conftest.py` 与 `tests/conftest.py` 双引擎 + 重复 fixture，需统一。
+2. 多目标能力边界：TICKET-029 已完成 Scheduler 首个加权多目标切片；更通用的成本函数、setup reuse、事实生命周期和班次/人员目标仍需后续票据设计。
+3. 历史文档中仍有旧错误码命名残留，需逐步清理并与 API 协议统一。
+4. `solve.py` 仍承担输入校验、阻塞编排、Planner/Scheduler 编排、响应组装等多类职责，后续建议下沉到 Service 层。
+5. 旧需求差距报告和历史计划文档中保留了“Planner 非 BFS / Scheduler 单资源”的旧结论，已在 2026-05-29 复核中标注修正。
+
+---
+
+## 本版本变更（V0.3）
+
+### 专项：主数据 Excel 导入（优先前置）
+
+- 目标：通过上传一个 `.xlsx` 文件，完成 `StateFeatureDef`、`Resource`、`OpRule` 的批量导入。
+- 约束：严格 Upsert（已存在更新，不存在创建）；任一错误整批失败并回滚。
+- 文件结构：`meta` + `feature_defs` + `resources` + `rules` + `instructions`（中文说明 sheet）。
+- 规则表达：`rules` 中 `preconditions/effects/resource_reqs` 采用单元格 DSL。
+
+> 说明：该专项作为 V0.3 前置可用性任务执行，不替代四项主线目标。
+
+### 专项：数值型状态规划能力（最高优先级）
+
+- 目标：在不破坏现有枚举型规划与 Scheduler 链路前提下，为数值型特征规划冻结最小正确架构。
+- 聚焦问题：
+  - 同一 `OpRule` 需要重复执行多次时，当前 RAG 无法表达实例化步骤。
+  - 当前 `find_ops_for_delta()` 仅支持“单步精确命中”，无法处理 `0 -> 80`、步长 `20` 这类多步推进。
+  - 当前 precondition 分析依赖静态 `current_state`，无法正确表达数值链条中的逐步状态演进。
+  - 含副作用的规则可能被误选为目标特征的 provider，形成“有进展但走弯路”的错误规划。
+- 约束：
+  - 保持 `RuleEvaluator` 为 precondition/effect 唯一入口。
+  - 保持 `CandidatePlanStep + predecessor_ids` 与 Scheduler 兼容，不先扩大调度层改动。
+  - 第一阶段聚焦精确数值目标（`eq`），阈值目标（`gte/lte`）作为后续扩展单独建模。
+
+### STEP 1：求解可解释性深化
+
+- 目标：让 Planner/Scheduler 输出可追踪“为什么选这个工序、为什么这样排程”的解释信息。
+- 产物：解释数据结构、响应字段、最小可视化承载方案。
+
+### STEP 2：多目标优化能力
+
+- 目标：让 `objectives` 从“可扩展框架”升级为“可用多目标能力”。
+- 产物：至少支持 2 类目标组合与明确权重生效逻辑。
+
+### STEP 3：工序组能力（Operation Group）
+
+- 目标：支持按工序组进行组织与展示，为复杂工艺建模做准备。
+- 产物：分组数据结构、求解链路兼容、前端展示入口。
+
+### STEP 4：A* 搜索策略
+
+- 目标：在保留现有策略前提下，引入 A* 搜索作为可选 Planner 策略。
+- 产物：策略选择开关、启发函数基线实现、回归验证。
+
+---
+
+## 任务完成状态
+
+```text
+━━━━━━ TICKET-013：数值型状态规划能力设计冻结 ━━━━━━ [✅] 已完成
+  [✅] T13-1  重新定义痛点与根因（动作实例化 / 单步命中 / 静态状态假设）
+  [✅] T13-2  冻结最小架构方案（Planner 内部实例化步骤 + NumericFeaturePlanner）
+  [✅] T13-3  明确阶段边界（Phase 1 精确数值目标 / Phase 2 副作用控制 / Phase 3 阈值目标）
+  [✅] T13-4  补齐完整测试链路（unit / integration / API / e2e）
+  [✅] T13-5  文档回写：STATE/TICKET 同步
+
+━━━━━━ TICKET-014：Phase 1 准备层 — NumericFeaturePlanner 骨架与纯内存验证 ━━━━━━ [✅] 已完成
+  [✅] T14-1  新增 numeric.py 与 PlannedStep / NumericPlanResult 数据结构
+  [✅] T14-2  实现数值候选规则筛选与排序
+  [✅] T14-3  实现精确目标 BFS / 有界搜索
+  [✅] T14-4  验证状态不可变与重复 op_rule 不去重
+  [✅] T14-5  补充 unit 测试并通过相关回归
+
+━━━━━━ TICKET-015：Phase 1 接入层 — build_rag 分流与重复步骤持久化 ━━━━━━ [✅] 已完成
+  [✅] T15-1  加载 StateFeatureDef 并按 value_type 对 delta 分流
+  [✅] T15-2  接入 NumericFeaturePlanner，number exact 目标生成实例化步骤
+  [✅] T15-3  数值步骤合并为统一 RAG，按实例 predecessor 串行建边
+  [✅] T15-4  CandidatePlanStep 支持重复 op_rule_id 持久化
+  [✅] T15-5  集成回归验证：numeric 重复步骤与 mixed enum/numeric 场景通过
+
+━━━━━━ TICKET-016：Phase 1 闭环层 — 隐式子目标 + Scheduler/API/E2E 验证 ━━━━━━ [✅] 已完成
+  [✅] T16-1  支持数值 precondition 驱动的隐式子目标规划
+  [✅] T16-2  增加 visited_goals 循环检测与结构化错误
+  [✅] T16-3  Scheduler/API 对重复 op_rule_id 步骤完整兼容
+  [✅] T16-4  补充 API 测试 A1-A4 与 E2E 测试 E1-E4
+  [✅] T16-5  全量测试通过
+
+━━━━━━ TICKET-017：数值型重复步骤与阻塞重排兼容性修复 ━━━━━━ [✅] 已完成
+  [✅] T17-1  实例级 blocked_step_id 路由与 step_id 回传
+  [✅] T17-2  修复重复 op_rule_id 的 step_role diff 错配
+  [✅] T17-3  numeric + blockage A/B/AB 交叉回归
+  [✅] T17-4  运行相关测试并修复问题
+  [✅] T17-5  文档回写：STATE/TICKET 同步
+
+━━━━━━ TICKET-018：内网开发机一键启动架构 ━━━━━━ [✅] 已完成
+  [✅] T18-1  bootstrap / launch 两阶段脚本落地
+  [✅] T18-2  start.intranet.bat 一键入口
+  [✅] T18-3  固定项目级 npm registry 使用方式
+  [✅] T18-4  复用既有 PostgreSQL 与迁移/seed 流程
+  [✅] T18-5  README 使用说明更新
+
+━━━━━━ TICKET-019：启动脚本统一收敛与模式分流 ━━━━━━ [✅] 已完成
+  [✅] T19-1  launcher 支持 mode 参数与分支
+  [✅] T19-2  start.bat / start.local.bat 统一调用 launcher
+  [✅] T19-3  保持 intranet / local / docker 三种入口兼容
+  [✅] T19-4  启动脚本检查与修复
+  [✅] T19-5  文档回写：STATE/TICKET 同步
+
+━━━━━━ TICKET-020：内网开发机配置教程补充 ━━━━━━ [✅] 已完成
+  [✅] T20-1  编写详细配置教程
+  [✅] T20-2  覆盖可能需要修改的配置项
+  [✅] T20-3  覆盖常见问题与排查
+  [✅] T20-4  补充 README 快速入口
+  [✅] T20-5  文档回写：STATE/TICKET 状态同步
+
+━━━━━━ TICKET-021：Planner 正向 BFS 搜索主策略改造 ━━━━━━ [✅] 已完成
+  [✅] T21-1  主策略切换为 forward BFS，保留 build_rag 对外契约
+  [✅] T21-2  数值 repeated step 能力迁入统一 BFS
+  [✅] T21-3  repair/blockage 语义通过状态注入继续兼容
+  [✅] T21-4  BFS path 转 RAG，支持重复 op_rule 实例与依赖压缩
+  [✅] T21-5  unit/integration/e2e 回归覆盖
+
+━━━━━━ TICKET-022：Scheduler 多资源排程 ━━━━━━ [✅] 已完成
+  [✅] T22-1  `StepData.resource_reqs` 作为 canonical 多资源输入
+  [✅] T22-2  CP-SAT 对每个资源类型建立 cumulative 约束
+  [✅] T22-3  资源实例分配支持每个需求类型与资源 capacity
+  [✅] T22-4  schedule task JSON 持久化 `resource_reqs` / `resources`
+  [✅] T22-5  单元测试与 Pump Body 集成断言补齐
+
+━━━━━━ TICKET-012：业务场景 Excel 导入包与端到端数据装载 ━━━━━━  [✅] 已完成
+  [✅] T12-1  业务场景导入规范冻结（模板、DSL、校验规则、响应结构）
+  [✅] T12-2  后端导入 API（dry-run + scenario_upsert）
+  [✅] T12-3  前端导入入口与校验结果展示
+  [✅] T12-4  模板文件与中文 instructions sheet 交付
+  [✅] T12-5  集成验证（成功导入 + 整批回滚 + 100+ rules dry-run）
+
+━━━━━━ TICKET-024：分层活动/状态 Phase 1 数据底座 ━━━━━━ [✅] 已完成
+  [✅] T24-1  新增 activity_node / state_node / scope_guard / scope_guard_precond 数据模型
+  [✅] T24-2  op_rule 早期可选绑定三级 activity_node；TICKET-036 后推荐 `atomic_activity_id`，`activity_node_id` 保持兼容
+  [✅] T24-3  后端 master-data CRUD 与层级 / Scope Guard 校验
+  [✅] T24-4  前端数据管理页新增活动/状态管理入口；TICKET-036 后主入口为活动能力 / 状态目标工作台
+  [✅] T24-5  集成测试、全量 pytest 与前端 build 验证
+
+━━━━━━ TICKET-025：分层活动/状态 Phase 2 展开预览 ━━━━━━ [✅] 已完成
+  [✅] T25-1  目标状态树展开为叶子原子目标 facts；历史 level-3 口径已由 TICKET-036 泛化
+  [✅] T25-2  活动范围展开为候选原子活动；legacy level-3 activity_node 仍兼容
+  [✅] T25-3  Scope Guard 动态合并为 source-aware effective preconditions
+  [✅] T25-4  前端数据管理页新增展开预览入口
+  [✅] T25-5  集成测试、全量 pytest 与前端 build 验证
+
+━━━━━━ TICKET-026：分层活动/状态 Phase 3 可达性和健康检查 ━━━━━━ [✅] 已完成
+  [✅] T26-1  Provider / Consumer 图摘要
+  [✅] T26-2  NO_PROVIDER / AMBIGUOUS_PROVIDER 目标可达性诊断
+  [✅] T26-3  BROKEN_CHAIN 前置断链诊断
+  [✅] T26-4  SELF_DEPENDENCY Scope Guard 自依赖诊断
+  [✅] T26-5  CONFLICTING_GOAL 互斥目标诊断
+  [✅] T26-6  前端数据管理页新增健康检查入口
+  [✅] T26-7  集成测试、全量 pytest 与前端 build 验证
+
+━━━━━━ TICKET-027：分层活动/状态 Phase 4 Planner/Scheduler 接入 ━━━━━━ [✅] 已完成
+  [✅] T27-1  新增 `/api/v1/solve/layered` 分层求解入口
+  [✅] T27-2  分层目标状态展开为联合目标事实并合成 target snapshot
+  [✅] T27-3  Planner 消费候选原子活动 / legacy 活动和 Scope Guard effective preconditions
+  [✅] T27-4  Scheduler 复用既有 CandidatePlan / CandidatePlanStep 排程链路
+  [✅] T27-5  返回活动树 / 状态树汇总、有效前置解释和状态回放校验
+  [✅] T27-6  前端 Solve 页新增快照 / 分层模式和分层解释页签
+  [✅] T27-7  集成测试、全量 pytest 与前端 build 验证
+
+━━━━━━ TICKET-028：分层活动/状态 Phase 5A 维护意图模板与联合求解 ━━━━━━ [✅] 已完成
+  [✅] T28-1  新增 maintenance_intent_template 数据模型和迁移
+  [✅] T28-2  新增维护意图模板 CRUD API 与校验
+  [✅] T28-3  新增 `/api/v1/solve/maintenance` 联合维护求解入口
+  [✅] T28-4  维护意图合并目标状态、活动范围、观测事实覆盖和期望事实
+  [✅] T28-5  复用 Phase 4 layered solve，保持一个 Planner/Scheduler run
+  [✅] T28-6  前端新增维护意图管理页和 Solve 维护模式
+  [✅] T28-7  集成测试证明公共 provider 活动只计划一次，全量回归和前端 build 通过
+
+━━━━━━ TICKET-029：分层活动/状态 Phase 5B Scheduler 连续性软成本 ━━━━━━ [✅] 已完成
+  [✅] T29-1  Scheduler 输入与输出携带执行活动和二级活动组元数据；TICKET-036 后支持原子活动元数据
+  [✅] T29-2  ObjectiveRegistry 支持单一加权 CP-SAT 目标表达式
+  [✅] T29-3  新增 activity group span / gaps / interruptions 软目标
+  [✅] T29-4  Scheduler diagnostics 返回 objective terms 与连续性摘要
+  [✅] T29-5  `/solve` / `/solve/layered` / `/solve/maintenance` 保持 objectives 数组透传
+  [✅] T29-6  Solve 页新增活动连续性开关、权重输入和结果摘要
+  [✅] T29-7  单元/集成测试、全量 pytest 与前端 build 验证
+
+━━━━━━ TICKET-030：分层场景 Excel 导入底座 ━━━━━━ [✅] 已完成
+  [✅] T30-1  importer 支持可选 activity_nodes / state_nodes / scope_guards sheets
+  [✅] T30-2  rules 支持 `atomic_activity_code` 推荐绑定；`activity_node_code` 保留 legacy 兼容
+  [✅] T30-3  dry-run 校验层级、Scope Guard、rule 绑定和错误不落库
+  [✅] T30-4  导入 upsert 分层节点和 Scope Guard，并替换 Scope Guard 前置条件
+  [✅] T30-5  模板下载和 Data Management 导入摘要同步分层字段
+  [✅] T30-6  集成测试覆盖 layered workbook import 和 `/solve/layered`
+  [✅] T30-7  前端 `npm run build` 已通过 escalated rerun 验证
+
+━━━━━━ TICKET-031：分层活动选择与维修解释 ━━━━━━ [✅] 已完成
+  [✅] T31-1  `/solve/layered` 返回 `layered.activity_selection`
+  [✅] T31-2  `/solve/maintenance` 复用 layered 字段解释维修活动选择
+  [✅] T31-3  解释 selected / skipped、跳过原因和 selected step order
+  [✅] T31-4  标记公共 provider 的目标/前置消费者和 `is_shared_provider`
+  [✅] T31-5  Solve 页新增活动选择解释表
+  [✅] T31-6  维护共享 provider 与已满足跳过集成测试、全量 pytest 和前端 build 验证
+
+━━━━━━ TICKET-032：维护意图模板场景导入 ━━━━━━ [✅] 已完成
+  [✅] T32-1  场景 Excel 支持可选 `maintenance_intents` sheet 和模板示例
+  [✅] T32-2  dry-run 校验维护作用域、目标状态、候选活动和维护事实
+  [✅] T32-3  按 `(machine_type_code, issue_type)` upsert `maintenance_intent_template`
+  [✅] T32-4  导入摘要和 preview 展示维护意图计数
+  [✅] T32-5  导入模板可通过现有 API 列表读取并用于 `/solve/maintenance`
+  [✅] T32-6  维护导入/求解测试、场景导入回归、全量 pytest 和前端 build 验证
+
+━━━━━━ TICKET-033：分层求解前健康诊断摘要 ━━━━━━ [✅] 已完成
+  [✅] T33-1  `/solve/layered` 成功响应返回 `layered.preflight_health`
+  [✅] T33-2  `/solve/maintenance` 复用同一字段
+  [✅] T33-3  完整健康检查仍保留在 `diagnostics.layered_health`
+  [✅] T33-4  Solve 页分层/维护解释区展示健康状态、计数和诊断明细
+  [✅] T33-5  分层/维护聚焦测试、全量 pytest 和前端 build 验证
+
+━━━━━━ TICKET-034：场景导入后分层健康诊断 ━━━━━━ [✅] 已完成
+  [✅] T34-1  场景 Excel 支持可选 `layered_health_checks` sheet 和模板示例
+  [✅] T34-2  dry-run 校验机型、目标状态节点、活动范围节点和 include_inactive
+  [✅] T34-3  导入成功后执行声明的分层健康检查
+  [✅] T34-4  导入响应返回 compact `post_import_health_checks`
+  [✅] T34-5  Data Management 导入弹窗展示导入诊断计数和结果表
+  [✅] T34-6  场景导入、分层 API、全量 pytest 和前端 build 验证
+
+━━━━━━ TICKET-035：分层求解层级结果展示与验收闭环 ━━━━━━ [✅] 已完成
+  [✅] T35-1  `/solve/layered` 与 `/solve/maintenance` 返回 `activity_tree` / `state_tree`
+  [✅] T35-2  保留既有 `activity_summary` / `state_summary` 平铺字段
+  [✅] T35-3  状态回放和状态树叶子展示目标状态来源活动或当前状态来源
+  [✅] T35-4  Solve 页任务明细支持活动层级树展示
+  [✅] T35-5  Solve 页 Gantt 支持二级活动分组和折叠查看
+  [✅] T35-6  Solve 页展示维护复用/跳过解释与连续性解释
+  [✅] T35-7  分层集成测试、全量 pytest、前端 e2e 与前端 build 验证
+
+━━━━━━ TICKET-036：状态目标与活动能力模型及交互重构 ━━━━━━ [✅] 已完成
+  [✅] T36-1  状态目标支持任意深度树，活跃无子节点作为原子状态，聚合节点不绑定 facts
+  [✅] T36-2  原子状态写入自动确保全局 `feature_definition` 与机型 `state_feature_def`
+  [✅] T36-3  新增 `atomic_activity`、`activity_package_atomic_ref` 与 `op_rule.atomic_activity_id`
+  [✅] T36-4  展开、健康检查、分层/维护求解、Scheduler loader 和场景导入兼容原子活动引用
+  [✅] T36-5  Data Management 使用状态目标工作台和活动能力工作台
+  [✅] T36-6  场景导入模板支持 `atomic_activities`、`activity_package_atomic_refs` 和 `rules.atomic_activity_code`
+  [✅] T36-7  全量后端 pytest 313 passed，前端 `npm run build` 通过
+
+━━━━━━ STEP 1：求解可解释性深化 ━━━━━━          [ ] 未开始
+  [ ] 1-1  定义解释数据结构（Planner/Scheduler 统一）
+  [ ] 1-2  扩展 /solve 响应解释字段（保持向后兼容）
+  [ ] 1-3  前端最小解释信息展示（不重做页面）
+
+━━━━━━ STEP 2：多目标优化能力 ━━━━━━            [⏳] 首个切片完成
+  [✅] 2-1  Scheduler 已支持单一加权目标表达式与权重生效
+  [✅] 2-2  已新增 activity group span / gaps / interruptions 目标
+  [✅] 2-3  TICKET-029 已补齐接口透传与回归测试；通用目标目录仍待后续扩展
+
+━━━━━━ STEP 3：工序组能力 ━━━━━━                [ ] 未开始
+  [ ] 3-1  数据模型与 schema 设计
+  [ ] 3-2  求解链路兼容（不破坏现有规则）
+  [ ] 3-3  前端分组展示入口
+
+━━━━━━ STEP 4：A* 搜索策略 ━━━━━━               [ ] 未开始
+  [ ] 4-1  Planner 策略接口抽象
+  [ ] 4-2  A* 基线实现与开关
+  [ ] 4-3  端到端对照与性能基线记录
+```
+
+---
+
+## 当前已知问题 / 决策悬挂
+
+- 决策（TICKET-036）：状态目标支持任意深度树；活跃无子节点状态按原子状态展开，聚合状态节点不绑定 `feature_key/operator/target_value` facts。
+- 决策（TICKET-036）：新活动能力主路径为一级/二级 `activity_node` 活动包 + `atomic_activity` 原子活动库 + `activity_package_atomic_ref` 引用；旧三级 `activity_node` 和 `op_rule.activity_node_id` 仅保留兼容。
+- 决策（TICKET-036）：`op_rule.atomic_activity_id` 是新建执行规则的推荐绑定；场景导入中 `rules.atomic_activity_code` 是推荐字段，`rules.activity_node_code` 是 legacy 兼容字段，两者不能同时使用。
+- 决策（TICKET-036）：原子活动任务会携带原子活动和二级活动组元数据供 Scheduler 连续性目标、Gantt 分组和解释结果使用。
+- 待定（TICKET-036）：同一原子活动被多个二级活动包复用时，Scheduler 连续性目标中的归属策略仍需后续设计。
+- 待定（TICKET-036）：活动能力工作台尚未完整重做原子活动规则的新建/编辑表单，当前仍通过既有规则维护入口承接。
+- 待定（TICKET-036）：Solve 页面部分 legacy “三级活动”展示文案后续可改为“执行活动 / 原子活动”。
+- 决策：`TICKET-013` 已完成设计冻结；Phase 1 已通过 `TICKET-014` / `TICKET-015` / `TICKET-016` 分票落地，先在 `TICKET-021` 收敛进正向 BFS，后由 `TICKET-023` 切换为实例级 Partial Order Planner 主流程。
+- 决策：数值型重复与 re-provider 能力当前由 POP 主流程统一承载；`numeric.py` 可暂时保留为历史兼容工具，但不再作为 `build_rag()` 主流程分流。
+- 决策：`TICKET-017` 已完成，numeric 重复步骤与阻塞重排的交叉兼容已覆盖。
+- 决策：重复任务的阻塞定位改为实例级，`/api/v1/solve` 返回 `step_id`，前端 `BlockageDialog` 需传 `blocked_step_id`；`blocked_op_rule_id` 仅保留为兼容降级输入。
+- 决策：当重复规则只提供 `blocked_op_rule_id` 且无法唯一定位实例时，后端返回 `AMBIGUOUS_BLOCKED_STEP`，避免默认命中第一个任务。
+- 决策（2026-06-02）：自发式重复清洁/重复上下电统一建模为 effect-driven re-provider。需要洁净度的后续活动应显式声明数值前置条件（如 `cleanliness > 30`）；当前序机械活动 effect 破坏该条件时，Planner 通过状态回放发现 unmet precondition，并自动插入可重新提供该条件的活动（如清洁/reset），而不是依赖人工代次建模或独立全局 trigger。
+- 决策：Strategy B 与 AB 的回归验证已同步覆盖 numeric repeated steps，确保 repair 插入与实例级阻塞不冲突。
+- 决策：内网开发机一键启动采用 bootstrap / launch 两阶段；Python 继续公网 `pip install`，npm 通过项目级 `.npmrc` 使用公司内网镜像，PostgreSQL 复用既有环境，不引入 Docker 或 request/HTTP 数据加载。
+- 决策：`start.bat` / `start.local.bat` / `start.intranet.bat` 已统一收敛到共享 PowerShell launcher，通过 mode 分流保留 Docker / local / intranet 三种入口。
+- 待定：`primary_feature` 是否作为第二阶段的辅助元数据引入，而非第一阶段主方案。
+- 决策：阈值约束优先作为活动前置条件参与 re-provider 闭包；最终目标层面的 `gte/lte` goal predicate 仍可作为后续独立扩展，不复用 `target_state` 的 equality 语义。
+- 待定：`seeds/005_numeric_phase1_ui_seed.sql` 与 `seeds/006_numeric_phase1_gapped_repeat_ui_seed.sql` 后续是否补充 solve 结果相关表 cleanup，以提升重复加载稳健性。
+- 决策：`Strategy A/AB` 的 blocked step 定位已改为优先按 `blocked_step_id` 精确定位，`blocked_op_rule_id` 仅作兼容回退。
+- 决策：`step_role` diff 对重复 `op_rule_id` 已改为按同一 plan 内实例顺序/step_order 对齐，避免 numeric repeated step 错配。
+- 决策：`start.bat` / `start.local.bat` 已收敛到共享 PowerShell launcher，并通过 `mode` 区分 docker/local/intranet 三种入口。
+- 决策：已新增内网开发机配置教程 `docs/intranet-dev-config-guide.md`，重点说明 `.env`、`frontend/.npmrc`、数据库连通性与常见问题排查。
+- 决策：Scheduler 多资源能力已完成；`resource_reqs` 是主契约，旧 `resource_type/resource_qty` 仅用于兼容旧数据与旧测试。
+- 决策：TICKET-012 已完成落地，下一张实现票可恢复 TICKET-011 / STEP 1 求解解释性深化。
+
+---
+
+## 本轮新增 / 关键文件
+
+- `app/core/planner/numeric.py` — 数值型 Phase 1 planner，实现 exact numeric 目标、重复步骤实例化、隐式子目标与循环检测。
+- `tests/unit/test_numeric_planner.py` — 数值型 planner 单元测试。
+- `tests/e2e/test_numeric_planning.py` — 数值型规划 API 级 E2E 测试。
+- `seeds/005_numeric_phase1_ui_seed.sql` — 数值型 Phase 1 UI 手工验收种子。
+- `seeds/006_numeric_phase1_gapped_repeat_ui_seed.sql` — 间断型重复任务 UI 手工验收种子。
+- `docs/TICKET_017.md` — 数值型重复步骤与阻塞重排兼容性修复工单。
+- `frontend/src/components/BlockageDialog.vue` — 阻塞弹窗改为上传实例级 `blocked_step_id`。
+- `tests/integration/test_step3_api.py` — 增加重复 numeric 步骤的实例级阻塞回归。
+- `tests/integration/test_blockage_strategies.py` — 增加 numeric repeated steps 的 A/B/AB 交叉回归。
+- `deploy/scripts/bootstrap_dev.ps1` — 内网开发机首次环境准备脚本。
+- `deploy/scripts/launch_dev.ps1` — 内网开发机日常启动脚本。
+- `start.intranet.bat` — 内网开发机一键入口。
+- `frontend/.npmrc` — 项目级 npm registry 配置。
+- `docs/TICKET_018.md` — 内网开发机一键启动架构工单。
+- `docs/TICKET_019.md` — 启动脚本统一收敛与模式分流工单。
+- `docs/intranet-dev-config-guide.md` — 内网开发机配置教程。
+- `docs/TICKET_020.md` — 内网开发机配置教程补充工单。
+- `app/core/planner/bfs.py` — 正向 BFS 主策略实现。
+- `docs/TICKET_021.md` — Planner 正向 BFS 搜索主策略改造工单。
+- `tests/unit/test_forward_bfs.py` — BFS 主策略单元测试。
+- `tests/unit/test_scheduler_multi_resource.py` — Scheduler 多资源约束与分配单元测试。
+- `docs/TICKET_022.md` — Scheduler 多资源排程工单。
+- `app/services/scenario_import.py` — TICKET-012 业务场景 Excel 导入解析、校验、模板生成与 strict upsert。
+- `app/api/v1/imports.py` — TICKET-012 场景导入 API 与模板下载 API。
+- `frontend/src/views/DataManagement/index.vue` — 数据管理页新增场景模板下载与导入弹窗。
+- `tests/integration/test_scenario_import_api.py` — 场景导入 dry-run、导入后求解、错误不落库与 100+ rules 覆盖。
+- `docs/layered_activity_state_requirements.md` — 分层活动与分层状态需求文档。
+- `docs/TICKET_024.md` — 分层活动/状态 Phase 1 数据底座工单。
+- `migrations/versions/004_layered_activity_state.py` — 活动/状态层级与 Scope Guard 迁移。
+- `frontend/src/views/DataManagement/ActivityHierarchyPage.vue` — legacy 活动层级管理页；TICKET-036 后主入口为活动能力工作台。
+- `frontend/src/views/DataManagement/StateHierarchyPage.vue` — legacy 状态层级管理页；TICKET-036 后主入口为状态目标工作台。
+- `frontend/src/views/DataManagement/ScopeGuardPage.vue` — Scope Guard 管理页。
+- `tests/integration/test_layered_activity_state_api.py` — 分层数据 API 与旧 solve 兼容回归。
+- `docs/TICKET_025.md` — 分层活动/状态 Phase 2 展开预览工单。
+- `app/services/layered_expansion.py` — 分层目标/活动范围/effective rule 展开服务。
+- `frontend/src/views/DataManagement/LayeredExpansionPage.vue` — 展开预览页。
+- `docs/TICKET_026.md` — 分层活动/状态 Phase 3 可达性和健康检查工单。
+- `app/services/layered_health.py` — Provider/Consumer 图与分层规则健康检查服务。
+- `frontend/src/views/DataManagement/LayeredHealthCheckPage.vue` — 健康检查页。
+- `docs/TICKET_027.md` — 分层活动/状态 Phase 4 Planner/Scheduler 接入工单。
+- `app/services/layered_solve.py` — 分层求解服务，连接展开结果、POP、Scheduler 和状态回放。
+- `frontend/src/views/SolvePage/index.vue` — 求解页新增快照 / 分层模式与分层解释结果页签。
+- `docs/TICKET_028.md` — 分层活动/状态 Phase 5A 维护意图模板与联合求解工单。
+- `migrations/versions/005_maintenance_intent_template.py` — 维护意图模板迁移。
+- `app/services/maintenance_solve.py` — 多维护意图归并与联合 layered solve 服务。
+- `frontend/src/views/DataManagement/MaintenanceIntentTemplatePage.vue` — 维护意图模板管理页。
+- `frontend/src/views/SolvePage/index.vue` — 求解页新增维护模式和维护合并结果展示。
+- `docs/TICKET_029.md` — 分层活动/状态 Phase 5B Scheduler 连续性软成本工单。
+- `app/core/solver/objectives.py` — 加权 objective 合并与活动组 span/gap/interruption 目标。
+- `app/core/scheduler/loader.py` — Scheduler RAG 输入加载活动节点和二级活动组元数据。
+- `app/core/scheduler/model.py` — Scheduler 模型记录 activity groups 并提供 objective cache。
+- `app/core/scheduler/solver.py` — Scheduler 任务输出、持久化和连续性 diagnostics。
+- `tests/unit/test_scheduler_multi_resource.py` — 增加连续性软目标模型测试。
+- `docs/TICKET_030.md` — 分层场景 Excel 导入底座工单。
+- `app/services/scenario_import.py` — 场景导入新增 activity/state/scope guard sheets、rule activity binding、模板示例和校验。
+- `tests/integration/test_scenario_import_api.py` — 增加 layered workbook dry-run/import/solve 和错误不落库测试。
+- `frontend/src/views/DataManagement/index.vue` — 导入摘要展示活动层级、状态层级和 Scope Guard 计数。
+- `docs/TICKET_031.md` — 分层活动选择与维修解释工单。
+- `app/services/layered_solve.py` — 新增 activity selection explanation 和 shared provider consumer 解释。
+- `frontend/src/views/SolvePage/index.vue` — 分层/维修解释页新增活动选择解释表。
+- `docs/TICKET_032.md` — 维护意图模板场景导入工单。
+- `app/services/scenario_import.py` — 场景导入新增 `maintenance_intents` sheet、维护事实解析、校验、模板示例和 upsert。
+- `app/api/v1/imports.py` — 导入响应返回已导入维护意图模板摘要。
+- `frontend/src/views/DataManagement/index.vue` — 导入摘要和 preview 展示维护意图计数。
+- `tests/integration/test_scenario_import_api.py` — 增加维护意图模板导入、重复导入 preview 和 `/solve/maintenance` 集成测试。
+- `docs/TICKET_033.md` — 分层求解前健康诊断摘要工单。
+- `app/services/layered_solve.py` — 分层成功响应新增 compact `layered.preflight_health`。
+- `frontend/src/views/SolvePage/index.vue` — 分层/维护解释页新增求解前诊断摘要和诊断表。
+- `tests/integration/test_layered_activity_state_api.py` — 增加 layered/maintenance preflight health 响应断言。
+- `docs/TICKET_034.md` — 场景导入后分层健康诊断工单。
+- `app/services/scenario_import.py` — 场景导入新增 `layered_health_checks` sheet、导入后健康检查执行和 compact 返回。
+- `app/api/v1/imports.py` — 场景导入响应稳定返回 `post_import_health_checks`。
+- `frontend/src/views/DataManagement/index.vue` — 导入弹窗展示导入诊断计数和 post-import 结果表。
+- `tests/integration/test_scenario_import_api.py` — 增加导入后健康检查 dry-run/import 返回断言。
+- `docs/TICKET_035.md` — 分层求解层级结果展示与 18.1-18.6 验收闭环工单。
+- `app/services/layered_solve.py` — 新增 activity/state tree 返回与目标状态来源解释。
+- `frontend/src/views/SolvePage/index.vue` — 任务明细层级树、Gantt 二级活动折叠、维修解释和连续性解释展示。
+- `tests/integration/test_layered_activity_state_api.py` — 增加目标状态来源与维护来源断言。
+- `frontend/e2e/tests/solve.spec.ts` — 任务明细 Tab 下验证基础求解结果。
+- `frontend/e2e/tests/blockage-strategy-a.spec.ts` — 任务明细 Tab 下验证 Strategy A 阻塞重排。
+- `frontend/e2e/tests/blockage-strategy-a-fill-gaps.spec.ts` — 任务明细 Tab 下验证 Strategy A 填空档场景。
+- `frontend/e2e/tests/blockage-strategy-b.spec.ts` — 任务明细 Tab 下验证 Strategy B 维修插入。
+- `docs/TICKET_036.md` — 状态目标与活动能力模型及交互重构工单。
+- `migrations/versions/007_atomic_activity_refactor.py` — 状态节点任意深度、原子活动、活动包引用和 `op_rule.atomic_activity_id` 迁移。
+- `app/db/models.py` — 新增 `AtomicActivity`、`ActivityPackageAtomicRef`，并保留 legacy `ActivityNode` 兼容关系。
+- `app/db/schemas.py` — 新增原子活动、活动包引用、原子活动规则绑定和分层响应字段。
+- `app/api/v1/master_data.py` — 新增原子活动 CRUD、活动包引用 CRUD、状态目标自动补齐特征定义和规则绑定校验。
+- `app/services/layered_expansion.py` — 状态目标展开到叶子原子状态，活动范围展开到原子活动引用并兼容 legacy 三级活动。
+- `app/services/layered_health.py` — 健康检查响应透出 `atomic_activity_id` 并兼容原子活动 Provider/Consumer。
+- `app/core/scheduler/loader.py` — Scheduler RAG 输入加载原子活动和二级活动包元数据。
+- `frontend/src/views/DataManagement/StateTargetWorkspace.vue` — 状态目标工作台，替代旧状态层级入口作为主维护流。
+- `frontend/src/views/DataManagement/ActivityCapabilityWorkspace.vue` — 活动能力工作台，维护一级/二级活动包、原子活动库和包引用。
+- `docs/business_user_manual_layered_planning.md` — 业务使用说明已同步到 TICKET-036 新模型口径。
+- `docs/master-data-excel-import.md` — 场景导入设计已同步原子活动、活动包引用、维护意图和导入后健康检查字段。
+- `docs/TICKET_037.md` — 网络编辑器绑定模型与 API 工单。
+- `docs/TICKET_038.md` — 网络编辑器图投影与校验服务工单。
+- `docs/TICKET_039.md` — 数据管理网络编辑器 MVP 工单。
+- `docs/TICKET_040.md` — 求解预检与求解器准备交接工单。
+- `docs/TICKET_041.md` — 网络编辑器端到端验收与文档工单。
+- `migrations/versions/008_network_editor_bindings.py` — 状态引用和活动-状态绑定语义层迁移。
+- `app/services/network_editor.py` — 网络编辑器图投影、校验、影响分析和求解预检服务。
+- `frontend/src/views/DataManagement/NetworkEditorWorkspace.vue` — Data Management 网络编辑器工作区。
+- `docs/network-editor-user-guide.md` — 网络编辑器用户与验收说明。
+
+---
+
+## 深入参考
+
+| 需要了解 | 去看 |
+|----------|------|
+| 系统宪法与硬约束 | [ANCHOR.md](./ANCHOR.md) |
+| 数值型状态规划设计工单 | [TICKET_013.md](./TICKET_013.md) |
+| 主数据导入设计文档 | [master-data-excel-import.md](./master-data-excel-import.md) |
+| V0.2 归档总结 | [archive/ARCHIVE_V0.2.md](./archive/ARCHIVE_V0.2.md) |
+| V0.2 归档状态快照 | [archive/STATE_V0.2.md](./archive/STATE_V0.2.md) |
+| API 契约与错误格式 | [protocols/api.md](./protocols/api.md) |
+| ORM/Schema 契约 | [protocols/db.md](./protocols/db.md) |
+| Planner 协议 | [protocols/planner.md](./protocols/planner.md) |
+| Scheduler 协议 | [protocols/scheduler.md](./protocols/scheduler.md) |
+| 历史设计与演进 | [archive/](./archive/) |
+---
+
+## Update 2026-05-29: TICKET-012 当前任务切换
+
+TICKET-012 重新激活为当前任务，范围从“主数据 Excel 单文件导入”重设计为“业务场景导入包”。目标是用一个 `.xlsx` 场景文件支撑真实端到端测试，覆盖 100+ 活动规则、资源、设备类型、设备实例、状态特征定义、起点/目标状态与 solve_case 元数据，并提供 dry-run 校验与 strict upsert 导入。
+
+## Update 2026-05-29: TICKET-012 已完成
+
+已新增 `POST /api/v1/imports/scenario`、`GET /api/v1/imports/scenario-template`、后端导入服务、前端导入入口和集成测试。导入支持完整业务场景 dry-run、行级错误、create/update 预估、strict upsert、导入后 solve_case ID 映射，并已通过导入后 `/solve` 验证和 105 条 rules dry-run 覆盖。
+
+## Update 2026-05-29: 工程机一键启动适配
+
+TICKET-012 新增 `openpyxl` 依赖后，已确认旧工程机 `.venv` 可能缺少该依赖。`deploy/scripts/launch_dev.ps1` 已增加启动前后端依赖自检：若 `openpyxl` 缺失，会自动执行 `pip install -r requirements.txt` 后再启动后端。`deploy/scripts/bootstrap_dev.ps1` 的 Python 探测也已增强，避免某个不可运行的 `py.exe/python.exe` 候选直接中断探测流程。
+
+## Update 2026-05-29: 数据管理页 mounted 错误兜底
+
+用户反馈 DataManagement 下 RulePage/ResourcePage/MachinePage 在 mounted 阶段出现 unhandled promise error。已将 Vite API proxy 默认目标改为同机后端 `http://127.0.0.1:8000`，并支持通过 `VITE_API_PROXY_TARGET` 覆盖；同时为 DataManagement 各子页的 mounted/load 请求增加 catch 兜底，避免后端或代理短暂不可用时冒泡为 Vue mounted hook 未处理异常。
+> Update 2026-07-02: 虚拟活动已收口为纯管理包。后端 `app/services/network_editor.py` 停止生成 `VIRTUAL_OUTPUT_NOT_IMPLEMENTED`，solver-ready 投影和求解预检不再把虚拟活动 `context_input/declared_output` 解释为原子活动输入/输出或继承前置；`app/api/v1/master_data.py` 拒绝对 `ActivityNode(level 1/2)` 创建新的状态绑定。前端 `frontend/src/views/DataManagement/NetworkEditorWorkspace.vue` 移除了虚拟活动状态绑定入口、专注画布边界状态/实现覆盖展示和虚拟活动输出实现摘要，历史 `context_input/declared_output` 仅保留兼容展示并标注历史口径。文档 `docs/network-editor-user-guide.md`、`docs/network-editor-acceptance-matrix.md` 同步为“虚拟活动管理包 + 原子活动 input/output 绑定”口径；新增回归 `tests/integration/test_master_data_api.py::test_activity_state_binding_rejects_virtual_activity_targets`。验证：`python -m py_compile app/services/network_editor.py app/api/v1/master_data.py`、`.venv\Scripts\python.exe -m pytest tests/integration/test_master_data_api.py::test_activity_state_binding_rejects_virtual_activity_targets -q`、`npm.cmd run build`、`npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "creates draft bindings from the editor form|opens virtual activity focus canvas"`、`python scripts/check_terminology.py` 均通过；`git diff --check` 仅提示既有 LF/CRLF warning。TICKET-064（原子状态判定统一）本轮未推进，仍保持 planned。
+
+> Update 2026-07-02 follow-up: Network Editor 状态包容器尺寸调整改为逐轴安全落草稿。手动 resize 会按宽/高独立判断内部节点包围范围，允许满足条件的轴生效，不满足的轴保持当前值或提升到最小安全尺寸；子状态包或节点扩展超出父状态包时，父容器按超出的轴逐级自动扩展。X6 容器模型现在读取 `_network_editor_container` 作为尺寸下限，保证 `containerDraft` 能在 X6 画布即时显示。自动整理入口改为状态包内部子节点按当前容器宽度换行，并根据排布结果重算高度后联动父容器扩展；活动节点不作为本轮自动整理入口。新增 E2E 覆盖 `container resize keeps an unsafe axis while applying a safe axis`、`container resize expands parent state packages when a child container exceeds bounds`、`auto arrange wraps state package children by container width and grows height`。验证：`npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "container resize|auto arrange"` 3 passed；`npm.cmd run build` passed with existing Vite chunk-size warning；`git diff --check -- frontend/src/views/DataManagement/NetworkEditorWorkspace.vue frontend/src/views/DataManagement/components/NetworkEditorX6Canvas.vue frontend/e2e/tests/network-editor.spec.ts` 仅提示既有 LF/CRLF warning。TICKET-064 本轮仍未推进。
+
+> Update 2026-07-02 follow-up 2: TICKET-065 completed. Scheduler now supports state-package continuity soft costs alongside the legacy activity-group continuity objectives. Layered solve derives per-step `state_continuity_groups` from target goal state `source_path` ancestors when a planned task directly achieves a goal fact; maintenance solve inherits the same path, while direct desired facts without state-node paths do not create state groups. New objective types are `minimize_state_group_span`, `minimize_state_group_gaps`, and `minimize_state_group_interruptions`; diagnostics now return `state_group_continuity`, and persisted task JSON includes `state_continuity_groups`. Solve page continuity preference now targets state packages for layered/maintenance modes and sends only `minimize_makespan` for snapshot mode. New ticket: `docs/TICKET_065.md`. Verification: focused state continuity tests 7 passed; objective/scheduler/state-continuity suite 15 passed; planner integration + serial API regression 29 passed; `py_compile` passed for changed backend modules; `npm.cmd run build` passed with the existing Vite chunk-size warning. TICKET-064 remains planned and was not advanced.
+> Update 2026-07-02 follow-up 3: TICKET-066 completed. Added a mechanical-integration-shaped layered solve regression dataset for state-package continuity: the top package `MECH_INTEGRATION_COMPLETE` contains child packages `STRUCTURE_ASSEMBLY_COMPLETE` and `TRANSFER_MECHANISM_READY`, with four target leaf states realized by four mechanical tasks sharing one mechanical-team resource. The regression verifies that parent and child state packages appear in `state_group_continuity`, each task carries top-level plus child package membership, and both child packages schedule compactly under the state continuity objectives. New ticket: `docs/TICKET_066.md`. Verification: `.venv\Scripts\python.exe -m pytest tests\integration\test_state_group_continuity.py -q` passed 3 tests. TICKET-064 remains planned and was not advanced.
+> Update 2026-07-02 follow-up 4: TICKET-066 database seed imported. Added `seeds/010_mechanical_integration_state_continuity_seed.sql` and loaded it into the local PostgreSQL database with `scripts/load_seed_data.py`. The imported dataset creates machine type `MECH_INTEGRATION_CONTINUITY`, machine `MI-CONT-001`, current state `Mechanical integration continuity start`, target package `MECH_INTEGRATION_COMPLETE`, and activity scope `MECH_INTEGRATION_ACT`. A direct `solve_layered()` check against the imported seed returned status `done`, makespan 40, and state continuity groups for `MECH_INTEGRATION_COMPLETE`, `STRUCTURE_ASSEMBLY_COMPLETE`, and `TRANSFER_MECHANISM_READY`, with both child packages compact. TICKET-064 remains planned and was not advanced.
+> Update 2026-07-02 follow-up 5: TICKET-067 completed. Layered solve activity scope is now optional: when `activity_scope_node_ids` is empty, `solve_layered()` defaults to all active top-level activity scopes for the machine type and records `activity_scope_defaulted`, `requested_activity_scope_node_ids`, and effective `activity_scope_node_ids` in persisted overrides and layered response metadata. Solve page no longer blocks layered solve when activity range is blank and labels the field as defaulting to all level-1 activity scopes. Verification: `tests\integration\test_state_group_continuity.py -q` passed 4 tests; `py_compile app\services\layered_solve.py` passed; `npm.cmd run build` passed with the existing chunk-size warning; direct DB solve for `MI-CONT-001` with empty activity scope returned status `done`, `activity_scope_defaulted=True`, effective scope `[10]`, and makespan 40. TICKET-064 remains planned and was not advanced.
+> Update 2026-07-02 follow-up 6: TICKET-068 completed. Network Editor atomic state creation now uses template state dimensions instead of arbitrary solver feature keys. The state drawer name field supports searching existing template-backed atomic states; the dimension selector only lists template keys containing `_dim_` and not `__`; target values come only from the selected binary enum template. Saving a new atomic state derives `feature_key` as `template_key__normalized_state_name`, records `metadata_json.dimension_template_key` and `state_object_name`, and exact matches by name + template + target reuse the same `StateNode`; adding that state to another package creates a `StateNodeReference` so existing output realizer bindings stay attached to the shared state body. Backend validation now enforces template existence, binary enum allowed values, derived concrete keys, concrete `StateFeatureDef` creation from the template, and unified commit exact reuse. The state dimension page keeps showing template dimensions only and now states when the current machine type has no templates. Verification: `py_compile app\api\v1\master_data.py` passed; `pytest tests\integration\test_master_data_api.py -k "template_dimension or exact_template_state" -q` passed 3 tests; `pytest tests\integration\test_state_group_continuity.py -q` passed 4 tests; `npm.cmd run build` passed with the existing chunk-size warning; focused Network Editor E2E for same-dimension, exact template reuse, state package reference reuse, and draft refs passed 4 tests. `network-editor-full-flow.spec.ts` still has two stale expectations around virtual-activity package binding and node-name `white-space`; those remain a separate E2E cleanup. TICKET-064 remains planned and was not advanced.
+> Update 2026-07-02 follow-up 7: TICKET-068 follow-up fixed the state drawer name search visibility. The first TICKET-068 pass limited autocomplete suggestions to already template-backed states, so legacy direct-feature atomic states or older Network Editor data could make the name field look like a plain input with no search. The suggestion pool now includes all active atomic states in the current machine type; selecting a template-backed suggestion still fills dimension template and target value, while selecting a legacy suggestion only fills the name/reference candidate without inventing a template. The name field now has an explicit search placeholder and triggers suggestions on focus. Verification: `npm.cmd run build` passed with the existing chunk-size warning; focused E2E `network-editor.spec.ts --grep "searches existing atomic state names|exact same-name template|exact template state"` passed 3 tests.
+> Update 2026-07-02 follow-up 8: TICKET-069 completed. Solve page Gantt now supports a `传统视图 / 状态泳道` switch. Traditional view preserves the existing task/activity-group Gantt and activity-group collapse controls; state-lane view groups tasks by the most specific `state_continuity_groups` state package, shows a visible lane summary, renders lane backgrounds/stripes, keeps task bar colors for `step_role`, and adds tooltip context for state package path, activity group, resource, time, and role. State lanes remain available when continuity optimization was not enabled as long as task membership data exists, with an explicit `未启用连续性优化` tag; results without state package memberships fall back to traditional view and disable state lanes. `ScheduleTaskItem` schema now documents the already-returned activity group and state continuity fields. Verification: `.venv\Scripts\python.exe -m py_compile app\db\schemas.py` passed; `npm.cmd run build` passed with the existing chunk-size warning; `npm.cmd run test:e2e -- solve.spec.ts --project=chromium` passed 4 tests; `git diff --check` on touched files only reported existing LF/CRLF warnings. TICKET-064 remains planned and was not advanced.
+> Update 2026-07-02 follow-up 9: TICKET-070 completed. Fixed two Solve page regressions from the Gantt lane work: snapshot mode now keeps the continuity switch clickable as `活动连续性` and sends the legacy activity-group continuity objectives when enabled, while layered/maintenance modes continue to use `状态包连续性`; the `当前结果没有状态包归属数据` message no longer appears while users are simply viewing traditional Gantt, and state-lane availability can fall back to `state_group_continuity.groups[*].task_step_orders` when task rows do not carry `state_continuity_groups`. Verification: `.venv\Scripts\python.exe -m py_compile app\db\schemas.py` passed; `npm.cmd run build` passed with the existing chunk-size warning; `npm.cmd run test:e2e -- solve.spec.ts --project=chromium` passed 4 tests; `git diff --check` on touched files only reported existing LF/CRLF warnings. TICKET-064 remains planned and was not advanced.
+> Update 2026-07-08 follow-up: Network Editor layout submit now preserves the edit-mode visual layout exactly in preview mode. Pure layout-only submits no longer reload the graph on success; they keep the current layout draft as the preview source of truth while clearing the draft-change list and switching to preview. Mixed submits with layout changes preserve a submitted-layout overlay across reloads, while manual refresh/type changes clear temporary layout state and reload from committed data. Draft display now records one row per effective user action: single-node moves remain visible, but batch/container/auto-arrange actions are grouped. Verification: `npm.cmd run test:e2e -- e2e/tests/network-editor.spec.ts --grep "auto arrange|redraws from commit reload|cancels edit session|moves internal nodes|moves expanded containers"` passed 9 tests; `npm.cmd run build` passed with the existing Vite chunk-size warning; `git diff --check -- frontend/src/views/DataManagement/NetworkEditorWorkspace.vue frontend/e2e/tests/network-editor.spec.ts` only reported existing LF/CRLF warnings.
+> Update 2026-07-11 follow-up: TICKET-084 completed. Network Editor state-transition nested expansion now keeps the expanded package outer frame at the exact collapsed-node top-left position while moving only intersecting right-side or lower sibling packages out of the expanded bounds. Non-ELK relay fallback positions are anchored beside visible output states, container-title obstacle geometry reads the actual X6 container coordinates, and all sibling avoidance offsets remain display-only. Collapse restores the parent-level geometry because these offsets never enter layout drafts or commit payloads. Added a six-leaf wide child-package E2E regression covering exact expansion anchoring, sibling non-overlap, and coordinate restoration. Real-browser verification on `MECH_INTEGRATION_HIGH_PARALLEL` confirmed `state_node:113` keeps the same X6 transform (`translate(330,90)`) before and after expansion. Verification: focused Playwright 3 passed; state expansion/relay/proxy regression 13 passed; `npm.cmd run build` passed with the existing Vite chunk-size warning; `git diff --check` only reported existing LF/CRLF conversion warnings. No backend API, schema, projection contract, Scheduler, or RAGBuilder changes.
+
+> Update 2026-07-12: TICKET-086 completed the full `codex/网络编辑器v2` review against `master`. P1/P2 fixes cover Network Editor debounce completion and layout projection, deployment process ownership, clean PostgreSQL seed repeatability, strict enum readiness, stable system-status disclosure/threading, legacy commit ID coercion, and pure-component blockage reason loading. The final candidate removes tracked dependency caches and release ZIPs, adds explicit line-ending policy, and keeps useful source/design/test artifacts. Verification on the reviewed candidate: rebuilt bundled Python 3.12.13 environment, backend `326 passed`, Vite production build passed, Chromium Playwright `78 passed`, PostgreSQL 15 Alembic 001-009 plus seeds 001-011 loaded twice with strict readiness `ready` and zero issues, terminology/compile/JavaScript/ANCHOR/security/conflict scans passed, and cumulative `git diff --check master` is clean. Residual P3 debt: the existing 4.6 MB Vite chunk warning and SQLAlchemy teardown warning for the historical `candidate_plan`/`solve_request` FK cycle.

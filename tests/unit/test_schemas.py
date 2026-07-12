@@ -155,6 +155,7 @@ class TestResourceSchemas:
     def test_resource_create_valid(self):
         """Test valid resource creation."""
         data = {
+            "machine_id": 1,
             "code": "TECH-01",
             "name": "Technician John",
             "resource_type": "TECHNICIAN",
@@ -170,6 +171,7 @@ class TestResourceSchemas:
     def test_resource_create_invalid_capacity(self):
         """Test that capacity must be at least 1."""
         data = {
+            "machine_id": 1,
             "code": "TECH-01",
             "name": "Test",
             "resource_type": "TECHNICIAN",

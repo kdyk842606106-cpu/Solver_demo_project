@@ -11,11 +11,16 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.db.session import async_engine
-from app.api.v1 import master_data, plans, solve, state
+from app.api.v1 import imports, master_data, plans, solve, state, system
+from app.services.system_status import get_release_info
 
-FRONTEND_INDEX = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
+FRONTEND_ROOT = Path(__file__).resolve().parent.parent / "frontend"
+FRONTEND_DIST = FRONTEND_ROOT / "dist"
+FRONTEND_DIST_INDEX = FRONTEND_DIST / "index.html"
+FRONTEND_DEV_INDEX = FRONTEND_ROOT / "index.html"
 
 
 @asynccontextmanager
@@ -23,6 +28,8 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
     print("Starting up...")
+    from app.db.session import patch_sqlite_types
+    patch_sqlite_types()
     yield
     # Shutdown
     print("Shutting down...")
@@ -86,23 +93,48 @@ app.include_router(solve.router, prefix="/api/v1")
 app.include_router(state.router, prefix="/api/v1")
 app.include_router(master_data.router, prefix="/api/v1")
 app.include_router(plans.router, prefix="/api/v1")
+app.include_router(imports.router, prefix="/api/v1")
+app.include_router(system.router, prefix="/api/v1")
+app.mount(
+    "/assets",
+    StaticFiles(directory=FRONTEND_DIST / "assets", check_dir=False),
+    name="frontend-assets",
+)
 
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "healthy", "version": "0.1.0"}
+    release = get_release_info()
+    return {
+        "status": "healthy",
+        "version": release["app_version"],
+        "commit": release["app_commit"],
+        "release_id": release["release_id"],
+    }
 
 
 @app.get("/")
 async def frontend_index():
-    """Serve the local single-file frontend from the API host to avoid file:// origins."""
-    if not FRONTEND_INDEX.exists():
-        raise HTTPException(status_code=404, detail="Frontend index.html not found")
-    return FileResponse(FRONTEND_INDEX)
+    """Serve the built frontend from the API host, falling back to the Vite entry."""
+    return _frontend_index_response()
 
 
 @app.get("/frontend")
 async def frontend_alias():
     """Convenience alias for the local frontend."""
-    return await frontend_index()
+    return _frontend_index_response()
+
+
+@app.get("/frontend/{path:path}")
+async def frontend_spa_alias(path: str):
+    """Serve the frontend SPA for browser routes under /frontend."""
+    return _frontend_index_response()
+
+
+def _frontend_index_response():
+    if FRONTEND_DIST_INDEX.exists():
+        return FileResponse(FRONTEND_DIST_INDEX)
+    if FRONTEND_DEV_INDEX.exists():
+        return FileResponse(FRONTEND_DEV_INDEX)
+    raise HTTPException(status_code=404, detail="Frontend index.html not found")

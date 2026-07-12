@@ -27,12 +27,12 @@ async def load_rules(
 ) -> list[OpRule]:
     """
     Load all operation rules for a machine type.
-    
+
     Args:
         machine_type_id: ID of the machine type
         session: SQLAlchemy async session
         active_only: If True, only load active rules
-        
+
     Returns:
         List of OpRule objects with preconditions, effects, and resource requirements loaded
     """
@@ -86,34 +86,34 @@ def find_ops_for_delta(
 ) -> list[OpRule]:
     """
     Find operations that can produce a specific effect.
-    
+
     Effect matching: given a feature key and target value,
     find all operations whose effects include that transformation.
-    
-    For set effects: checks if effect.new_value == target_value
-    For increment/decrement effects: simulates applying the effect to
+
+    For set/reset effects: checks if effect.new_value == target_value
+    For increment/decrement/sub effects: simulates applying the effect to
     current_state and checks if result matches target_value.
-    
+
     Args:
         feature_key: Feature key to change
         target_value: Target value for the feature
         rules: List of OpRule objects to search
-        current_state: Current state dict for simulating increment/decrement
-        
+        current_state: Current state dict for simulating increment/decrement/sub
+
     Returns:
         List of OpRule objects that can produce the target effect
     """
     matching_ops = []
     evaluator = RuleEvaluator()
-    
+
     for rule in rules:
         for effect in rule.effects:
             if effect.feature_key != feature_key:
                 continue
-            
+
             effect_type = getattr(effect, 'effect_type', 'set')
-            
-            if effect_type == 'set':
+
+            if effect_type in {'set', 'reset'}:
                 if effect.new_value == target_value:
                     matching_ops.append(rule)
                     break
@@ -124,7 +124,7 @@ def find_ops_for_delta(
                     if result.get(feature_key) == target_value:
                         matching_ops.append(rule)
                         break
-    
+
     return matching_ops
 
 
@@ -137,37 +137,37 @@ def find_provider(
 ) -> Optional[OpRule]:
     """
     Find an operation that can satisfy a precondition.
-    
+
     Backward matching: given a precondition (feature_key + required_value),
     find an operation among candidates whose effects can satisfy it.
-    
+
     When multiple candidates can satisfy the precondition, select the one
     with the shortest duration (optimal selection for RAG construction).
-    
+
     Args:
         feature_key: Feature key required by precondition
         required_value: Value required by precondition
         candidates: List of candidate OpRule objects
         exclude: Optional OpRule to exclude from consideration
-        current_state: Current state dict for simulating increment/decrement
-        
+        current_state: Current state dict for simulating increment/decrement/sub
+
     Returns:
         Best OpRule that can satisfy the precondition, or None if not found
     """
     providers = []
     evaluator = RuleEvaluator()
-    
+
     for rule in candidates:
         if exclude and rule.id == exclude.id:
             continue
-        
+
         for effect in rule.effects:
             if effect.feature_key != feature_key:
                 continue
-            
+
             effect_type = getattr(effect, 'effect_type', 'set')
-            
-            if effect_type == 'set':
+
+            if effect_type in {'set', 'reset'}:
                 if effect.new_value == required_value:
                     providers.append(rule)
                     break
@@ -178,10 +178,10 @@ def find_provider(
                     if result.get(feature_key) == required_value:
                         providers.append(rule)
                         break
-    
+
     if not providers:
         return None
-    
+
     # Select the one with shortest duration (optimal)
     return min(providers, key=lambda r: r.duration_min)
 
@@ -189,10 +189,10 @@ def find_provider(
 def get_precondition_dict(preconditions: list[OpRulePrecond]) -> dict[str, tuple[str, str]]:
     """
     Convert preconditions list to dictionary format.
-    
+
     Args:
         preconditions: List of OpRulePrecond objects
-        
+
     Returns:
         Dictionary mapping feature_key to (operator, value)
     """
@@ -202,10 +202,10 @@ def get_precondition_dict(preconditions: list[OpRulePrecond]) -> dict[str, tuple
 def get_effect_dict(effects: list[OpRuleEffect]) -> dict[str, str]:
     """
     Convert effects list to dictionary format.
-    
+
     Args:
         effects: List of OpRuleEffect objects
-        
+
     Returns:
         Dictionary mapping feature_key to new_value
     """
@@ -215,21 +215,21 @@ def get_effect_dict(effects: list[OpRuleEffect]) -> dict[str, str]:
 def rule_summary(rule: OpRule) -> str:
     """
     Generate a human-readable summary of an operation rule.
-    
+
     Args:
         rule: OpRule object
-        
+
     Returns:
         Summary string
     """
     preconds = ", ".join(
-        f"{p.feature_key}={p.feature_value}" 
+        f"{p.feature_key}={p.feature_value}"
         for p in rule.preconditions
     ) or "none"
-    
+
     effects = ", ".join(
-        f"{e.feature_key}→{e.new_value}" 
+        f"{e.feature_key}→{e.new_value}"
         for e in rule.effects
     ) or "none"
-    
+
     return f"{rule.code}({rule.duration_min}min): [{preconds}] → [{effects}]"

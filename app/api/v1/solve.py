@@ -19,53 +19,93 @@ from app.db.models import (
     MachineState,
     SolveRequest,
 )
-from app.db.schemas import SolveRequestCreate
+from app.db.schemas import LayeredSolveRequest, MaintenanceSolveRequest, SolveRequestCreate
 from app.db.session import get_db_session
 from app.core.planner.search import build_rag, save_candidate_plan
 from app.core.planner.state import load_state, compute_state_delta
 from app.core.scheduler.solver import (
-    TaskResult,
     solve_schedule,
     save_schedule_result,
 )
 from app.core.solver.step_role import compute_step_role_diff
+from app.services.layered_solve import solve_layered
+from app.services.maintenance_solve import solve_maintenance
 
 router = APIRouter(tags=["solve"])
 
 
-def _compute_critical_path(tasks: list[TaskResult]) -> list[str]:
-    """Return op_codes on the critical path, in chronological order.
+@router.post("/solve/layered")
+async def solve_layered_endpoint(
+    request: LayeredSolveRequest,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Run a solve from layered target states and activity scopes."""
+    return await solve_layered(request, db)
 
-    Algorithm: from tasks that end at makespan, trace backwards through
-    "tight" edges (task.start_min == predecessor.end_min).
+
+@router.post("/solve/maintenance")
+async def solve_maintenance_endpoint(
+    request: MaintenanceSolveRequest,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Run one joint solve from selected maintenance intent templates."""
+    return await solve_maintenance(request, db)
+
+
+class AmbiguousBlockedStepError(Exception):
+    """Raised when a legacy blockage request cannot identify one instance."""
+
+
+async def _resolve_blocked_step_for_new_plan(
+    db: AsyncSession,
+    plan_id: int,
+    blocked_step_id: int | None,
+    blocked_op_rule_id: int | None,
+) -> CandidatePlanStep | None:
+    """Resolve which step in the new plan should receive the blockage.
+
+    Prefer an explicit parent blocked_step_id because it identifies a concrete
+    step instance. For legacy callers that only pass blocked_op_rule_id, fall
+    back to the unique matching step when possible.
     """
-    if not tasks:
-        return []
+    parent_step: CandidatePlanStep | None = None
+    if blocked_step_id is not None:
+        parent_step = await db.get(CandidatePlanStep, blocked_step_id)
+        if parent_step is not None:
+            step_result = await db.execute(
+                select(CandidatePlanStep)
+                .where(CandidatePlanStep.candidate_plan_id == plan_id)
+                .where(CandidatePlanStep.step_order == parent_step.step_order)
+            )
+            blocked_step = step_result.scalar_one_or_none()
+            if blocked_step is not None:
+                return blocked_step
+            blocked_op_rule_id = parent_step.op_rule_id
 
-    by_order: dict[int, TaskResult] = {t.step_order: t for t in tasks}
-    makespan = max(t.end_min for t in tasks)
+    if blocked_op_rule_id is None:
+        return None
 
-    on_path: set[int] = set()
-    stack = [t.step_order for t in tasks if t.end_min == makespan]
-
-    while stack:
-        order = stack.pop()
-        if order in on_path:
-            continue
-        task = by_order.get(order)
-        if task is None:
-            continue
-        on_path.add(order)
-        for pred_order in task.predecessors:
-            pred = by_order.get(pred_order)
-            if pred is not None and pred.end_min == task.start_min:
-                stack.append(pred_order)
-
-    path_tasks = sorted(
-        [by_order[o] for o in on_path],
-        key=lambda t: t.start_min,
+    step_result = await db.execute(
+        select(CandidatePlanStep)
+        .where(CandidatePlanStep.candidate_plan_id == plan_id)
+        .where(CandidatePlanStep.op_rule_id == blocked_op_rule_id)
+        .order_by(CandidatePlanStep.step_order)
     )
-    return [t.op_rule_code for t in path_tasks]
+    matching_steps = step_result.scalars().all()
+    if not matching_steps:
+        return None
+
+    if len(matching_steps) == 1:
+        return matching_steps[0]
+
+    if parent_step is not None:
+        for step in matching_steps:
+            if step.step_order == parent_step.step_order:
+                return step
+
+    raise AmbiguousBlockedStepError(
+        "AMBIGUOUS_BLOCKED_STEP: repeated task requires blocked_step_id"
+    )
 
 
 @router.post("/solve")
@@ -186,6 +226,7 @@ async def solve(
                 "status": "failed",
                 "error_code": error_code,
                 "error_message": plan_result.error_message,
+                "diagnostics": plan_result.diagnostics,
             }
 
         parent_plan_id = request.parent_plan_id
@@ -212,26 +253,29 @@ async def solve(
 
         new_blocked_step_id = None
         if strategy in ("A", "AB") and strategy_a_offset is not None:
-            # Determine which op_rule_id to look for in the new plan's steps.
-            # Frontend sends blocked_op_rule_id; legacy callers may send blocked_step_id.
-            target_op_rule_id: int | None = None
-            if blocked_op_rule_id is not None:
-                target_op_rule_id = blocked_op_rule_id
-            elif blocked_step_id is not None:
-                parent_blocked_step = await db.get(CandidatePlanStep, blocked_step_id)
-                if parent_blocked_step is not None:
-                    target_op_rule_id = parent_blocked_step.op_rule_id
-
-            if target_op_rule_id is not None:
-                step_result = await db.execute(
-                    select(CandidatePlanStep)
-                    .where(CandidatePlanStep.candidate_plan_id == plan_id)
-                    .where(CandidatePlanStep.op_rule_id == target_op_rule_id)
+            try:
+                blocked_step = await _resolve_blocked_step_for_new_plan(
+                    db=db,
+                    plan_id=plan_id,
+                    blocked_step_id=blocked_step_id,
+                    blocked_op_rule_id=blocked_op_rule_id,
                 )
-                blocked_step = step_result.scalar_one_or_none()
-                if blocked_step is not None:
-                    blocked_step.not_before = strategy_a_offset
-                    new_blocked_step_id = blocked_step.id
+            except AmbiguousBlockedStepError as exc:
+                req_id = solve_req.id
+                solve_req.status = "failed"
+                solve_req.solved_at = datetime.now(timezone.utc)
+                await db.commit()
+                return {
+                    "solve_request_id": req_id,
+                    "status": "failed",
+                    "candidate_plan_id": plan_id,
+                    "error_code": "AMBIGUOUS_BLOCKED_STEP",
+                    "error_message": str(exc),
+                }
+
+            if blocked_step is not None:
+                blocked_step.not_before = strategy_a_offset
+                new_blocked_step_id = blocked_step.id
 
         if strategy in ("A", "B", "AB"):
             blockage_event = BlockageEvent(
@@ -255,6 +299,10 @@ async def solve(
 
         if sched_result.status not in ("optimal", "feasible"):
             error_code = "INFEASIBLE" if sched_result.status == "infeasible" else "SOLVER_TIMEOUT"
+            diagnostics = {
+                "planner": plan_result.diagnostics,
+                "schedule": sched_result.diagnostics,
+            }
 
             req_id = solve_req.id
             solve_req.status = "failed"
@@ -266,6 +314,7 @@ async def solve(
                 "candidate_plan_id": plan_id,
                 "error_code": error_code,
                 "error_message": sched_result.error_message,
+                "diagnostics": diagnostics,
             }
 
         result_id = await save_schedule_result(sched_result, solve_req.id, plan_id, db)
@@ -279,7 +328,11 @@ async def solve(
             .where(CandidatePlanStep.candidate_plan_id == plan_id)
         )
         plan_steps = {
-            s.op_rule_id: {"not_before": s.not_before, "step_role": s.step_role or "normal"}
+            s.step_order: {
+                "step_id": s.id,
+                "not_before": s.not_before,
+                "step_role": s.step_role or "normal",
+            }
             for s in steps_result.scalars().all()
         }
 
@@ -292,19 +345,30 @@ async def solve(
             for k, v in sorted(delta.items())
         ]
 
-        critical_path = _compute_critical_path(sched_result.tasks or [])
+        critical_path = sched_result.critical_path or []
 
         tasks_response = []
         for t in sched_result.tasks:
-            step_meta = plan_steps.get(t.op_rule_id)
+            step_meta = plan_steps.get(t.step_order)
             tasks_response.append({
                 "step_order": t.step_order,
+                "step_id": step_meta["step_id"] if step_meta else None,
                 "op_rule_id": t.op_rule_id,
                 "op_rule_code": t.op_rule_code,
+                "op_rule_name": t.op_rule_name,
                 "start_min": t.start_min,
                 "end_min": t.end_min,
                 "duration_min": t.duration_min,
                 "resources": t.resources,
+                "resource_type": t.resource_type,
+                "resource_reqs": t.resource_reqs,
+                "activity_node_id": t.activity_node_id,
+                "activity_node_code": t.activity_node_code,
+                "activity_node_level": t.activity_node_level,
+                "activity_group_id": t.activity_group_id,
+                "activity_group_code": t.activity_group_code,
+                "activity_group_name": t.activity_group_name,
+                "state_continuity_groups": t.state_continuity_groups,
                 "predecessors": t.predecessors,
                 "not_before": step_meta["not_before"] if step_meta else None,
                 "step_role": step_meta["step_role"] if step_meta else "normal",
@@ -321,6 +385,10 @@ async def solve(
             "solve_request_id": req_id,
             "status": "done",
             "candidate_plan_id": plan_id,
+            "diagnostics": {
+                **(plan_result.diagnostics or {}),
+                "schedule": sched_result.diagnostics,
+            },
             "state_delta": state_delta,
             "critical_path": critical_path,
             "schedule": {

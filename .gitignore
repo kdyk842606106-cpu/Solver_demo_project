@@ -22,9 +22,12 @@ wheels/
 
 # Virtual Environment
 .venv/
+.venv-*/
+.venv.broken-*/
 venv/
 ENV/
 env/
+frontend/e2e/.venv-*/
 
 # IDE
 .idea/
@@ -42,6 +45,7 @@ env/
 .coverage
 htmlcov/
 .tox/
+.playwright-mcp/
 
 # MyPy
 .mypy_cache/
@@ -51,17 +55,39 @@ dmypy.json
 # Database
 *.db
 *.sqlite3
+.postgres-data/
+.postgres-logs/
 
 # Logs
 *.log
 logs/
+/.deploy/
+
+# Generated demo/review artifacts in active working locations
+/MS010_*.html
+/schedule_result_MS010*.json
+/schedule_report_input_MS010.json
+/screenshot-*.png
+/Solver_demo_project_*.zip
+/Solver_Demo_Presentation.pptx
+/ppt_design_log.md
+/frontend/e2e/tests/*.bak
+/output/
+/release/
+/tmp_dbos_argus_repo/
+/tmp_dbos_argus_src/
+/tmp_dbos_argus_*/
+/dbos_argus-*.tar.gz
+/docs/archive/cleanup_20260529/generated_artifacts/*.zip
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Playwright MCP cache
-.playwright-mcp/
 
-# Temp files
-frontend/_tmp_check.js
+# Frontend node_modules (WSL path issue)
+frontend/node_modules/
+node_modules/
+
+# OpenClaw / MCP files
+.opencode/

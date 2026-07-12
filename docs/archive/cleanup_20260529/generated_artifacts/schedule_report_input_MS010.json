@@ -1,0 +1,973 @@
+{
+  "critical_path": [
+    "MS010-OPS001",
+    "MS010-OPS002",
+    "MS010-OPS003",
+    "MS010-OPS004",
+    "MS010-OPS005",
+    "MS010-OPS008",
+    "MS010-OPS009",
+    "MS010-OPS012",
+    "MS010-OPS013",
+    "MS010-OPS014",
+    "MS010-OPS025",
+    "MS010-OPS006",
+    "MS010-OPS015",
+    "MS010-OPS007",
+    "MS010-OPS016",
+    "MS010-OPS026",
+    "MS010-OPS010",
+    "MS010-OPS020",
+    "MS010-OPS027",
+    "MS010-OPS011",
+    "MS010-OPS021",
+    "MS010-OPS022",
+    "MS010-OPS023",
+    "MS010-OPS024"
+  ],
+  "schedule": {
+    "makespan": 28374,
+    "tasks": [
+      {
+        "step_order": 1,
+        "op_rule_id": 9001,
+        "op_rule_code": "MS010-OPS001",
+        "op_rule_name": "集成入口条件检查",
+        "start_min": 0,
+        "end_min": 450,
+        "duration_min": 450,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "WORKER_001",
+            "resource_type": "WORKER"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 3,
+            "is_required": true,
+            "resource_type": "WORKER"
+          }
+        ],
+        "predecessors": []
+      },
+      {
+        "step_order": 2,
+        "op_rule_id": 9002,
+        "op_rule_code": "MS010-OPS002",
+        "op_rule_name": "机台安装前准备",
+        "start_min": 450,
+        "end_min": 2880,
+        "duration_min": 2430,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "CRANE_001",
+            "resource_type": "行吊"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 5,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "行吊"
+          }
+        ],
+        "predecessors": [
+          1
+        ]
+      },
+      {
+        "step_order": 3,
+        "op_rule_id": 9003,
+        "op_rule_code": "MS010-OPS003",
+        "op_rule_name": "主机中部模块安装前准备",
+        "start_min": 2880,
+        "end_min": 4860,
+        "duration_min": 1980,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_R_001",
+            "resource_type": "SPACE_R"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 3,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "行吊"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_R"
+          }
+        ],
+        "predecessors": [
+          2
+        ]
+      },
+      {
+        "step_order": 4,
+        "op_rule_id": 9004,
+        "op_rule_code": "MS010-OPS004",
+        "op_rule_name": "主机中部模块安装",
+        "start_min": 4860,
+        "end_min": 8220,
+        "duration_min": 3360,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_R_001",
+            "resource_type": "SPACE_R"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 5,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "行吊"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_R"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_L"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_DOWN"
+          }
+        ],
+        "predecessors": [
+          3
+        ]
+      },
+      {
+        "step_order": 5,
+        "op_rule_id": 9005,
+        "op_rule_code": "MS010-OPS005",
+        "op_rule_name": "顶部拖链模块主体安装",
+        "start_min": 8220,
+        "end_min": 9120,
+        "duration_min": 900,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_LIGHT_001",
+            "resource_type": "SPACE_LIGHT"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 4,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "行吊"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_LIGHT"
+          }
+        ],
+        "predecessors": [
+          4
+        ]
+      },
+      {
+        "step_order": 17,
+        "op_rule_id": 9017,
+        "op_rule_code": "MS010-OPS017",
+        "op_rule_name": "顶部计量框架安装",
+        "start_min": 8220,
+        "end_min": 9360,
+        "duration_min": 1140,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_UP_001",
+            "resource_type": "SPACE_UP"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 4,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "行吊"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_UP"
+          }
+        ],
+        "predecessors": [
+          4
+        ]
+      },
+      {
+        "step_order": 8,
+        "op_rule_id": 9008,
+        "op_rule_code": "MS010-OPS008",
+        "op_rule_name": "光源导轨精调节",
+        "start_min": 9120,
+        "end_min": 10152,
+        "duration_min": 1032,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_LIGHT_001",
+            "resource_type": "SPACE_LIGHT"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 5,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_LIGHT"
+          }
+        ],
+        "predecessors": [
+          4,
+          5
+        ]
+      },
+      {
+        "step_order": 18,
+        "op_rule_id": 9018,
+        "op_rule_code": "MS010-OPS018",
+        "op_rule_name": "中框公共线缆布线",
+        "start_min": 9360,
+        "end_min": 14880,
+        "duration_min": 5520,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_OUT_001",
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 5,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_OUT"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_UP"
+          }
+        ],
+        "predecessors": [
+          17
+        ]
+      },
+      {
+        "step_order": 9,
+        "op_rule_id": 9009,
+        "op_rule_code": "MS010-OPS009",
+        "op_rule_name": "光源连接模块安装与调节",
+        "start_min": 10152,
+        "end_min": 13272,
+        "duration_min": 3120,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_LIGHT_001",
+            "resource_type": "SPACE_LIGHT"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 5,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "行吊"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_LIGHT"
+          }
+        ],
+        "predecessors": [
+          8
+        ]
+      },
+      {
+        "step_order": 12,
+        "op_rule_id": 9012,
+        "op_rule_code": "MS010-OPS012",
+        "op_rule_name": "动态气体开关安装",
+        "start_min": 13272,
+        "end_min": 15372,
+        "duration_min": 2100,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_DOWN_001",
+            "resource_type": "SPACE_DOWN"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 3,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_DOWN"
+          }
+        ],
+        "predecessors": [
+          9,
+          4
+        ]
+      },
+      {
+        "step_order": 22,
+        "op_rule_id": 9019,
+        "op_rule_code": "MS010-OPS019",
+        "op_rule_name": "大气机械臂2安装与调节",
+        "start_min": 14880,
+        "end_min": 16848,
+        "duration_min": 1968,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_FRONT_001",
+            "resource_type": "SPACE_FRONT"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 4,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "行吊"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_FRONT"
+          }
+        ],
+        "predecessors": [
+          18
+        ]
+      },
+      {
+        "step_order": 13,
+        "op_rule_id": 9013,
+        "op_rule_code": "MS010-OPS013",
+        "op_rule_name": "光学传感器组件安装",
+        "start_min": 15372,
+        "end_min": 16332,
+        "duration_min": 960,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_DOWN_001",
+            "resource_type": "SPACE_DOWN"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 4,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "行吊"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_DOWN"
+          }
+        ],
+        "predecessors": [
+          12
+        ]
+      },
+      {
+        "step_order": 14,
+        "op_rule_id": 9014,
+        "op_rule_code": "MS010-OPS014",
+        "op_rule_name": "热屏蔽板安装",
+        "start_min": 16332,
+        "end_min": 17712,
+        "duration_min": 1380,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_DOWN_001",
+            "resource_type": "SPACE_DOWN"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 4,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_DOWN"
+          }
+        ],
+        "predecessors": [
+          13
+        ]
+      },
+      {
+        "step_order": 19,
+        "op_rule_id": 9025,
+        "op_rule_code": "MS010-OPS025",
+        "op_rule_name": "底部运动台安装",
+        "start_min": 17712,
+        "end_min": 20934,
+        "duration_min": 3222,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_DOWN_001",
+            "resource_type": "SPACE_DOWN"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 5,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "行吊"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_DOWN"
+          }
+        ],
+        "predecessors": [
+          14
+        ]
+      },
+      {
+        "step_order": 6,
+        "op_rule_id": 9006,
+        "op_rule_code": "MS010-OPS006",
+        "op_rule_name": "供气盒模块安装",
+        "start_min": 19014,
+        "end_min": 20754,
+        "duration_min": 1740,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_OUT_001",
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 3,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "行吊"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "predecessors": [
+          5
+        ]
+      },
+      {
+        "step_order": 15,
+        "op_rule_id": 9015,
+        "op_rule_code": "MS010-OPS015",
+        "op_rule_name": "中框气体分析模块安装",
+        "start_min": 19944,
+        "end_min": 20754,
+        "duration_min": 810,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_OUT_001",
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 4,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "行吊"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "predecessors": [
+          4
+        ]
+      },
+      {
+        "step_order": 7,
+        "op_rule_id": 9007,
+        "op_rule_code": "MS010-OPS007",
+        "op_rule_name": "中框真空系统前级管路安装",
+        "start_min": 20754,
+        "end_min": 21174,
+        "duration_min": 420,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_OUT_001",
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 3,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "predecessors": [
+          6
+        ]
+      },
+      {
+        "step_order": 16,
+        "op_rule_id": 9016,
+        "op_rule_code": "MS010-OPS016",
+        "op_rule_name": "机械臂1推入恢复",
+        "start_min": 20754,
+        "end_min": 20934,
+        "duration_min": 180,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_OUT_001",
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 3,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "predecessors": [
+          15,
+          4
+        ]
+      },
+      {
+        "step_order": 20,
+        "op_rule_id": 9026,
+        "op_rule_code": "MS010-OPS026",
+        "op_rule_name": "整机管路安装",
+        "start_min": 20934,
+        "end_min": 22614,
+        "duration_min": 1680,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_OUT_001",
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 4,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "行吊"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "predecessors": [
+          19,
+          16
+        ]
+      },
+      {
+        "step_order": 10,
+        "op_rule_id": 9010,
+        "op_rule_code": "MS010-OPS010",
+        "op_rule_name": "光源主体对准",
+        "start_min": 21174,
+        "end_min": 23694,
+        "duration_min": 2520,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_LIGHT_001",
+            "resource_type": "SPACE_LIGHT"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 5,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_LIGHT"
+          }
+        ],
+        "predecessors": [
+          9,
+          7
+        ]
+      },
+      {
+        "step_order": 23,
+        "op_rule_id": 9020,
+        "op_rule_code": "MS010-OPS020",
+        "op_rule_name": "真空机械臂2安装与调节",
+        "start_min": 21306,
+        "end_min": 24564,
+        "duration_min": 3258,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_FRONT_001",
+            "resource_type": "SPACE_FRONT"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 4,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "行吊"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_FRONT"
+          }
+        ],
+        "predecessors": [
+          22
+        ]
+      },
+      {
+        "step_order": 21,
+        "op_rule_id": 9027,
+        "op_rule_code": "MS010-OPS027",
+        "op_rule_name": "外防护安装",
+        "start_min": 22614,
+        "end_min": 28374,
+        "duration_min": 5760,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_OUT_001",
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 3,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "行吊"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "predecessors": [
+          20
+        ]
+      },
+      {
+        "step_order": 11,
+        "op_rule_id": 9011,
+        "op_rule_code": "MS010-OPS011",
+        "op_rule_name": "光源组件对准",
+        "start_min": 23694,
+        "end_min": 28374,
+        "duration_min": 4680,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "WORKER_001",
+            "resource_type": "WORKER"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 4,
+            "is_required": true,
+            "resource_type": "WORKER"
+          }
+        ],
+        "predecessors": [
+          10
+        ]
+      },
+      {
+        "step_order": 24,
+        "op_rule_id": 9021,
+        "op_rule_code": "MS010-OPS021",
+        "op_rule_name": "机械支柱安装",
+        "start_min": 24564,
+        "end_min": 25644,
+        "duration_min": 1080,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_OUT_001",
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 3,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "行吊"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "predecessors": [
+          23
+        ]
+      },
+      {
+        "step_order": 25,
+        "op_rule_id": 9022,
+        "op_rule_code": "MS010-OPS022",
+        "op_rule_name": "顶部运动台安装与调节",
+        "start_min": 25644,
+        "end_min": 26364,
+        "duration_min": 720,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_UP_001",
+            "resource_type": "SPACE_UP"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 4,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "行吊"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_UP"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "predecessors": [
+          24
+        ]
+      },
+      {
+        "step_order": 26,
+        "op_rule_id": 9023,
+        "op_rule_code": "MS010-OPS023",
+        "op_rule_name": "顶部拖链模块及机械支柱功能调试安装",
+        "start_min": 26364,
+        "end_min": 28164,
+        "duration_min": 1800,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_LIGHT_001",
+            "resource_type": "SPACE_LIGHT"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 4,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "行吊"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_LIGHT"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "predecessors": [
+          25
+        ]
+      },
+      {
+        "step_order": 27,
+        "op_rule_id": 9024,
+        "op_rule_code": "MS010-OPS024",
+        "op_rule_name": "顶部区域真空抽排管路安装",
+        "start_min": 28164,
+        "end_min": 28374,
+        "duration_min": 210,
+        "resources": [
+          {
+            "resource_id": 1,
+            "resource_code": "SPACE_OUT_001",
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "resource_reqs": [
+          {
+            "quantity": 3,
+            "is_required": true,
+            "resource_type": "WORKER"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "行吊"
+          },
+          {
+            "quantity": 1,
+            "is_required": true,
+            "resource_type": "SPACE_OUT"
+          }
+        ],
+        "predecessors": [
+          26
+        ]
+      }
+    ]
+  }
+}

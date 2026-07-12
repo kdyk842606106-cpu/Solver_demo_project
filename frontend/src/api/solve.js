@@ -3,6 +3,10 @@ import http from './index'
 // POST /solve — send solve request, returns enriched SolveResponse
 export const postSolve = (payload) => http.post('/solve', payload)
 
+// POST /solve/layered — solve from layered target states and activity scopes
+export const postLayeredSolve = (payload) => http.post('/solve/layered', payload)
+export const postMaintenanceSolve = (payload) => http.post('/solve/maintenance', payload)
+
 // GET /plans/{id}/versions — version chain
 export const getPlanVersions = (planId) => http.get(`/plans/${planId}/versions`)
 

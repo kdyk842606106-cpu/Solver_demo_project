@@ -7,7 +7,9 @@ connection URLs for both async and sync operations.
 
 import os
 from functools import lru_cache
+from typing import Any
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -20,9 +22,22 @@ class DatabaseSettings(BaseSettings):
     db_password: str = "solver123"
     db_name: str = "solver_db"
 
+    # Connection timeout in seconds (shared by app and scripts)
+    db_connect_timeout: int = 10
+
     # Optional: override full URL
     database_url: str | None = None
     database_url_sync: str | None = None
+
+    @field_validator("db_port", "db_connect_timeout", mode="before")
+    @classmethod
+    def _validate_plain_int(cls, value: Any, info: Any) -> Any:
+        if isinstance(value, dict):
+            raise ValueError(
+                f"{info.field_name.upper()} must be a plain integer, not a dict. "
+                "Check .env and Windows environment variables."
+            )
+        return value
 
     class Config:
         env_file = ".env"
@@ -47,6 +62,7 @@ class DatabaseSettings(BaseSettings):
         return (
             f"postgresql+psycopg://{self.db_user}:{self.db_password}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
+            f"?connect_timeout={self.db_connect_timeout}"
         )
 
 

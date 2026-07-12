@@ -5,14 +5,17 @@ Loads candidate plan steps from database, reconstructs the RAG
 with operation durations and resource requirements for CP-SAT modeling.
 """
 
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Any, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import (
+    ActivityPackageAtomicRef,
+    ActivityNode,
+    AtomicActivity,
     CandidatePlan,
     CandidatePlanStep,
     OpRule,
@@ -27,10 +30,19 @@ class StepData:
     step_order: int
     op_rule_id: int
     op_rule_code: str
+    op_rule_name: str | None
     duration_min: int
-    resource_type: str
-    resource_qty: int
+    resource_reqs: list[dict[str, Any]] = field(default_factory=list)
+    resource_type: str = "NONE"       # backward compat: primary resource
+    resource_qty: int = 0             # backward compat: primary qty
     not_before: int | None = None
+    activity_node_id: int | None = None
+    activity_node_code: str | None = None
+    activity_node_level: int | None = None
+    activity_group_id: int | None = None
+    activity_group_code: str | None = None
+    activity_group_name: str | None = None
+    state_continuity_groups: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -39,6 +51,7 @@ class RagData:
     candidate_plan_id: int
     steps: list[StepData]
     edges: list[tuple[int, int]]  # (from_step_order, to_step_order)
+    machine_id: int = 0
 
 
 @dataclass
@@ -73,7 +86,10 @@ async def load_rag(
     result = await session.execute(
         select(CandidatePlan)
         .where(CandidatePlan.id == candidate_plan_id)
-        .options(selectinload(CandidatePlan.steps))
+        .options(
+            selectinload(CandidatePlan.steps),
+            selectinload(CandidatePlan.solve_request),
+        )
     )
     plan = result.scalar_one_or_none()
 
@@ -83,12 +99,21 @@ async def load_rag(
     if not plan.steps:
         return None
 
+    if plan.solve_request is None:
+        return None
+
     # Load all op_rule data we need in one query
     op_rule_ids = [step.op_rule_id for step in plan.steps]
     rules_result = await session.execute(
         select(OpRule)
         .where(OpRule.id.in_(op_rule_ids))
-        .options(selectinload(OpRule.resource_reqs))
+        .options(
+            selectinload(OpRule.resource_reqs),
+            selectinload(OpRule.activity_node).selectinload(ActivityNode.parent),
+            selectinload(OpRule.atomic_activity)
+            .selectinload(AtomicActivity.package_refs)
+            .selectinload(ActivityPackageAtomicRef.activity_node),
+        )
     )
     rules_map: dict[int, OpRule] = {r.id: r for r in rules_result.scalars().all()}
 
@@ -101,23 +126,53 @@ async def load_rag(
         if rule is None:
             continue
 
-        # Get primary resource requirement (first required one)
+        # Collect ALL required resource requirements
+        resource_reqs = []
         resource_type = "NONE"
         resource_qty = 0
         for req in rule.resource_reqs:
             if req.is_required:
-                resource_type = req.resource_type
-                resource_qty = req.quantity
-                break
+                resource_reqs.append({
+                    "resource_type": req.resource_type,
+                    "quantity": req.quantity,
+                })
+                if resource_type == "NONE":
+                    resource_type = req.resource_type
+                    resource_qty = req.quantity
+
+        activity_node = rule.activity_node
+        atomic_activity = rule.atomic_activity
+        activity_group = activity_node.parent if activity_node and activity_node.level == 3 else None
+        if atomic_activity is not None:
+            activity_node_id = -atomic_activity.id
+            activity_node_code = atomic_activity.code
+            activity_node_level = 3
+            refs = sorted(
+                atomic_activity.package_refs,
+                key=lambda item: (item.sort_order, item.id),
+            )
+            activity_group = refs[0].activity_node if refs else None
+        else:
+            activity_node_id = activity_node.id if activity_node else None
+            activity_node_code = activity_node.code if activity_node else None
+            activity_node_level = activity_node.level if activity_node else None
 
         steps.append(StepData(
             step_order=step.step_order,
             op_rule_id=rule.id,
             op_rule_code=rule.code,
+            op_rule_name=rule.name,
             duration_min=rule.duration_min,
+            resource_reqs=resource_reqs,
             resource_type=resource_type,
             resource_qty=resource_qty,
             not_before=step.not_before,
+            activity_node_id=activity_node_id,
+            activity_node_code=activity_node_code,
+            activity_node_level=activity_node_level,
+            activity_group_id=activity_group.id if activity_group else None,
+            activity_group_code=activity_group.code if activity_group else None,
+            activity_group_name=activity_group.name if activity_group else None,
         ))
 
         # Build edges from predecessor_ids
@@ -127,6 +182,7 @@ async def load_rag(
 
     return RagData(
         candidate_plan_id=candidate_plan_id,
+        machine_id=plan.solve_request.machine_id,
         steps=steps,
         edges=edges,
     )
@@ -135,6 +191,7 @@ async def load_rag(
 async def load_resources(
     resource_types: list[str],
     session: AsyncSession,
+    machine_id: int,
     available_only: bool = True,
 ) -> list[ResourceData]:
     """
@@ -142,13 +199,17 @@ async def load_resources(
 
     Args:
         resource_types: List of resource type strings to load
+        machine_id: Machine whose local resource pool should be loaded
         session: SQLAlchemy async session
         available_only: If True, only load available resources
 
     Returns:
         List of ResourceData
     """
-    query = select(Resource).where(Resource.resource_type.in_(resource_types))
+    query = select(Resource).where(
+        Resource.machine_id == machine_id,
+        Resource.resource_type.in_(resource_types),
+    )
 
     if available_only:
         query = query.where(Resource.is_available == True)

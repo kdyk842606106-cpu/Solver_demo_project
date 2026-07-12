@@ -86,6 +86,9 @@ async function load() {
   loading.value = true
   try {
     ;[machineTypes.value, list.value] = await Promise.all([getMachineTypes(), getMachines()])
+  } catch {
+    machineTypes.value = []
+    list.value = []
   } finally {
     loading.value = false
   }

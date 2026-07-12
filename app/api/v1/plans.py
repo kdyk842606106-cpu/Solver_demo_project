@@ -80,11 +80,12 @@ async def get_plan_versions(
     return chain
 
 
-async def _load_schedule_tasks(plan_id: int, db: AsyncSession) -> tuple[dict, int | None]:
+async def _load_schedule_tasks(plan_id: int, db: AsyncSession) -> tuple[dict[tuple[str, int], dict], int | None]:
     """Load the latest ScheduleResult for a plan.
 
     Returns:
-        (op_code -> {"start_min": int, "end_min": int}, makespan)
+        ((op_code, step_order) -> {"start_min": int, "end_min": int, "step_order": int|None,
+         "op_rule_name": str|None}, makespan)
         Raises HTTPException 422 if no schedule exists.
     """
     result = await db.execute(
@@ -100,27 +101,25 @@ async def _load_schedule_tasks(plan_id: int, db: AsyncSession) -> tuple[dict, in
             detail=f"PLAN_NOT_SCHEDULED: Plan {plan_id} has no schedule result",
         )
 
-    tasks_by_code: dict[str, dict] = {}
+    tasks_by_code: dict[tuple[str, int], dict] = {}
     for t in (sched.tasks or []):
         code = t.get("op_rule_code")
-        if code:
-            # Note: op_rule_code is used as the join key for diff alignment.
-            # The current RAGBuilder guarantees each op_rule appears at most once
-            # per plan (state-space search consumes each delta exactly once).
-            # If a future planner allows repeating ops, this dict must be keyed
-            # by (op_rule_code, step_order) instead.
-            tasks_by_code[code] = {
+        step_order = t.get("step_order")
+        if code and step_order is not None:
+            tasks_by_code[(code, step_order)] = {
                 "start_min": t.get("start_min"),
                 "end_min": t.get("end_min"),
+                "step_order": step_order,
+                "op_rule_name": t.get("op_rule_name"),
             }
 
     return tasks_by_code, sched.makespan
 
 
-async def _load_step_meta(plan_id: int, db: AsyncSession) -> dict[str, dict]:
+async def _load_step_meta(plan_id: int, db: AsyncSession) -> dict[tuple[str, int], dict]:
     """Load CandidatePlanStep metadata (step_role, not_before) for a plan.
 
-    Returns op_code -> {"step_role": str, "not_before": int|None}.
+    Returns (op_code, step_order) -> {"step_role": str, "not_before": int|None}.
     """
     result = await db.execute(
         select(CandidatePlanStep)
@@ -129,7 +128,7 @@ async def _load_step_meta(plan_id: int, db: AsyncSession) -> dict[str, dict]:
     )
     steps = result.scalars().all()
     return {
-        s.op_rule.code: {"step_role": s.step_role, "not_before": s.not_before}
+        (s.op_rule.code, s.step_order): {"step_role": s.step_role, "not_before": s.not_before}
         for s in steps
         if s.op_rule is not None
     }
@@ -166,17 +165,20 @@ async def get_plan_diff(
     # Load step metadata (step_role, not_before) from NEW plan
     new_step_meta = await _load_step_meta(other_plan_id, db)
 
-    # Build diff over the union of all op_codes
-    all_codes = sorted(set(base_tasks) | set(new_tasks))
+    # Build diff over the union of all (op_code, step_order) keys.
+    all_step_keys = sorted(set(base_tasks) | set(new_tasks), key=lambda item: (item[0], item[1]))
 
     diff_steps: list[PlanDiffStep] = []
-    for code in all_codes:
-        base_t = base_tasks.get(code)
-        new_t = new_tasks.get(code)
-        meta = new_step_meta.get(code, {})
+    for step_key in all_step_keys:
+        code, fallback_step_order = step_key
+        base_t = base_tasks.get(step_key)
+        new_t = new_tasks.get(step_key)
+        meta = new_step_meta.get(step_key, {})
 
         diff_steps.append(PlanDiffStep(
             op_code=code,
+            op_name=(new_t or base_t or {}).get("op_rule_name"),
+            step_order=(new_t or base_t or {}).get("step_order", fallback_step_order),
             base_start=base_t["start_min"] if base_t else None,
             base_end=base_t["end_min"] if base_t else None,
             new_start=new_t["start_min"] if new_t else None,

@@ -44,11 +44,11 @@
         <span style="margin-left:8px;color:#64748b">分钟后</span>
       </el-form-item>
 
-      <!-- Strategy B: blockage_reason (dynamic from API, ANCHOR constraint 6) -->
+      <!-- Strategy B: reasons are loaded by the parent and passed into this pure component. -->
       <el-form-item v-if="strategyHasB" label="阻塞原因" required>
         <el-select v-model="form.blockage_reason" placeholder="请选择" style="width:100%">
           <el-option
-            v-for="opt in blockageReasonOptions"
+            v-for="opt in props.blockageReasonOptions"
             :key="opt"
             :value="opt"
             :label="opt"
@@ -82,8 +82,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getFeatureDefinitions } from '../api/masterData'
-import { postSolve } from '../api/solve'
+import { postLayeredSolve, postMaintenanceSolve, postSolve } from '../api/solve'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -92,13 +91,35 @@ const props = defineProps({
   machineId: Number,
   currentStateId: Number,
   targetStateId: Number,
+  mode: {
+    type: String,
+    default: 'snapshot',
+  },
+  objectives: {
+    type: Array,
+    default: () => [],
+  },
+  targetStateNodeIds: {
+    type: Array,
+    default: () => [],
+  },
+  activityScopeNodeIds: {
+    type: Array,
+    default: () => [],
+  },
+  maintenanceIntentTemplateIds: {
+    type: Array,
+    default: () => [],
+  },
+  blockageReasonOptions: {
+    type: Array,
+    default: () => [],
+  },
 })
 
 const emit = defineEmits(['update:modelValue', 'replanned'])
 
 const submitting = ref(false)
-const blockageReasonOptions = ref([])
-
 const form = ref({
   strategy: 'A',
   not_before_offset: 0,
@@ -111,15 +132,7 @@ const form = ref({
 const strategyHasA = computed(() => form.value.strategy === 'A' || form.value.strategy === 'AB')
 const strategyHasB = computed(() => form.value.strategy === 'B' || form.value.strategy === 'AB')
 
-// Load blockage_reason options dynamically from feature_definition (ANCHOR constraint 6)
-async function onOpen() {
-  try {
-    const defs = await getFeatureDefinitions()
-    const brDef = defs.find((d) => d.feature_key === 'blockage_reason')
-    blockageReasonOptions.value = Array.isArray(brDef?.allowed_values) ? brDef.allowed_values : []
-  } catch {
-    blockageReasonOptions.value = []
-  }
+function onOpen() {
   // Reset form
   form.value = {
     strategy: 'A',
@@ -144,6 +157,7 @@ async function submit() {
   }
 
   const blockageConstraints = {
+    blocked_step_id: props.task.step_id ?? null,
     blocked_op_rule_id: props.task.op_rule_id ?? null,
     strategy: form.value.strategy,
     note: form.value.note.trim() || null,
@@ -158,15 +172,33 @@ async function submit() {
 
   submitting.value = true
   try {
-    const result = await postSolve({
+    const basePayload = {
       machine_id: props.machineId,
       current_state_id: props.currentStateId,
-      target_state_id: props.targetStateId,
-      objectives: [{ type: 'minimize_makespan', weight: 1.0 }],
+      objectives: props.objectives?.length
+        ? props.objectives
+        : [{ type: 'minimize_makespan', weight: 1.0 }],
       parent_plan_id: props.planId,
       blockage_constraints: blockageConstraints,
-    })
+    }
+    const result = props.mode === 'layered'
+      ? await postLayeredSolve({
+        ...basePayload,
+        target_state_node_ids: props.targetStateNodeIds,
+        activity_scope_node_ids: props.activityScopeNodeIds,
+      })
+      : props.mode === 'maintenance'
+        ? await postMaintenanceSolve({
+          ...basePayload,
+          intent_template_ids: props.maintenanceIntentTemplateIds,
+        })
+        : await postSolve({
+          ...basePayload,
+          target_state_id: props.targetStateId,
+        })
     if (result.status !== 'done') {
+      console.error('[replan failed]', result)
+      window.__lastSolveDiagnostics = result.diagnostics ?? result
       ElMessage.error(`${result.error_code}: ${result.error_message}`)
       return
     }

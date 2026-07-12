@@ -1,0 +1,201 @@
+# TICKET-041: 网络编辑器端到端验收与文档
+
+> Status: implemented
+> Version: V0.3
+> Completed: 2026-06-23
+> Depends on: `docs/TICKET_037.md`, `docs/TICKET_038.md`, `docs/TICKET_039.md`, `docs/TICKET_040.md`
+
+## Scope
+
+本工单完成网络编辑器 MVP 的端到端验收和文档闭环。
+
+## Implemented
+
+- [x] 代表性验收场景文档：
+  - 聚合状态包
+  - 状态包成员引用
+  - 虚拟活动声明输入/输出
+  - 原子活动输入/输出
+  - 覆盖快照 stale/refresh
+  - 虚拟活动实现完整性
+  - 求解预检
+- [x] 用户说明文档：
+  - `docs/network-editor-user-guide.md`
+- [x] 需求验收矩阵：
+  - `docs/network-editor-acceptance-matrix.md`
+- [x] 业务说明书链接网络编辑器文档：
+  - `docs/business_user_manual_layered_planning.md`
+- [x] 后端验收测试：
+  - 状态引用约束
+  - 绑定覆盖快照
+  - 规则同步
+  - 图投影和校验
+  - 影响分析
+  - 深度控制
+  - 求解预检
+- [x] 前端浏览器验收：
+  - 覆盖缺口
+  - 覆盖刷新
+  - 问题定位
+  - ready flow
+  - 多状态包出现显示
+  - solver-ready 模式
+  - 求解预检模板
+  - 影响分析
+  - 深度控制
+  - 虚拟活动容器展开
+  - 预览/编辑状态机
+  - 取消编辑丢弃草稿并恢复已提交布局
+  - 状态包/虚拟活动容器隔离
+  - 容器整体移动与内部相对布局保持
+  - 虚拟活动专注画布预览态
+  - 状态包/跨层级语义线中文标签
+  - 抽屉保存仅入草稿，统一提交才调用 commit
+
+## Verification
+
+- `python -m pytest tests\integration\test_layered_activity_state_api.py -q` — 20 passed
+- `python -m pytest tests\integration\test_scenario_import_api.py -q` — 9 passed
+- `python -m pytest -q` — 324 passed
+- `npm run build` — passed, only existing Vite chunk-size warning
+- `npm run test:e2e -- network-editor.spec.ts --project=chromium` — 8 passed; 覆盖预览只读、预览态展开/折叠、虚拟活动专注预览、details-only 问题定位、取消编辑丢弃草稿、抽屉保存仅入草稿且统一提交才调用 commit、容器内部节点自由拖动、容器整体移动、专注画布虚拟活动容器隔离、汇总线点击展开和语义线中文标签
+
+## Notes
+
+- 2026-06-25 决策：网络编辑器后续画板重构采用 X6 单白板画布。当前手写 DOM/SVG 状态-活动二部图壳子、状态列/活动列分区和“高层普通节点 + 容器外框”展示只作为历史过渡实现保留，不能再作为完全自由白板的最终验收口径。主需求文档新增 `X6 单画布原则`，主设计 spec 新增 `X6 Canvas Refactor`，用户说明和验收矩阵已同步为：X6 只负责画布交互，重复状态识别、同步/分叉、求解预检和一次性提交继续由现有业务层负责；后端 `network-editor/graph`、`network-editor/commit`、`network-editor/solver-precheck` 协议不变。回归：文档阶段，无代码和依赖变更。
+- 2026-06-25 补强：主设计冻结文档一次性提交状态机补齐。`docs/superpowers/specs/2026-06-23-state-activity-network-editor-design.md` 新增 `Unified Edit Commit` 和 `Page state machine`，明确页面默认和非编辑会话均为预览模式；只有点击 `enter edit` 后才可编辑画板；抽屉保存、拖拽、连线、容器调整、覆盖刷新和同步/分叉选择只进入可见草稿；`network-editor/commit` 是画板唯一写库入口；取消编辑丢弃草稿并回到预览模式。验收矩阵证据索引新增主设计冻结文档锚点。回归：定向 `rg` confirmed `Unified Edit Commit`、`Page state machine`、`network-editor/commit` 已在主 spec 中存在；`git diff --check` passed with existing STATE LF/CRLF warning only。
+- 2026-06-25 补强：网络编辑器浏览器回归完整执行通过。`moves internal nodes freely inside expanded containers` 用例改为读取画布节点 `style.left/top` 坐标，而不是受页面布局流影响的 viewport `boundingBox` 坐标；这更准确覆盖“内部节点布局改变、容器根节点画布布局不变”。完整执行 `npm run test:e2e -- network-editor.spec.ts --project=chromium` 8 passed，验收矩阵当前浏览器证据已从“收集 8 条 / 待复跑”更新为“8 passed”。
+- 2026-06-25 补强：容器内部节点自由拖动浏览器收集证据补强。`network-editor.spec.ts` 新增 `moves internal nodes freely inside expanded containers`，在编辑模式下展开状态包后拖动包内状态引用实例，断言内部状态移动但状态包根节点不被一起拖走；展开虚拟活动后拖动内部原子活动，断言原子活动移动但虚拟活动根节点不被一起拖走；草稿列表出现 `调整状态位置` 和 `调整原子活动位置`，继续通过统一提交路径保存布局。回归：`npm run test:e2e -- --list network-editor.spec.ts --project=chromium` 8 tests listed。
+- 2026-06-25 补强：前置设计链术语同步收口。继续把当前工单依赖链中的早期文档同步到最新需求口径：`TICKET_040` 从“导出预览”改为“求解预检与求解器准备交接”，旧 `export-preview` 仅作为 deprecated 兼容别名；`TICKET_037` / `TICKET_038` 从“多父状态/主父级/引用父级”改为“状态包成员引用/默认所在状态包/成员引用”；英文 design freeze spec 把 `export preview`、`multi-parent state` 和不持久化拖拽布局的旧 MVP 边界改为 solver precheck、state package member references 和 unified submit layout metadata；业务说明书、浏览器复核记录和 edit-session plan 也同步为“多状态包出现 / 求解预检 / 独立 JSON 与求解模板下载不提供”。回归：精确 `rg` 旧词在当前设计链中无命中，剩余命中仅为 STATE/TICKET-041 历史审计记录对旧词的说明；`git diff --check` passed with existing STATE LF/CRLF warning only。
+- 2026-06-25 补强：求解预检旧导出口径继续收口。前端求解就绪 warning 标题从 `导出前需复核` 改为 `提交/求解前需复核`，求解预检阻塞项按钮 test id 从 `network-editor-export-blocking-issue-*` 改为 `network-editor-solver-precheck-blocking-issue-*`；验收矩阵把“导出将虚拟活动放入 group/WBS metadata / 导出只输出原子活动”改为求解预检与求解交接口径；TICKET-039 早期 MVP 摘要同步从 `导出预览`、`主父级/引用父级`、`父状态/子状态` 收口为 `求解预检`、`所在状态包/其他出现位置`、`状态包成员引用`。回归：`npm run build` passed，仅有既有 Vite chunk-size warning；`npm run test:e2e -- --list network-editor.spec.ts --project=chromium` 7 tests listed；精确 `rg` 未在当前页面、用户说明、验收矩阵和 TICKET-039 中发现这些旧口径残留。
+- 2026-06-25 补强：一次性提交浏览器收集证据补强。`network-editor.spec.ts` 新增 `queues drawer saves as drafts and commits only from unified submit`，进入编辑后通过状态抽屉 `保存` 创建 `新建状态：一次性提交状态` 草稿，断言此时未发送 `network-editor/commit`，再点击顶部 `统一提交` 后才发送唯一一次 commit 请求，并校验 payload 中只有该状态创建草稿；用户说明同步把模糊取消表述改为 `提交前复核` 中点击 `返回编辑`，避免与顶部 `取消编辑` 的丢弃草稿语义混淆。回归：`npm run test:e2e -- --list network-editor.spec.ts --project=chromium` 7 tests listed。
+- 2026-06-25 补强：验收矩阵证据索引去脆弱行号。`docs/network-editor-acceptance-matrix.md` 第 7 节从 `行级证据索引` 调整为稳定 `证据索引`，前端工作区证据从易漂移的 `NetworkEditorWorkspace.vue:<line>` 改为 `data-testid`、函数名、API 调用名和 e2e 用例名，继续覆盖一次性提交、预览态只读、容器移动、展开/折叠、专注画布和求解预检等成品流。回归：`rg --line-number "NetworkEditorWorkspace\\.vue:[0-9]+" docs/network-editor-acceptance-matrix.md` no matches；`git diff --check -- docs/network-editor-acceptance-matrix.md docs/STATE_V0.3.md docs/TICKET_041.md` passed with existing STATE LF/CRLF warning only。
+- 2026-06-25 补强：浏览器回归证据口径同步。验收矩阵中的前端浏览器回归证据已从旧口径更新为当时 `network-editor.spec.ts` 可收集 6 条用例，并列明覆盖预览只读、预览态展开/折叠、虚拟活动专注预览、details-only 问题定位、取消编辑丢弃草稿和容器整体移动；完整浏览器执行仍因此前 Codex usage limit 暂未复跑，该次证据只代表 Playwright 收集通过。回归：`npm run test:e2e -- --list network-editor.spec.ts --project=chromium` 6 tests listed；`git diff --check -- docs/network-editor-acceptance-matrix.md docs/STATE_V0.3.md docs/TICKET_041.md` passed with existing STATE LF/CRLF warning only。
+- 2026-06-25 补强：一次性提交与归属术语再收口。当前成品页面继续采用“非编辑即预览、进入编辑后编辑画板、编辑完统一提交”的一次性提交模式；主需求文档、用户说明和验收矩阵已有一致口径。前端校验建议中的旧父级文案已改为 `活动归属关系`，避免把活动包/活动归属误解成父子所有权。回归：`npm run build` passed，仅有既有 Vite chunk-size warning；`npm run test:e2e -- --list network-editor.spec.ts --project=chromium` 6 tests listed；`git diff --check -- frontend/src/views/DataManagement/NetworkEditorWorkspace.vue docs/STATE_V0.3.md docs/TICKET_041.md` passed with existing STATE LF/CRLF warning only；`rg` confirmed the current front-end suggestion text uses `活动归属关系`，历史 STATE/TICKET 记录可能仍保留早期术语作为审计历史。
+- 2026-06-25 补强：画布缩放和平移查看落地。中间画布动作条新增缩小、百分比重置和放大控件，支持 `Ctrl/Alt + 滚轮` 快速缩放；画布滚动容器继续承担平移查看，缩放只作用于视觉层，双击新建、右键菜单、节点拖动、容器移动和容器尺寸调整均按缩放比例反算坐标或增量，布局 metadata 仍保存原始画布坐标。`network-editor.spec.ts` 补充默认 `100%`、放大到 `110%`、重置回 `100%` 的收集断言；主需求文档、用户说明和验收矩阵已同步。回归：`npm run build` passed，仅有既有 Vite chunk-size warning；`npm run test:e2e -- --list network-editor.spec.ts --project=chromium` 6 tests listed；`git diff --check` passed with existing STATE LF/CRLF warning only。
+- 2026-06-25 补强：details-only 校验问题定位兜底落地。前端 `issueStateLabel`、`issueActivityLabel` 和 `inspectIssue` 现在优先使用 `related_state_ids` / `related_activity_ids`，缺失时会从 `details.state_node_id`、`details.activity_node_id`、`details.node_type/node_id`、`details.op_rule_id` 等字段推导可定位对象；`network-editor.spec.ts` 新增 mock validate 问题，只提供 `node_type=atomic_activity` 和 `node_id=20`，断言问题表显示 `完成原子活动`，点击 `定位` 后选中对应原子活动。验收矩阵已同步。回归：`npm run build` passed，仅有既有 Vite chunk-size warning；`npm run test:e2e -- --list network-editor.spec.ts --project=chromium` 6 tests listed；`git diff --check` passed with existing STATE LF/CRLF warning only。
+- 2026-06-25 补强：复杂连线汇总线点击展开落地。SVG 汇总线新增透明命中路径，只有 `N 个输入` / `N 个输出` 汇总线可点击或键盘触发；触发后复用活动选中逻辑展开该活动的具体输入/输出边，普通线和标签仍不阻挡画布节点/容器操作。`network-editor.spec.ts` 夹具新增 6 个同一原子活动输入状态，断言预览态先显示 `6 个输入` 汇总线，点击后汇总标签消失并选中该原子活动；用户说明和验收矩阵已同步。回归：`npm run build` passed，仅有既有 Vite chunk-size warning；`npm run test:e2e -- --list network-editor.spec.ts --project=chromium` collected at that point；`git diff --check` passed with existing STATE LF/CRLF warning only。
+- 2026-06-25 补强：虚拟活动专注画布容器隔离断言已加入。`network-editor.spec.ts` 在预览态进入虚拟活动 `专注` 后，断言专注条展示 `上下文` / `输出` 边界状态，同时虚拟活动容器仍只显示活动内容，不显示上下文状态或声明输出状态名称；验收矩阵同步记录该断言已收集，完整浏览器执行仍待 usage limit 恢复后复跑。回归：`npm run test:e2e -- --list network-editor.spec.ts --project=chromium` collected；`git diff --check` passed with existing STATE LF/CRLF warning only。
+- 2026-06-25 补强：一次性提交语义澄清。主需求文档修正“取消编辑”和“提交前复核取消”的边界：提交失败或用户在提交前复核中取消时，草稿保留在当前编辑会话内；点击 `取消编辑` 并确认 `丢弃草稿` 时，草稿丢弃并回到 `预览模式`。回归：`rg` confirmed no remaining reverse stale wording in key docs；`git diff --check` passed with existing STATE LF/CRLF warning only。
+- 2026-06-25 补强：完全自由白板的新建状态落点放开。画布空白处双击新建状态不再限制在左半状态区，`newStateLayoutFromCanvasPoint` 和状态包节点内 `添加状态` 默认落点都按全画布宽度夹取；状态包容器自身空白双击现在会直接预填该状态包为所在状态包，并按双击坐标作为新状态初始布局。用户说明、主需求文档和验收矩阵已同步。回归：`npm run build` passed，仅有既有 Vite chunk-size warning；`npm run test:e2e -- --list network-editor.spec.ts --project=chromium` collected at that point。
+- 2026-06-25 补强：取消编辑丢弃草稿浏览器回归用例已加入。取消编辑和编辑态刷新确认框按钮明确为 `丢弃草稿` / `返回编辑`；`network-editor.spec.ts` 新增 `cancels edit session and restores submitted layout without committing drafts`，通过真实节点布局拖拽制造 `调整状态位置` 草稿，再点击 `取消编辑` 并确认，预期回到 `预览模式`、隐藏 `统一提交`、节点坐标恢复到已提交位置。当前已完成 `npm run build` passed 和 `npm run test:e2e -- --list network-editor.spec.ts --project=chromium` collected；尝试执行 focused browser e2e 时被 Codex usage limit 拦截，最近一次实际浏览器执行仍为 4 passed，完整浏览器执行待额度恢复后复跑。
+- 2026-06-25 补强：虚拟活动专注画布预览态回归。`network-editor.spec.ts` 的 mock 图新增虚拟活动 `declared_output` 夹具，浏览器回归验证预览模式下点击虚拟活动节点 `专注` 后，顶部专注条显示 `专注画布`、活动面包屑、`上下文` 状态、`输出` 声明输出状态和 `实现 1/1` 覆盖；退出专注画布后仍保持 `预览模式`，不会显示 `统一提交` 或产生草稿。回归：`npm run test:e2e -- network-editor.spec.ts --project=chromium` 4 passed；`npm run build` passed，仅有既有 Vite chunk-size warning。
+- 2026-06-25 补强：自由白板容器整体移动落地。状态包容器和虚拟活动容器在编辑模式下新增左上角移动手柄；拖动状态包容器会批量移动状态包节点和内部状态引用实例，拖动虚拟活动容器会批量移动虚拟活动节点和内部活动节点，各内部节点相对位置保持不变，位置变更仍作为节点布局草稿进入 `编辑草稿` 并由 `统一提交` 写库。`network-editor.spec.ts` 新增真实拖动回归，验证状态包/虚拟活动容器移动后内部节点坐标变化、草稿出现且 `统一提交` 可用。回归：`npm run test:e2e -- network-editor.spec.ts --project=chromium` 3 passed；`npm run build` passed，仅有既有 Vite chunk-size warning。
+- 2026-06-25 补强：状态包/虚拟活动容器隔离浏览器回归。`network-editor.spec.ts` 的 mock 图新增包内原子状态，真实页面展开状态包后断言状态包容器显示 `准备状态包` 和 `1 个状态` 且不混入原子活动名；展开虚拟活动后断言虚拟活动容器显示 `准备虚拟活动` 且不混入包内状态名或外部目标状态名。该回归同时确认预览态展开/折叠仍不会进入编辑模式或暴露 `统一提交`。回归：`npm run test:e2e -- network-editor.spec.ts --project=chromium` 2 passed。
+- 2026-06-25 补强：预览态状态包写入口隐藏并补齐展开/折叠回归。状态包节点的 `添加状态` 快捷入口现在和其他写操作一样只在编辑模式显示；预览模式仍保留 `展开/折叠`，但不会暴露状态包新增入口、不会显示 `统一提交` 草稿按钮。`network-editor.spec.ts` 新增覆盖预览态状态包/虚拟活动展开折叠、预览态隐藏 `添加状态`、虚拟活动容器不显示状态名称。回归：`npm run test:e2e -- network-editor.spec.ts --project=chromium` 2 passed。
+- 2026-06-25 补强：新增网络编辑器预览/编辑状态机与语义线标签浏览器回归。`frontend/e2e/tests/network-editor.spec.ts` 通过 mock API 打开真实网络编辑器页面，验证选择设备类型后预览态仍只读、点击 `进入编辑` 后写入口启用、没有草稿时 `统一提交` 保持禁用，并使用合法虚拟活动 `context_input` 夹具断言 SVG 画布渲染 `状态包上下文 / 跨层级`，同时断言原子活动 `output` 夹具渲染 `产出 / 跨层级` 中文短标签。回归：`npm run test:e2e -- network-editor.spec.ts --project=chromium` 1 passed。
+- 2026-06-25 补强：一次性提交模式复核与设计结论审计补强。按最新确认再次核对成品页状态机：未点击 `进入编辑` 一律为预览模式，只读查看已提交数据；点击 `进入编辑` 后才允许编辑画板，所有保存、拖动、连线、容器调整、覆盖刷新和同步/分叉选择都只进入 `编辑草稿`；点击顶部 `统一提交` 后才一次性调用既有数据库接口落库。前端同步补强状态包绑定和跨层级绑定的中文短标签，普通语义线 hover 标题也改为中文角色；验收矩阵新增需求文档第 19 节 40 条关键设计结论逐条覆盖审计。回归：`npm run build` passed，仅有既有 Vite chunk-size warning；`git diff --check` passed，仅有既有 LF/CRLF warning。
+- 2026-06-25 补强：验收矩阵证据索引刷新。`docs/network-editor-acceptance-matrix.md` 的当前验证从旧的 19 passed 更新为最新网络编辑器集成回归 20 passed，并把行级证据索引改为当前代码中的稳定函数/测试锚点，补入引用实例独立布局与聚焦状态包语义边端点投影的回归证据；本工单顶部 Verification 同步更新。回归：文档同步，无代码变更；`git diff --check -- docs\network-editor-acceptance-matrix.md docs\TICKET_041.md` passed。
+- 2026-06-25 补强：状态包引用实例独立布局与端点投影落地。后端 `network-editor/graph` 现在为 `state_node_reference` 输出带 `reference_id` 的独立状态图节点，并保留真实状态统计去重；`network-editor/commit` 支持 `state_node_reference` update，用于保存引用实例布局 metadata。前端拖动状态引用实例或调整引用状态包容器尺寸时，会更新对应引用实例 metadata，不再污染真实状态本体布局；同一真实状态在其他状态包中的位置保持不变。聚焦状态包时，指向该真实状态的状态-活动语义边会优先落到当前状态包内的引用实例端点，并通过 `canonical_source_id` / `canonical_target_id` 保留真实状态端点供校验和求解语义使用。回归：`python -m py_compile app\services\network_editor.py app\api\v1\master_data.py app\db\schemas.py` passed；`python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_unified_commit_batches_changes_and_rolls_back -q` 1 passed；`python -m pytest tests\integration\test_layered_activity_state_api.py -q` 20 passed；前端 build passed。
+- 2026-06-25 补强：一次性提交与引用状态包术语最终收口。主需求文档再次明确“未点击 `进入编辑` 一律为预览模式，点击后才打开编辑草稿，编辑完画板后通过 `统一提交` 一次性写入现有数据库接口”；同时把主需求文档、验收矩阵和本工单中的 `父子状态`、`主父级状态`、`Impact`、`多父引用显示`、`导出模板` 等残留旧口径改为 `层级所有权`、`状态包成员引用`、`影响分析`、`多状态包出现显示`、`求解预检模板`。回归：文档同步，无代码变更。
+- 2026-06-25 补强：求解预检正式接口命名收口。后端新增 `POST /api/v1/machine-types/{machine_type_id}/network-editor/solver-precheck` 作为 canonical 求解预检 API，旧 `network-editor/export-preview` 标记为 deprecated 兼容别名；前端 `求解预检` 按钮改用 `precheckNetworkEditorSolver` 调新接口，工作区内部求解预检状态、样式、payload helper 和浏览器测试锚点命名同步收口到 `solverPrecheck` / `solver-precheck`；后端 summary helper 和集成测试主路径变量也改为 solver precheck 语义，旧 export 命名仅保留在兼容响应/路由/wrapper；验收矩阵同步说明“正式 solver-precheck、旧 export-preview 仅兼容”。回归：`python -m py_compile app\api\v1\master_data.py app\db\schemas.py app\services\network_editor.py` passed；solver-precheck focused backend tests 5 passed；`python -m pytest tests\integration\test_layered_activity_state_api.py -q` 20 passed；前端 build passed。
+
+- 2026-06-25 补强：状态包成员引用与求解预检术语继续收口。TICKET/STATE/浏览器流程/验收矩阵中的早期 `父状态`、`子状态`、`多父状态`、`父级`、`导出预览`、`State groups` 等用户可读旧口径已改为 `状态包`、`状态包成员引用`、`所在状态包`、`求解预检`、`状态包聚合` 等当前成品页面术语；仅保留必要接口名、测试名和历史技术字段。回归：文档同步，无代码变更。
+- 2026-06-25 补强：浏览器流程记录同步当前成品页面文案。早期复核记录中的深度控制、快捷连线、绑定创建和问题定位描述已改为当前 `状态深度`、`活动深度`、`状态 -> 上下文`、`活动 -> 产出`、`绑定创建已加入草稿`、`定位` / `已定位` 等中文口径；验收矩阵中的“前端问题定位自动展开”锚点同步更新。回归：文档同步，无代码变更。
+- 2026-06-25 补强：网络编辑器问题建议兜底中文化。前端问题表和提交前复核的 `issueSuggestedActionText` 不再在未知 issue code 时直接展示后端英文 `suggested_action`，改为中文通用建议；已有 issue code 仍使用精确中文建议，后端 `suggested_action` 仅作为接口协议和排查字段保留。用户说明、验收矩阵和浏览器流程记录已同步。回归：前端 build passed。
+- 2026-06-25 补强：网络编辑器影响分析命名继续收口。当前用户说明、验收矩阵和浏览器流程记录把右侧影响面板统一改为 `影响分析`；早期浏览器流程中的状态/虚拟活动/原子活动抽屉和编码/名称/类型/所在状态包/排序/启用字段说明同步改为当前中文按钮和字段，`Impact` 仅保留在接口名、变量名或历史技术记录中。回归：文档同步，无代码变更。
+- 2026-06-25 补强：网络编辑器异常兜底与字段说明文案继续中文化。前端草稿入队异常不再展示 `Queue state change failed`、`Reuse state failed`、`Queue state package fork failed`、`Queue atomic activity change failed` 等英文动作名，统一改为中文；用户说明和验收矩阵将抽屉字段从 `Code` 收口为 `编码`，取消按钮说明从 `Cancel` 收口为 `取消`。回归：前端 build passed。
+- 2026-06-25 补强：网络编辑器残留可见英文兜底清理。右侧状态详情中无所在状态包时不再显示 `Root`，改为 `未加入状态包`；网络编辑器批量加载失败时不再提示 `Load network editor data failed`，改为中文错误兜底。验收矩阵和浏览器流程记录已同步。回归：前端 build passed。
+- 2026-06-25 补强：一次性提交操作流按最新确认再次落文档。主需求文档新增“预览模式不是未保存编辑态、编辑模式不是自动保存态”的页面级口径，明确只有点击 `进入编辑` 后才可编辑画板；抽屉保存、拖拽、连线、容器调整、自动整理、覆盖刷新和同步/分叉选择都只进入本次草稿，编辑完后点击 `统一提交` 才一次性写入现有数据库接口；用户说明和验收矩阵同步更新。回归：文档同步，无代码变更。
+- 2026-06-25 补强：画布连接方式引导补齐。网络编辑器画布动作条现在按预览模式、无选择、只选状态、只选活动、状态+活动双选和拖拽中状态显示不同下一步提示；同时选中状态和活动后，会明确提示点击 `状态 -> 输入/上下文` 或 `活动 -> 产出/声明输出` 加入编辑草稿，降低首屏建网对端口拖拽经验的依赖。用户说明、验收矩阵和浏览器流程记录已同步。回归：前端 build passed。
+- 2026-06-25 补强：缺规则问题行跳转活动能力入口补齐。建模校验、求解器准备和求解预检阻塞项中的规则类问题行新增 `规则` 动作，点击会先定位相关状态/活动/绑定对象，再通过 `open-workspace` 事件把数据管理页签切到 `活动能力`，方便为相关原子活动创建、启用或明确选择规则。用户说明、验收矩阵和浏览器流程记录已同步。回归：前端 build passed。
+- 2026-06-25 补强：前端请求去重与影响分析防抖补齐。`frontend/src/api/masterData.js` 的 `getMachineTypes` 现在在 API 层共享缓存并合并 in-flight 请求，多个数据管理子页面并发加载设备类型时复用同一请求；创建、更新、删除设备类型成功后清缓存。网络编辑器影响分析自动刷新增加短防抖和请求序号保护，快速切换节点、焦点或图投影时旧响应不会覆盖新选择；顶部 `影响分析` 手动按钮保持即时刷新。验收矩阵和浏览器流程记录已同步。回归：前端 build passed。
+- 2026-06-25 补强：网络编辑器工作区布局与设备选择器体验补齐。前端为网络编辑器工作区新增明确内部滚动容器，左侧资源区、右侧属性区和底部校验 / 求解预检区各自滚动，画布在中间区域内伸缩，改善 720px 高度下的可见性；`求解` 视图画布顶部新增“仅显示可执行活动与求解事实投影”说明，避免虚拟活动隐藏被误判；设备类型选择器保留搜索并按最近使用、业务设备类型、测试 / 样例设备类型分组，最近 5 个机型保存在本地。主需求文档、用户说明、验收矩阵和浏览器流程记录已同步。回归：前端 build passed。
+- 2026-06-24 补强：网络编辑器浏览器可测性与隐藏 DOM 暴露问题补齐。前端为顶部工具栏、资源区、画布、属性区、校验区、问题表、抽屉/弹窗、关键按钮、状态/活动节点和容器补 `data-testid`；问题表定位/刷新按钮携带 `data-issue-code`；5 个分段控件补 `aria-label`；状态、虚拟活动、原子活动抽屉，以及重复状态、共享状态包修改、批量绑定弹窗启用 `destroy-on-close`，避免关闭后隐藏表单 DOM 污染浏览器文本抽取。验收矩阵和浏览器流程记录已同步。回归：前端 build passed。
+- 2026-06-24 补强：网络编辑器生产预览入口补齐。后端 `/` 现在优先服务 `frontend/dist/index.html` 和 `/assets/*`，没有生产构建时回退到 `frontend/index.html`；前端新增 `npm run preview:api`，正式复用 `scripts/serve_frontend_dist_proxy.py` 服务 `frontend/dist` 并代理 `/api/*`，支持通过 `--backend` / `--port` 使用备用端口。README、验收矩阵和浏览器流程记录已同步。回归：`python -m py_compile app\main.py scripts\serve_frontend_dist_proxy.py` passed，前端 build passed，TestClient root/assets smoke passed。
+- 2026-06-24 补强：网络编辑器缺规则快捷连线闭环补齐。前端右侧规则下拉、批量绑定、拖线确认和快捷连线统一只识别启用 `op_rule`；没有启用规则时提示先去活动能力或规则维护创建并启用规则，多条启用规则时提示在右侧规则下拉中明确选择，停用规则不会再被自动带入绑定草稿。用户说明、验收矩阵和浏览器流程记录已同步。回归：前端 build passed。
+- 2026-06-24 补强：新建状态重复识别闭环按需求收口。前端保存新状态时，若只有一个编码、名称或原子状态事实强匹配候选，会直接提示 `已发现相同状态，将复用` 并复用已有状态到当前状态包草稿；多个候选或仅名称相似时才弹出 `发现相似状态`，保留 `复用选中状态` / `仍然新建` 决策。用户说明和验收矩阵已同步。回归：前端 build passed。
+- 2026-06-24 补强：网络编辑器预览态写入防线补强。前端 `queueDraftChange` 中心草稿入口现在会在非编辑态/提交中拒绝入队，状态多选标记和端口拖放落点也补充 `requireEditMode` / `canMutate` 二次检查，避免后续新增入口绕过“进入编辑后才产生草稿”的页面级状态机；验收矩阵已同步。回归：前端 build passed。
+- 2026-06-24 补强：网络编辑器原始状态值中文映射补强。前端绑定影响分析标签、绑定列表、覆盖快照、求解器准备状态、求解预检状态、运行时待补字段和共享状态包影响预览不再直接展示 `input/output/partial/stale/pending/none/ready` 等原始值，改为中文角色、覆盖状态和预检状态；验收矩阵已同步。回归：前端 build passed。
+- 2026-06-24 补强：网络编辑器页面残留英文摘要中文化。前端将顶部和资源区 `State/Virtual/Atomic/New Virtual/New Atomic`，状态/活动节点 `leaf/ref/child/d/act/pkg/sub/impl/in/ctx/out/cross`，容器 `states/items/ctx/out`，复杂连线 `N inputs/N outputs` 和若干错误兜底统一改为中文短标签；主需求文档、用户说明和验收矩阵已同步。回归：前端 build passed。
+- 2026-06-24 补强：统一提交保存边界与待补规则闭环对齐需求。后端 `network-editor/commit` 现在只用结构性建模 error 阻止保存；求解准备 error 会进入提交前复核，用户确认后可保存建模中的图，但求解预检继续 blocked。原子活动绑定允许零启用规则时 `op_rule_id=null`，前端在产出状态无法生成 effect fact 时按“待补规则”创建原子活动和两侧绑定草稿，不自动创建 `op_rule`；补充 focused 回归覆盖预检 422 不落库、确认后保存、绑定规则为空和求解预检 blocked。需求文档、用户说明和验收矩阵已同步。回归：`python -m py_compile app\api\v1\master_data.py` passed，待补规则 focused case 1 passed，统一提交 focused case 1 passed，solver-ready blocked focused case 1 passed，前端 build passed。
+- 2026-06-24 补强：统一提交复核提示接入中文 issue 展示。`统一提交` 预检只有 warning 时，`提交前复核` 弹窗现在列出最多 5 条中文问题摘要、对象和建议，再由用户选择 `继续提交` 或 `返回编辑`；存在 error 或 revision 冲突时，错误提示改为中文摘要并保留草稿。需求文档、用户说明和验收矩阵已同步。回归：前端 build passed。
+- 2026-06-24 补强：网络编辑器校验问题表用户可读化。建模校验、求解器准备和求解预检阻塞项不再直接展示后端英文 `message/suggested_action` 作为主文案，而是按 issue code 映射为中文级别、中文问题类型、说明和建议；说明会补充相关状态、活动、绑定、覆盖状态、缺失叶子、规则 ID 和事实特征。`layered-expansion` / `layered-health-check` 诊断的 `node_id/node_type` 现在会进入 issue details，状态和活动诊断会映射为可定位对象。主需求文档、用户说明和验收矩阵已同步。回归：`python -m py_compile app\services\network_editor.py` passed，health focused case 1 passed，network editor solver precheck focused case 1 passed，前端 build passed。
+- 2026-06-24 补强：网络编辑器核心操作文案中文化。状态/虚拟活动/原子活动抽屉、影响分析、求解预检摘要、阻塞项定位/刷新、端口拖线提示和常见校验提示已统一为中文，减少成品操作流文档与实际页面的语言不一致；必要技术字段如 `feature_key`、`/solve/layered` 保留。验收矩阵已同步。回归：前端 build passed。
+- 2026-06-24 补强：已有状态默认归属编辑增加共享状态包保护。状态抽屉的 `所在状态包` 继续用于维护状态本体默认归属，但如果用户编辑已有状态时试图把它加入或移出已被复用的状态包，前端会阻止直接保存，并提示改用左侧 `状态包成员` 表的 `添加` / `移除引用` 入口进入同步/分叉确认，避免绕过共享状态包决策。用户说明和验收矩阵已同步。回归：前端 build passed。
+- 2026-06-24 补强：共享状态包成员添加/移除统一接入同步/分叉决策。右侧状态包成员表 `添加` 已有状态到共享状态包时不再直接排引用草稿，而是进入 `共享状态包修改确认`；`移除引用` 触及共享状态包时也会进入同一决策流。后端 `state_package_fork` 新增 `removed_state_node_id` 支持，分叉时复制原状态包直接成员但跳过被移除成员，并替换当前使用方引用；同步路径仍直接修改共享成员。回归：`python -m py_compile app\api\v1\master_data.py` passed，统一提交 focused case 1 passed，前端 build passed。
+- 2026-06-24 补强：共享状态包同步/分叉确认新增影响预览。`共享状态包修改确认` 弹窗现在会在用户确认前展示本次新增状态、受影响状态包、分叉时保持不变的状态包、相关绑定数量、需复核绑定和当前 partial/stale 覆盖缺口；选择同步/分叉仍只加入编辑草稿，统一提交才写库。用户说明和验收矩阵已同步。回归：前端 build passed。
+- 2026-06-24 补强：一次性提交口径按最新要求再次收口。主需求文档、用户说明和验收矩阵明确：默认和非编辑会话均为 `预览模式`；只有点击 `进入编辑` 后才打开本次画板编辑草稿；抽屉保存、节点拖动、容器尺寸、端口连线、自动整理、覆盖刷新和同步/分叉选择都只进入草稿；`统一提交` 是唯一写库动作。预览模式下的展开/折叠、聚焦、影响分析、校验和求解预检仅改变查看上下文或读取已提交数据，不创建草稿。前端同步修正节点级展开/折叠切换时先判断旧展开状态，再更新焦点，避免切换到新节点时误判。回归：前端 build passed。
+- 2026-06-24 补强：节点级展开 / 折叠入口落地。状态包和虚拟活动节点右上角现在提供 `展开 / 折叠`，预览模式也可用；点击后更新当前图焦点和 `stateDepth` / `activityDepth`，展开显示完整内部成员，折叠回摘要层，不写入编辑草稿。顶部 Focus bar 同步中文化为 `聚焦选中`、`折叠选中`、`展开一层`、`展开全部`、`清除焦点`。用户说明和验收矩阵已同步。回归：前端 build passed。
+- 2026-06-24 补强：状态层级 UI 口径收敛为状态包成员引用。前端不再在用户可见位置展示会强化父子状态区别的文案，统一改为 `所在状态包`、`其他出现位置`、`状态包成员`、`添加状态`；影响分析、状态抽屉、右侧成员表、右键菜单、资源树加号和草稿列表同步调整。底层 `state_node.parent_id` 仍作为兼容默认成员关系存在，不改变数据库结构。用户说明、验收矩阵和主需求文档已同步。回归：前端 build passed；`git diff --check` passed with existing LF/CRLF warning only。
+- 2026-06-24 补强：新建原子活动输入/产出必填校验落地。前端原子活动抽屉在新建时要求至少选择一个输入状态和一个产出状态，否则不允许保存到编辑草稿；这与需求文档“前置状态或目标状态为空，应禁止保存”的口径一致。编辑已有原子活动的基础属性仍可单独维护，既有绑定通过右侧绑定区调整。用户说明和验收矩阵已同步。回归：前端 build passed。
+- 2026-06-24 补强：自由白板复杂连线降噪落地。前端画布保留真实 `visibleEdges` 作为语义边，不改变后端绑定；新增渲染层 `renderedEdges`，活动输入或输出超过 5 条时默认显示 `N inputs` / `N outputs` 汇总曲线，选中相关活动、相关状态或影响分析路径时展开具体边；具体边使用端口 lane offset 上下错开，避免同端点多线完全重叠。用户说明和验收矩阵已同步。回归：前端 build passed；`git diff --check` passed with existing LF/CRLF warning only。
+- 2026-06-24 补强：画布状态多选浮动工具条落地，并与一次性提交模式对齐。编辑模式下 `Ctrl` / `Shift` / `Cmd` 点击状态节点进入多选，浮动工具条显示 `已选 / 前置 / 产出` 数量，可把当前批次标记为前置或产出，再直接打开虚拟活动或原子活动抽屉并预填对应状态；节点会用前置/产出底色提示已暂存角色。点击刷新已提交数据会结束编辑会话并回到预览模式，符合“非编辑即预览”的产品规则。主需求文档、用户说明和验收矩阵已同步。回归：前端 build passed；`git diff --check` passed with existing LF/CRLF warning only。
+- 2026-06-24 补强：画布节点右键菜单落地。状态和活动节点现在支持右键菜单；状态菜单提供设为状态焦点、编辑状态、向状态包添加状态；活动菜单提供设为活动焦点、虚拟活动专注、编辑活动以及添加内部活动/原子活动，写操作继续受编辑模式和 `canMutate` 控制。主需求文档、用户说明和验收矩阵已同步。回归：前端 build passed；`git diff --check` passed with existing LF/CRLF warning only。
+- 2026-06-24 补强：状态节点悬浮快捷操作落地。编辑模式下状态节点显示 `编辑` 快捷入口，状态包节点显示 `添加状态` 快捷入口；点击 `添加状态` 会预填当前状态包，并给新增成员一个位于状态包容器内部的默认布局落点，继续走编辑草稿和统一提交。主需求文档、用户说明和验收矩阵已同步。回归：前端 build passed；`git diff --check` passed with existing LF/CRLF warning only。
+- 2026-06-24 补强：画布空白处快速新建状态入口落地。编辑模式下在画布空白处双击会打开新建状态抽屉；若双击位置落在展开状态包容器内部，会预填该状态包为所在状态包；保存后新状态草稿携带 `_network_editor_layout` 初始坐标，统一提交成功后按该位置显示。主需求文档、用户说明和验收矩阵已同步。回归：前端 build passed；`git diff --check` passed with existing LF/CRLF warning only。
+- 2026-06-24 补强：虚拟活动和原子活动说明字段补齐。后端新增 `activity_node.description`、`atomic_activity.description` nullable 字段及迁移 `009_activity_descriptions`，schema、序列化、统一提交 CRUD 均透传；前端虚拟/原子活动抽屉新增 `说明` 文本框，原子活动新建时同批默认 `op_rule.description` 沿用该说明；集成测试补充 activity/atomic description 创建与更新断言。回归：py_compile passed，activity/atomic description focused test 1 passed，统一提交 focused case 1 passed，前端 build passed。
+- 2026-06-24 补强：删除/移除文案按状态引用语义收紧。状态引用表操作从 `删除` 改为 `移除引用`，确认框明确真实状态不会被删除；属性区通用操作从 `Edit/Delete Selected` 改为中文 `编辑选中` 和上下文删除按钮，选中状态时显示 `删除状态本体` 并提示这不是移出状态包，选中活动时显示 `删除虚拟活动` / `删除原子活动`。回归：前端 build passed。
+- 2026-06-24 补强：新建原子活动产出状态包时新增覆盖范围选择。原子活动抽屉的 `产出状态` 选到多叶子状态包后，会显示 `全部当前成员 / 选择部分成员`；partial 模式必须勾选叶子状态，自动生成的 output 绑定携带 `covered_leaf_state_ids`，同批 `op_rule` effect facts 也只按所选叶子生成；点击抽屉 `取消` 放弃本次草稿。回归：前端 build passed。
+- 2026-06-24 补强：绑定创建新增状态包覆盖范围选择。右侧 `创建绑定` 表单在多叶子状态包场景显示 `全部当前成员 / 选择部分成员`；partial 模式必须勾选叶子状态并随绑定草稿提交 `covered_leaf_state_ids`。端口拖线确认状态包绑定时，主按钮为 `全部当前成员`，次按钮为 `选择部分成员`，选择 partial 后只预填表单不创建草稿；批量绑定继续默认全部当前启用叶子，partial 覆盖用单条表单处理。回归：前端 build passed。
+- 2026-06-24 补强：按最新产品口径收紧一次性提交说明。主需求文档、用户说明和验收矩阵现在明确把网络编辑器定义为页面级状态机：未点击 `进入编辑` 时一律为只读 `预览模式`；点击 `进入编辑` 后才打开临时编辑草稿；单步保存、拖动、连线、刷新覆盖和同步/分叉只进入草稿，不直接写库；编辑完画板后点击 `统一提交` 才是唯一写库动作，成功后结束编辑会话并回到预览模式。回归：文档同步，无代码变更。
+- 2026-06-24 补强：状态包分叉审计信息下沉到后端约束。`state_package_fork` 统一提交现在要求 `branch.name` 和分叉 `reason` 均非空，缺失时返回 422 且不创建分支；前端原有分支名称/说明必填校验保持不变。回归：`python -m py_compile app\api\v1\master_data.py` passed，统一提交 focused case 1 passed。
+- 2026-06-24 补强：统一提交新增非阻断提示确认流。前端提交草稿时先以 `allow_warnings=false` 调用 `network-editor/commit` 做提交预检；若后端返回阻塞错误则回滚并保留草稿，若只有 warning 则展示提交前复核确认，用户点击 `继续提交` 后才以 `allow_warnings=true` 正式提交。回归：前端 build passed。
+- 2026-06-24 补强：编辑会话新增基线 revision 冲突保护。`network-editor/graph` 返回当前网络内容指纹，前端进入编辑时记录并在统一提交时作为 `base_revision` 传入；后端提交前重新计算 revision，不一致时返回 409，草稿不应用，前端保留草稿并展示冲突提示。回归：`python -m py_compile app\db\schemas.py app\api\v1\master_data.py app\services\network_editor.py` passed，统一提交 focused case 1 passed，网络编辑器集成测试 19 passed，前端 build passed。
+- 2026-06-24 补强：语义端口拖放从“松手即入草稿”改为“松手预填右侧绑定表单并确认”。确认框展示状态端点、活动端点、绑定角色、规则和覆盖范围；点击 `加入草稿` 后才创建绑定草稿。若原子活动存在多条规则，系统不自动猜测，要求先在右侧选择规则后点击 `连接`。回归：前端 build passed。
+- 2026-06-24 补强：新建原子活动抽屉现在可选择多个输入状态、产出状态和规则时长；保存后同批次排入 `atomic_activity`、`op_rule`、`activity_state_binding` 草稿，并通过 `_draft_ref` 在统一提交时解析真实原子活动和规则 ID。选择状态包时，规则 precondition/effect facts 展开到启用叶子原子状态，但画布绑定保持到所选状态包，减少线条噪声。回归：`python -m py_compile app\db\schemas.py app\api\v1\master_data.py` passed，统一提交 focused case 1 passed，网络编辑器集成测试 19 passed，前端 build passed。
+- 2026-06-24 补强：统一提交新增草稿引用解析，`NetworkEditorDraftChange.client_id` 可被后续绑定 payload 的 `_draft_ref` 引用；新建虚拟活动抽屉现在可选择多个上下文输入和声明输出状态，保存后同批次创建虚拟活动并自动排入 `context_input/declared_output` 绑定草稿。回归：`python -m py_compile app\db\schemas.py app\api\v1\master_data.py` passed，统一提交 focused case 1 passed，网络编辑器集成测试 19 passed，前端 build passed。
+- 2026-06-24 补强：右侧绑定区新增 `批量绑定`，选中虚拟活动或原子活动后可一次选择多个前置状态和产出状态，批量排入 `activity_state_binding` 创建草稿；虚拟活动自动使用 `context_input/declared_output`，原子活动自动使用 `input/output` 并沿用规则选择，已存在或已在草稿中的重复绑定会跳过。回归：前端 build passed。
+- 2026-06-24 补强：画布状态/活动节点新增左右语义端口，编辑模式下右侧端口发起拖线、左侧端口接收拖放；状态右端口到虚拟/原子活动左端口创建 `context_input` / `input`，虚拟/原子活动右端口到状态左端口创建 `declared_output` / `output`，SVG 线端点也改为匹配端口方向；节点本体不再作为业务连线发起点，布局移动仍走布局手柄。回归：前端 build passed。
+- 2026-06-24 补强：虚拟活动节点新增 `专注` 入口并支持双击进入专注画布；进入后复用 `activity_scope_node_ids` 和完整活动深度展示内部活动，顶部显示活动面包屑、上下文状态、声明输出状态和实现覆盖；编辑模式下一级虚拟活动可直接点 `子活动`，二级虚拟活动可点 `原子` 继续分解，仍走编辑草稿。回归：前端 build passed。
+- 2026-06-24 补强：需求文档、用户说明和验收矩阵进一步明确一次性提交产品规则：默认和非编辑会话均为 `预览模式`，只有显式点击 `进入编辑` 后画板才允许写操作；统一提交成功、取消编辑、刷新或切换设备后都回到预览模式。回归：文档同步，行为已由前端编辑会话和 `network-editor/commit` 集中提交实现覆盖。
+- 2026-06-24 补强：重复状态复用选择器和被引用状态包 `同步 / 分叉` 交互已产品化。前端新建状态保存前按编码、名称、原子状态事实和值、相似名称识别候选；唯一强匹配会自动复用，多个候选或仅相似名称时弹出 `发现相似状态` 后可复用已有状态或仍然新建；复用会创建 `state_node_reference` 草稿而不是重复创建真实状态。修改已被引用状态包成员时弹出 `共享状态包修改确认`，同步继续修改共享状态包，分叉会提交新增的 `state_package_fork` 变更；后端统一提交时复制原状态包直接成员、创建分支、把新增/复用状态加入分支，并替换当前引用方，其他引用方保持原状态包不变。回归：`python -m py_compile app\db\schemas.py app\api\v1\master_data.py` passed，统一提交 focused case 1 passed，网络编辑器集成测试 19 passed，场景导入 9 passed，前端 build passed。
+- 2026-06-24 补强：顶部新增 `自动整理`，编辑模式下按当前可见节点层级和顺序重新排布状态/活动节点，批量写入布局草稿，继续通过 `metadata_json._network_editor_layout` 和统一提交持久化，补齐 MVP 中自动布局与节点防重叠入口。回归：前端 build passed。
+- 2026-06-24 补强：状态包容器和虚拟活动容器新增右下角尺寸手柄，编辑模式下拖动后写入布局草稿；容器尺寸保存到节点 `metadata_json._network_editor_container`，与节点位置一起通过统一提交持久化，画布高度会随手动拉大的容器扩展。回归：前端 build passed，统一提交 focused case 1 passed，网络编辑器集成测试 19 passed。
+- 2026-06-24 补强：自由白板节点位置纳入编辑模式一次性提交。前端状态/活动节点在编辑模式下显示布局手柄，拖动后先进入 `编辑草稿`；草稿内同一节点的字段更新与布局更新会合并，避免 `metadata_json._network_editor_layout` 被后续属性编辑覆盖；统一提交后布局随节点 metadata 持久化。状态包容器和虚拟活动容器边界按成员实际坐标计算，容器内部节点可自由摆放，虚拟活动容器仍只包含活动节点。主需求文档新增 `成品页面操作流总览（自由白板版本）`，明确预览/编辑/统一提交、重复状态复用、同步/分叉、连线降噪和不导出独立数据文件；计划文件 `docs/superpowers/plans/2026-06-24-network-editor-edit-session-refactor.md` 已更新完成项。回归：`python -m py_compile app\db\schemas.py app\api\v1\master_data.py` passed，统一提交 focused case 1 passed，网络编辑器集成测试 19 passed，场景导入 9 passed，前端 build passed。
+- 2026-06-24 补强：网络编辑器按最新自由画布交互要求改为默认 `预览模式`，新增 `进入编辑` / `统一提交` / `取消编辑` 顶部流程；前端所有新增、编辑、删除、连线、覆盖刷新和状态引用维护先进入 `编辑草稿`，不再即时写库；后端新增 `POST /api/v1/machine-types/{machine_type_id}/network-editor/commit` 批量提交端点，在同一次请求中应用草稿并执行网络编辑器校验，失败时依赖 session rollback 避免半提交。前端求解交接入口命名为 `求解预检`，页面只展示预检摘要和模板信息，不再提供 `下载导出 JSON` / `下载求解模板`。回归：新增统一提交 rollback focused case 1 passed，网络编辑器集成测试 19 passed，场景导入 9 passed，`python -m py_compile app\db\schemas.py app\api\v1\master_data.py` passed，前端 build passed。
+- 2026-06-24 补强：影响分析和求解分组归属现在按 `include_inactive` 过滤 `activity_package_atomic_ref`；默认 `owner_virtual_activities` 不再包含停用挂载的虚拟活动，`include_inactive=true` 可审计历史挂载。回归：新增 inactive package ref focused case 1 passed，网络编辑器集成测试 18 passed，场景导入 9 passed，全量后端 324 passed，前端 build passed。
+- 2026-06-24 补强：求解预检的 binding leaf facts 现在与 solver-ready 图投影保持一致，默认只交接启用叶子对应的 `own_preconditions` / `own_effects` / `inherited_preconditions`；覆盖快照中残留停用叶子时不会进入默认求解交接，`include_inactive=true` 仍可用于审计停用 leaf facts。回归：新增 inactive binding leaf focused case 1 passed，网络编辑器集成测试 17 passed，场景导入 9 passed，全量后端 323 passed，前端 build passed。
+- 2026-06-24 补强：solver-ready 图投影、影响分析、校验和求解预检现在统一按 `include_inactive` 处理 legacy `op_rule`、活动包引用、上下文绑定和求解规则选择；默认视图只使用 active 规则/端点/状态事实，只有停用 `op_rule` 的原子活动不会再生成 legacy precondition/effect 边，也不会在求解预检中被自动填入停用 `op_rule_id`。回归：新增 inactive legacy rule focused case 1 passed，网络编辑器集成测试 16 passed，场景导入 9 passed，全量后端 322 passed，前端 build passed。
+- 2026-06-24 补强：网络编辑器状态、虚拟活动和原子活动属性抽屉新增 `编码` 字段，创建时可留空继续自动生成，编辑已有节点时可直接改码并复用后端唯一性校验；集成回归补充 state/activity/atomic update 显式改码断言。回归：节点编码 focused case 1 passed，网络编辑器集成测试 15 passed，全量后端 321 passed，前端 build passed。
+- 2026-06-24 补强：后端绑定规则同步新增 provenance，`activity_state_binding` 只清理网络编辑器实际新增或共同接管的 `op_rule_precond/effect`；创建再删除绑定不会误删原本手写在 `op_rule` 上的同名规则事实。回归：绑定同步 focused case 1 passed，网络编辑器集成测试 15 passed，场景导入 9 passed，全量后端 321 passed，前端 build passed。
+- 2026-06-24 补强：带 `binding_id` 的覆盖问题 `定位` / `刷新` 现在会自动展开绑定两端的状态和活动节点后再选中绑定，避免状态包覆盖缺口在当前查看范围外时只能选中表格行、画布不可见。回归：前端 build passed。
+- 2026-06-24 补强：求解预检的 `/solve/layered` 请求模板现在在未选择活动范围时自动推断有可执行后代的顶层活动 scope；未选择目标状态时将 `target_state_node_ids` 标为待补齐运行时字段，避免 ready 预检生成空候选活动的求解模板。回归：网络编辑器集成测试 15 passed，场景导入 9 passed，全量后端 321 passed，前端 build passed。
+- 2026-06-24 补强：前端问题表和求解预检阻塞项的 `定位` 现在在目标状态/活动不可见时会自动调整局部焦点和展开深度，刷新图投影后再选中节点；阻塞项里的 `atomic_activity:*` 不再因为默认折叠深度而点不到。回归：前端 build passed。
+- 2026-06-24 补强：网络编辑器校验中来自 `layered-health-check` 的 `BROKEN_CHAIN` / `NO_PROVIDER` 等诊断现在会通过 `op_rule_id` 映射回真实 `atomic_activity:*` 图节点，并保留 `op_rule_id`、feature 和 provider 细节，底部问题表的 `定位` 可落到原子活动而不是内部负数 activity id。回归：网络编辑器集成测试 15 passed，场景导入 9 passed，全量后端 321 passed，前端 build passed。
+- 2026-06-24 补强：清理 `NetworkEditorWorkspace.vue` 中未被 UI 使用的旧 `createBinding` / `refreshCoverage` 函数，绑定创建和覆盖刷新统一走带角色矩阵、规则选择、异常兜底和派生结果失效的当前路径，减少后续维护误用。回归：前端 build passed，遗留函数扫描无旧入口。
+- 2026-06-24 补强：顶部工具栏新增 `影响分析` 显式入口，选中状态或活动后可手动重新拉取当前选择的影响分析；原有选中节点自动刷新右侧影响分析面板的行为保留。回归：前端 build passed。
+- 2026-06-24 补强：求解器准备校验和求解预检新增 executable rule readiness 验收：无启用 `op_rule`、多条启用 `op_rule` 未显式选择、绑定指向多个/无效规则以及缺少输出状态都会阻止求解交接；新增集成回归覆盖这些坏求解输入。回归：网络编辑器集成测试 15 passed，场景导入 9 passed，全量后端 321 passed，前端 build passed。
+- 2026-06-24 补强：状态包成员引用从“显示标记”扩展为完整显示 DAG 语义，额外出现位置参与图投影局部展开、状态包覆盖快照、影响分析成员覆盖、求解聚合规则、`layered-expansion` 和 `layered-health-check`；新增集成回归覆盖引用所在状态包作为局部根、求解目标和绑定状态包。回归：网络编辑器集成测试 14 passed，场景导入 9 passed，全量后端 320 passed，前端 build passed。
+- 2026-06-24 补强：求解预检请求改用求解专用 payload，保留当前目标/活动范围选择，但固定为 solver-ready 和完整深度，避免画布默认折叠时求解候选活动被误裁剪。回归：前端 build passed。
+- 2026-06-24 补强：求解预检下载入口按最新一次性提交口径移除，`status=blocked` 时保留阻塞项与摘要预览，但不再出现 `下载导出 JSON` 和 `下载求解模板`；`solve_request_template` 新增 `model_status`、`solver_handoff_ready` 和 `blocking_issue_count`，前端 ready 显示“数据库交接就绪”，blocked 显示“仅预检摘要：阻塞 N 项”，防止未就绪模型被误交给求解链路。回归：network editor solver precheck focused case 1 passed；网络编辑器集成测试 20 passed；前端 build passed。
+- 2026-06-24 补强：后端绑定更新新增机型身份保护，`PUT /activity-state-bindings/{id}` 不允许改变已有绑定的 `machine_type_id`，避免绑定 ID 被跨机型迁移；集成测试新增对应 422 回归。回归：网络编辑器集成测试 passed。
+- 2026-06-24 补强：前端绑定表单与快捷连线新增活动类型/角色矩阵预校验，虚拟活动只允许上下文输入/声明输出，可执行活动只允许输入/输出；可执行活动在没有唯一 `op_rule` 时要求用户显式选择规则，避免把后端必拒的组合提交到 API。回归：前端 build passed。
+- 2026-06-24 补强：后端绑定校验收紧虚拟活动角色，level 1/2 `activity_node` 只允许 `context_input` / `declared_output`，普通 `input` / `output` 请求返回 422；集成测试新增对应回归。回归：网络编辑器集成测试 passed。
+- 2026-06-24 补强：网络编辑器核心异步入口新增 API 异常兜底，覆盖初始机型加载、主数据加载、图刷新、影响分析、校验、求解预检、保存/删除、覆盖刷新和状态引用维护；后端不可用或请求失败时通过页面消息提示，不再把 rejected Promise 冒泡到 Vue 事件链。回归：前端 build passed。
+- 2026-06-24 补强：网络编辑器初始深度从全展开调整为默认折叠，进入工作区时使用 `状态深度 = 1`、`活动深度 = 2`，先展示高层状态和一级/二级虚拟活动；`展开全部` 仍可恢复完整展开。回归：前端 build passed。
+- 2026-06-24 补强：画布活动节点的跨层级提示从 `cross` 调整为 `cross N`，按当前活动关联的跨层级绑定条数显示节点级数量，补齐网络分布与深度分析中“跨层级前置/绑定数量”的局部摘要口径。回归：前端 build passed。
+- 2026-06-24 补强：画布虚拟活动容器新增 `ctx` 上下文前置数量和 `out 已实现/声明` 输出覆盖摘要，与虚拟活动节点 `impl` 指标共用声明输出/内部可执行 output 的覆盖口径，补齐展开容器中的上下文与输出覆盖读图信息。回归：前端 build passed。
+- 2026-06-24 补强：画布折叠状态包节点新增成员数、深度跨度和相关活动数摘要，并与既有 `pkg 已覆盖/当前叶子` 覆盖摘要一起补齐状态包节点形态。回归：前端 build passed。
+- 2026-06-24 补强：画布虚拟活动节点新增 `impl 已实现/声明` 摘要，按声明输出覆盖叶子与内部可执行活动 output 覆盖叶子的交集计算实现比例；有缺口时显示警示样式，完整实现时显示成功样式。回归：前端 build passed。
+- 2026-06-24 补强：左侧资源树新增行内成员创建入口，状态包可直接添加状态成员，一级活动可直接新建二级虚拟活动，二级活动包可直接新建并挂载原子活动；保存后复用现有刷新链路同步资源树和图投影。回归：前端 build passed。
+- 2026-06-24 补强：总览下方新增求解就绪状态条，按当前图投影的 `validation_summary` 标记 `暂不可求解`、`预检前需复核` 或 `求解输入就绪`，补齐纲要/不完整模型“可保存、可展示，但不可直接求解”的显式提示。回归：前端 build passed。
+- 2026-06-24 补强：左侧活动树现在通过 `activity_package_atomic_ref` 查询二级包下的原子活动引用，并把原子活动作为 `原子` 叶子显示；点击原子叶子会定位画布中的可执行活动并展开到原子层。回归：前端 build passed。
+- 2026-06-24 补强：网络编辑器校验新增 `STATE_AGGREGATION_CYCLE`、`STATE_REFERENCE_CYCLE`、`ACTIVITY_CONTAINER_CYCLE` 和 `ACTIVITY_SOLVER_PARTICIPATION_MISMATCH`，对历史/导入脏数据中的状态包成员环、状态引用环、活动容器环和求解参与标记错误返回阻断预检；状态包成员更新继续阻止危险重挂，后端图投影和前端状态覆盖计算均增加叶子展开环防护，避免脏数据导致页面或图投影卡住。回归：网络编辑器集成测试 14 passed，场景导入 9 passed，前端 build passed。
+- 2026-06-24 补强：新增 `docs/network-editor-acceptance-matrix.md`，按需求文档第 17 节 MVP、关键规则、校验项、影响分析、统计和不做项逐项登记当前实现证据，作为后续闭合审计入口。回归：文档同步，无代码变更。
+- 2026-06-24 补强：验收矩阵新增行级证据索引，覆盖 API、图投影/校验服务、前端交互和集成测试锚点，便于逐项从文件位置复核“已实现”声明。回归：文档同步，无代码变更。
+- 2026-06-24 补强：左侧 `未布置节点` 从前 12 个摘要改为完整可滚动列表，状态和活动孤立节点不再被 `+N more` 折叠隐藏；用户说明和验收矩阵已同步。回归：前端 build passed。
+- 2026-06-24 补强：影响分析结果现在会在画布中高亮相关状态、活动和连接边，补齐影响路径高亮验收点。回归：前端 build passed，网络编辑器集成测试 12 passed。
+- 2026-06-24 补强：状态影响分析面板新增状态包成员覆盖摘要，展示叶子状态数、状态包绑定数、绑定引用数和叶子状态标签，补齐“选择状态时显示成员覆盖情况”的验收点。回归：前端 build passed，网络编辑器集成测试 12 passed。
+- 2026-06-24 补强：活动影响分析面板新增 `直接前置状态` 和 `产出状态` 列表，与已有继承前置、所属虚拟活动、受影响状态包和下游活动一起完整展示 13.2 要求的活动影响信息。回归：前端 build passed，网络编辑器集成测试 12 passed。
+- 2026-06-24 补强：顶部总览新增 `Partial V` 与 `Cross` 指标，直接展示部分实现虚拟活动数量和跨层级绑定数量，补齐网络分布与深度分析统计口径。回归：前端 build passed，网络编辑器集成测试 12 passed。
+- 2026-06-24 补强：求解器准备校验新增 `GRAPH_DEPENDENCY_CYCLE` error，检测当前图投影中的状态-活动有向环并阻止导出，补齐“存在循环依赖应阻止导出”的验收点。回归：网络编辑器集成测试 12 passed，前端 build passed。
+- 2026-06-24 补强：求解器准备校验新增 `OUTPUT_STATE_UNUSED` warning，对产出后没有下游活动消费且未作为目标状态的状态给出非阻断提示；选为目标状态时自动豁免。回归：网络编辑器集成测试 12 passed，前端 build passed。
+- 2026-06-24 补强：求解器准备校验新增 `CROSS_LEVEL_BINDING_MANY` warning，当跨层级绑定超过 3 条时给出全局复核提示，补齐“跨层级绑定较多”非阻断提示。回归：网络编辑器集成测试 12 passed，前端 build passed。
+- 2026-06-24 补强：求解器准备校验新增 `STATE_PACKAGE_COVERAGE_LARGE` warning，状态包绑定覆盖超过 8 个叶子状态时提示复核，补齐“状态包覆盖范围过大”非阻断提示。回归：网络编辑器集成测试 12 passed，前端 build passed。
+- 2026-06-24 补强：底部建模校验和求解器准备校验表格新增 `建议` 列，按 issue code 显示中文下一步处理动作；后端 `suggested_action` 仅作为接口协议和排查字段保留。回归：前端 build passed，网络编辑器集成测试 12 passed。
+- 2026-06-24 补强：建模校验新增 `ACTIVITY_MISSING_INPUT` / `ACTIVITY_MISSING_OUTPUT`，对只有单侧连接的活动提示缺少输入或输出，补齐“活动缺少前置状态/产出状态”建模校验项。回归：网络编辑器集成测试 12 passed，前端 build passed。
+- 2026-06-24 补强：建模校验新增 `VIRTUAL_ACTIVITY_NOT_DECOMPOSED`，当可见虚拟活动没有任何可见后代可执行活动时返回 warning，补齐“虚拟活动未分解”校验项。回归：网络编辑器集成测试 12 passed，前端 build passed。
+- 2026-06-24 补强：虚拟活动节点新增 `sub` 与 `d` 摘要，展示当前可见子活动数量和最大后代层级，补齐虚拟活动节点“子活动/最大深度”展示口径。回归：前端 build passed，网络编辑器集成测试 12 passed。
+- 2026-06-24 补强：画布状态列新增状态包容器背景，状态包展开时保留层级边界并标出可见成员范围，补齐“展开状态包时容器边界保留”的视觉验收点。回归：前端 build passed，网络编辑器集成测试 12 passed。
+- 2026-06-24 补强：左侧资源区新增 `未布置节点`，按当前图可见边列出孤立状态和活动，并跟随搜索框按编码/名称过滤，点击可直接定位到画布节点，补齐资源区未布置节点验收点。回归：前端 build passed，网络编辑器集成测试 12 passed。
+- 2026-06-24 补强：画布活动节点显示 `in`、`ctx`、`out`、`cross` 摘要，直接提示自身输入、继承/上下文前置、产出和跨层级绑定。回归：前端 build passed，网络编辑器集成测试 12 passed。
+- 2026-06-24 补强：求解预检新增 `state_aggregation_rules` 与 `virtual_activity_groups`，前端摘要显示状态包聚合和虚拟活动分组，保证求解交接摘要保留状态聚合和虚拟活动 group/WBS 元数据。回归：网络编辑器集成测试 12 passed，前端 build passed。
+- 2026-06-24 补强：前端绑定表单新增 `更新选中绑定`，选中已有绑定后可修改角色、状态、活动或规则并调用 PUT API，避免必须删除重建。回归：前端 build passed，网络编辑器集成测试 12 passed。
+- 2026-06-24 补强：校验新增 `DUPLICATE_STATE_NAME`、`MULTI_PARENT_STATE_NOTICE`、`MULTIPLE_OUTPUT_PROVIDERS`，覆盖重复状态名、状态包多处引用和多个可执行活动产出同一状态的非阻断质量提示。回归：网络编辑器集成测试 12 passed，前端 build passed。
+- 2026-06-24 补强：画布状态包节点直接显示 `pkg 已覆盖/当前叶子` 与绑定数量，并在 partial/stale 覆盖时高亮，便于从总览发现状态包缺口。回归：前端 build passed，网络编辑器集成测试 12 passed。
+- 2026-06-24 补强：前端新增 `折叠选中`、`展开一层`、`展开全部`，让选中状态/活动可以直接局部折叠、逐层展开或展开完整子树。回归：前端 build passed，网络编辑器集成测试 12 passed。
+- 2026-06-24 补强：绑定覆盖缩小/删除会同步清理对应 `op_rule_precond/effect` 旧 fact；跨层级绑定会返回建模提示 `CROSS_LEVEL_BINDING_NOTICE`。回归：网络编辑器集成测试 12 passed，场景导入 9 passed，全量后端 320 passed，前端 build passed。
+- 网络编辑器仍不维护工期、资源、成本、OR/CUSTOM 聚合、自动排程重做、自动状态回滚和自动生成可执行活动。
+- `GraphEdge` 仍为响应投影对象，不作为核心持久表。
+- Planner/Scheduler canonical 链路未被替换。
