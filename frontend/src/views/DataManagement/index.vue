@@ -30,6 +30,10 @@
         <BusinessStateDimensionPage />
       </el-tab-pane>
 
+      <el-tab-pane label="工作日历" name="workCalendar">
+        <WorkCalendarPage />
+      </el-tab-pane>
+
       <el-tab-pane label="状态目标" name="stateTarget">
         <StateTargetWorkspace />
       </el-tab-pane>
@@ -130,6 +134,7 @@ import MachineTypePage from './MachineTypePage.vue'
 import MachinePage from './MachinePage.vue'
 import ResourcePage from './ResourcePage.vue'
 import BusinessStateDimensionPage from './BusinessStateDimensionPage.vue'
+import WorkCalendarPage from './WorkCalendarPage.vue'
 import StateTargetWorkspace from './StateTargetWorkspace.vue'
 import StatePage from './StatePage.vue'
 import ActivityCapabilityWorkspace from './ActivityCapabilityWorkspace.vue'

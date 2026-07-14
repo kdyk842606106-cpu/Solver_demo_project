@@ -14,7 +14,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.db.session import async_engine
-from app.api.v1 import imports, master_data, plans, solve, state, system
+from app.api.v1 import adjustments, calendars, imports, master_data, plans, solve, state, system
+from app.services.plan_adjustment import PlanAdjustmentError
 from app.services.system_status import get_release_info
 
 FRONTEND_ROOT = Path(__file__).resolve().parent.parent / "frontend"
@@ -84,6 +85,25 @@ async def generic_exception_handler(request: Request, exc: Exception):
     return JSONResponse(status_code=500, content=content)
 
 
+@app.exception_handler(PlanAdjustmentError)
+async def plan_adjustment_exception_handler(request: Request, exc: PlanAdjustmentError):
+    """Preserve stable plan-adjustment error codes at the API boundary."""
+    if exc.code in {"PLAN_NOT_FOUND", "ADJUSTMENT_NOT_FOUND"}:
+        status_code = 404
+    elif exc.code in {"ADJUSTMENT_STALE", "BASELINE_PLAN_CHANGED", "PLAN_NOT_BASELINE"}:
+        status_code = 409
+    else:
+        status_code = 422
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "error_code": exc.code,
+            "error_message": str(exc),
+            "details": exc.details,
+        },
+    )
+
+
 # ============================================================
 # Routes
 # ============================================================
@@ -95,6 +115,8 @@ app.include_router(master_data.router, prefix="/api/v1")
 app.include_router(plans.router, prefix="/api/v1")
 app.include_router(imports.router, prefix="/api/v1")
 app.include_router(system.router, prefix="/api/v1")
+app.include_router(calendars.router, prefix="/api/v1")
+app.include_router(adjustments.router, prefix="/api/v1")
 app.mount(
     "/assets",
     StaticFiles(directory=FRONTEND_DIST / "assets", check_dir=False),

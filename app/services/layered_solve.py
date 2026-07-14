@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.planner.partial_order import partial_order_plan
 from app.core.planner.search import RAG, RAGNode, has_cycle, save_candidate_plan
 from app.core.planner.state import compute_state_delta, load_state
+from app.core.scheduler.rules import SchedulingRuleError
 from app.core.scheduler.solver import save_schedule_result, solve_schedule
 from app.core.solver.rule_evaluator import RuleEvaluator
 from app.core.solver.step_role import compute_step_role_diff
@@ -30,6 +31,11 @@ from app.db.models import (
 from app.db.schemas import LayeredExpansionRequest, LayeredSolveRequest
 from app.services.layered_expansion import expand_layered_context
 from app.services.layered_health import check_layered_health
+from app.services.scheduling_rule_requests import (
+    materialize_scheduling_rule_overrides,
+    prepare_scheduling_rule_constraints,
+    scheduling_rule_exception_candidates,
+)
 
 
 @dataclass(frozen=True)
@@ -989,7 +995,25 @@ async def solve_layered(
         "B": "blockage_strategy_b",
         "AB": "blockage_strategy_ab",
     }
-    replan_reason = replan_reason_map.get(strategy) if strategy else "layered_initial"
+    has_rule_exception = bool(
+        ((request.constraints or {}).get("scheduling_rules") or {}).get("new_override")
+    )
+    replan_reason = (
+        "scheduling_rule_exception"
+        if has_rule_exception
+        else replan_reason_map.get(strategy) if strategy else "layered_initial"
+    )
+
+    try:
+        prepared_constraints = await prepare_scheduling_rule_constraints(
+            machine_id=request.machine_id,
+            parent_plan_id=parent_plan_id,
+            constraints=request.constraints,
+            session=session,
+            solve_mode=(request.context or {}).get("mode", "layered"),
+        )
+    except SchedulingRuleError as exc:
+        return _error_payload(None, exc.code, str(exc))
 
     current_state_overrides = dict(request.current_state_overrides or {})
     if strategy in ("B", "AB") and strategy_b_reason:
@@ -1013,13 +1037,24 @@ async def solve_layered(
     )
 
     objectives = request.objectives or [{"type": request.objective, "weight": 1.0}]
+    inherited_calendar_request = None
+    if parent_plan_id and (request.calendar_context is None or request.calendar_context.revision_policy != "latest"):
+        inherited_calendar_request = await session.scalar(
+            select(SolveRequest)
+            .join(CandidatePlan, CandidatePlan.solve_request_id == SolveRequest.id)
+            .where(CandidatePlan.id == parent_plan_id)
+        )
+    calendar_enabled = bool(request.calendar_context and request.calendar_context.enabled)
+    if inherited_calendar_request and inherited_calendar_request.calendar_enabled:
+        calendar_enabled = True
+
     solve_req = SolveRequest(
         machine_id=request.machine_id,
         current_state_id=request.current_state_id,
         target_state_id=target_state_id,
         objective=request.objective,
         objectives=objectives,
-        constraints=request.constraints,
+        constraints=prepared_constraints,
         parent_plan_id=parent_plan_id,
         blockage_constraints=blockage_constraints,
         overrides={
@@ -1035,6 +1070,21 @@ async def solve_layered(
             "context": request.context,
         },
         status="running",
+        calendar_enabled=calendar_enabled,
+        schedule_start_at=(
+            request.calendar_context.schedule_start_at
+            if request.calendar_context and request.calendar_context.schedule_start_at
+            else inherited_calendar_request.schedule_start_at if inherited_calendar_request else None
+        ),
+        schedule_timezone=(
+            request.calendar_context.display_timezone
+            if request.calendar_context and request.calendar_context.display_timezone
+            else inherited_calendar_request.schedule_timezone if inherited_calendar_request else None
+        ),
+        calendar_snapshot=(
+            {"revision_policy": (request.calendar_context.revision_policy if request.calendar_context else "inherit")}
+            if calendar_enabled else None
+        ),
     )
 
     try:
@@ -1167,6 +1217,23 @@ async def solve_layered(
 
         await session.flush()
 
+        try:
+            solve_req.constraints = await materialize_scheduling_rule_overrides(
+                solve_req.constraints,
+                candidate_plan_id=plan_id,
+                session=session,
+            )
+        except SchedulingRuleError as exc:
+            solve_req.status = "failed"
+            solve_req.solved_at = datetime.now(timezone.utc)
+            await session.commit()
+            return _error_payload(
+                solve_req.id,
+                exc.code,
+                str(exc),
+                {"candidate_plan_id": plan_id},
+            )
+
         state_continuity_groups_by_step = _state_continuity_groups_by_step(
             pop_result.nodes,
             effective_rules,
@@ -1179,12 +1246,20 @@ async def solve_layered(
             state_continuity_groups_by_step=state_continuity_groups_by_step,
         )
         if sched_result.status not in ("optimal", "feasible"):
+            exception_candidates = await scheduling_rule_exception_candidates(
+                solve_req.constraints,
+                candidate_plan_id=plan_id,
+                diagnostics=sched_result.diagnostics,
+                session=session,
+            )
             solve_req.status = "failed"
             solve_req.solved_at = datetime.now(timezone.utc)
             await session.commit()
-            return _error_payload(
+            payload = _error_payload(
                 solve_req.id,
-                "INFEASIBLE" if sched_result.status == "infeasible" else "SOLVER_TIMEOUT",
+                sched_result.error_code or (
+                    "INFEASIBLE" if sched_result.status == "infeasible" else "SOLVER_TIMEOUT"
+                ),
                 sched_result.error_message or "Layered schedule failed",
                 {
                     "planner": pop_result.diagnostics,
@@ -1192,6 +1267,9 @@ async def solve_layered(
                     "layered_health": health,
                 },
             )
+            payload["candidate_plan_id"] = plan_id
+            payload["exception_candidates"] = exception_candidates
+            return payload
 
         await save_schedule_result(sched_result, solve_req.id, plan_id, session)
         await compute_step_role_diff(plan_id, parent_plan_id, session)
@@ -1233,6 +1311,16 @@ async def solve_layered(
                 "predecessors": task.predecessors,
                 "not_before": step_meta["not_before"] if step_meta else None,
                 "step_role": step_meta["step_role"] if step_meta else "normal",
+                "start_at": task.start_at,
+                "end_at": task.end_at,
+                "elapsed_min": task.elapsed_min,
+                "calendar_pause_min": task.calendar_pause_min,
+                "segments": task.segments,
+                "calendar_resolution": task.calendar_resolution,
+                "responsible_subsystem": task.responsible_subsystem,
+                "effect_dimension_keys": task.effect_dimension_keys,
+                "matched_scheduling_rules": task.matched_scheduling_rules,
+                "scheduling_rule_violations": task.scheduling_rule_violations,
             })
 
         rule_by_id = {rule.id: rule for rule in effective_rules}
@@ -1260,6 +1348,16 @@ async def solve_layered(
             },
             "state_delta": state_delta,
             "critical_path": sched_result.critical_path or [],
+            "critical_path_segments": sched_result.critical_path_segments or [],
+            "schedule_start_at": (
+                sched_result.calendar_summary.get("schedule_start_at")
+                if sched_result.calendar_summary else None
+            ),
+            "schedule_end_at": (
+                sched_result.calendar_summary.get("schedule_end_at")
+                if sched_result.calendar_summary else None
+            ),
+            "calendar_summary": sched_result.calendar_summary,
             "schedule": {
                 "makespan": sched_result.makespan,
                 "tasks": tasks_response,

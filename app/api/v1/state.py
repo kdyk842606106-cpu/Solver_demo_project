@@ -139,11 +139,29 @@ async def get_solve_request(
         sched = sched_result.scalar_one_or_none()
 
         if sched:
+            step_result = await db.execute(
+                select(CandidatePlanStep).where(
+                    CandidatePlanStep.candidate_plan_id == sched.candidate_plan_id
+                )
+            )
+            steps_by_order = {
+                step.step_order: step for step in step_result.scalars().all()
+            }
+            enriched_tasks = []
+            for raw_task in sched.tasks or []:
+                task = dict(raw_task)
+                step = steps_by_order.get(task.get("step_order"))
+                if step is not None:
+                    task["step_id"] = step.id
+                    task["not_before"] = step.not_before
+                    task["step_role"] = step.step_role
+                    task["lineage_key"] = step.lineage_key
+                enriched_tasks.append(task)
             response["candidate_plan_id"] = sched.candidate_plan_id
             response["schedule"] = {
                 "makespan": sched.makespan,
                 "solver_status": sched.solver_status,
-                "tasks": sched.tasks,
+                "tasks": enriched_tasks,
             }
 
     return response

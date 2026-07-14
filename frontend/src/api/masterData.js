@@ -37,6 +37,7 @@ export const deleteMachineType = async (id) => {
   clearMachineTypesCache()
   return result
 }
+export const getSchedulingRuleTypes = () => http.get('/scheduling-rule-types')
 
 // ── Machines ─────────────────────────────────────────────────
 export const getMachines = (params = {}) => http.get('/machines', { params })
@@ -134,6 +135,17 @@ export const getResources = (machineId, params = {}) =>
 export const createResource = (data) => http.post('/resources', data)
 export const updateResource = (id, data) => http.put(`/resources/${id}`, data)
 export const deleteResource = (id) => http.delete(`/resources/${id}`)
+
+// ── Work calendars ────────────────────────────────────────────
+export const getWorkCalendars = () => http.get('/work-calendars')
+export const createWorkCalendar = (data) => http.post('/work-calendars', data)
+export const updateWorkCalendar = (id, data) => http.put(`/work-calendars/${id}`, data)
+export const deactivateWorkCalendar = (id) => http.delete(`/work-calendars/${id}`)
+export const previewWorkCalendar = (id, data) => http.post(`/work-calendars/${id}/preview`, data)
+export const setSystemDefaultWorkCalendar = (id) => http.post(`/work-calendars/${id}/set-default`)
+export const getMachineCalendarPolicy = (machineId) => http.get(`/machines/${machineId}/calendar-policy`)
+export const updateMachineCalendarPolicy = (machineId, data) =>
+  http.put(`/machines/${machineId}/calendar-policy`, data)
 
 // Scenario Import
 export const importScenario = (file, { dryRun = true } = {}) => {

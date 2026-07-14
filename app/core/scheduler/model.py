@@ -17,6 +17,18 @@ from app.core.scheduler.loader import RagData, ResourceData, get_resource_capaci
 
 
 @dataclass
+class SegmentVar:
+    index: int
+    start: Any
+    end: Any
+    duration: Any
+    interval: Any
+    present: Any
+    window_start: int
+    window_end: int
+
+
+@dataclass
 class TaskVar:
     """CP-SAT variables for a single task."""
     step_order: int
@@ -25,6 +37,8 @@ class TaskVar:
     interval: Any  # cp_model.IntervalVar
     duration: int
     resource_type: str
+    work_intervals: list[Any] = field(default_factory=list)
+    segments: list[SegmentVar] = field(default_factory=list)
 
 
 def step_resource_requirements(step: Any) -> dict[str, int]:
@@ -65,12 +79,18 @@ class ScheduleModel:
     activity_groups: dict[int, list[int]] = field(default_factory=dict)
     state_groups: dict[int, list[int]] = field(default_factory=dict)
     objective_cache: dict[str, Any] = field(default_factory=dict)
+    calendar_enabled: bool = False
+    adjustment_assumption_map: dict[int, dict[str, Any]] = field(default_factory=dict)
 
 
 def build_model(
     rag_data: RagData,
     resources: list[ResourceData],
     objectives: list[dict] | None = None,
+    calendar_context: Any | None = None,
+    scheduling_rule_context: Any | None = None,
+    adjustment_context: dict[str, Any] | None = None,
+    defer_objective: bool = False,
 ) -> ScheduleModel:
     """
     Build a CP-SAT model from RAG data and resources.
@@ -85,12 +105,15 @@ def build_model(
     """
     model = cp_model.CpModel()
 
-    horizon = sum(s.duration_min for s in rag_data.steps)
+    horizon = calendar_context.horizon if calendar_context is not None else sum(s.duration_min for s in rag_data.steps)
+    if adjustment_context:
+        from app.core.scheduler.adjustments import adjustment_horizon_floor
+        horizon = max(horizon, adjustment_horizon_floor(adjustment_context) + sum(s.duration_min for s in rag_data.steps))
     max_not_before = max(
         (s.not_before for s in rag_data.steps if s.not_before is not None),
         default=0,
     )
-    if max_not_before > 0:
+    if max_not_before > 0 and calendar_context is None:
         horizon = max_not_before + horizon
 
     task_vars: dict[int, TaskVar] = {}
@@ -101,9 +124,67 @@ def build_model(
         so = step.step_order
         start = model.new_int_var(0, horizon, f"start_{so}")
         end = model.new_int_var(0, horizon, f"end_{so}")
-        interval = model.new_interval_var(
-            start, step.duration_min, end, f"interval_{so}"
-        )
+        segments: list[SegmentVar] = []
+        if calendar_context is None:
+            interval = model.new_interval_var(start, step.duration_min, end, f"interval_{so}")
+            work_intervals = [interval]
+        else:
+            span = model.new_int_var(step.duration_min, horizon, f"span_{so}")
+            model.add(span == end - start)
+            model.add(span == step.duration_min)
+            interval = model.new_interval_var(start, span, end, f"span_interval_{so}")
+            windows = calendar_context.windows_by_step.get(so, [])
+            if not windows:
+                raise ValueError(f"Step {so} has no calendar windows")
+            used = []
+            first = []
+            last = []
+            durations = []
+            work_intervals = []
+            for index, (window_start, window_end) in enumerate(windows):
+                length = window_end - window_start
+                present = model.new_bool_var(f"segment_{so}_{index}_present")
+                is_first = model.new_bool_var(f"segment_{so}_{index}_first")
+                is_last = model.new_bool_var(f"segment_{so}_{index}_last")
+                segment_start = model.new_int_var(window_start, window_end, f"segment_{so}_{index}_start")
+                segment_end = model.new_int_var(window_start, window_end, f"segment_{so}_{index}_end")
+                segment_duration = model.new_int_var(0, length, f"segment_{so}_{index}_duration")
+                segment_interval = model.new_optional_interval_var(
+                    segment_start,
+                    segment_duration,
+                    segment_end,
+                    present,
+                    f"segment_{so}_{index}",
+                )
+                model.add(segment_duration == 0).only_enforce_if(present.Not())
+                model.add(segment_duration >= 1).only_enforce_if(present)
+                model.add(is_first <= present)
+                model.add(is_last <= present)
+                model.add(segment_end == window_end).only_enforce_if([present, is_last.Not()])
+                model.add(segment_start == window_start).only_enforce_if([present, is_first.Not()])
+                model.add(start == segment_start).only_enforce_if(is_first)
+                model.add(end == segment_end).only_enforce_if(is_last)
+                used.append(present)
+                first.append(is_first)
+                last.append(is_last)
+                durations.append(segment_duration)
+                work_intervals.append(segment_interval)
+                segments.append(SegmentVar(
+                    index=index,
+                    start=segment_start,
+                    end=segment_end,
+                    duration=segment_duration,
+                    interval=segment_interval,
+                    present=present,
+                    window_start=window_start,
+                    window_end=window_end,
+                ))
+            model.add(sum(first) == 1)
+            model.add(sum(last) == 1)
+            model.add(used[0] == first[0])
+            for index in range(1, len(used)):
+                model.add(used[index] == used[index - 1] + first[index] - last[index - 1])
+            model.add(sum(durations) == step.duration_min)
 
         task_vars[so] = TaskVar(
             step_order=so,
@@ -112,6 +193,8 @@ def build_model(
             interval=interval,
             duration=step.duration_min,
             resource_type=step.resource_type,
+            work_intervals=work_intervals,
+            segments=segments,
         )
         if step.activity_group_id is not None:
             activity_groups.setdefault(step.activity_group_id, []).append(so)
@@ -155,8 +238,8 @@ def build_model(
             demand = requirements_by_step[step.step_order].get(res_type)
             if demand is not None:
                 tv = task_vars[step.step_order]
-                intervals.append(tv.interval)
-                demands.append(demand)
+                intervals.extend(tv.work_intervals)
+                demands.extend([demand] * len(tv.work_intervals))
 
         if intervals:
             model.add_cumulative(intervals, demands, capacity)
@@ -183,11 +266,24 @@ def build_model(
             for group_id, step_orders in state_groups.items()
             if len(step_orders) >= 2
         },
+        calendar_enabled=calendar_context is not None,
     )
+
+    if adjustment_context:
+        from app.core.scheduler.adjustments import apply_adjustment_constraints
+        apply_adjustment_constraints(schedule_model, adjustment_context)
 
     if objectives is None:
         objectives = [{"type": "minimize_makespan", "weight": 1.0}]
-    from app.core.solver.objectives import ObjectiveRegistry
-    ObjectiveRegistry.apply_all(objectives, schedule_model)
+    if scheduling_rule_context is not None:
+        from app.core.scheduler.rules import apply_scheduling_rules
+        apply_scheduling_rules(schedule_model, scheduling_rule_context)
+    if not defer_objective:
+        from app.core.solver.objectives import ObjectiveRegistry
+        ObjectiveRegistry.apply_all(
+            objectives,
+            schedule_model,
+            additional_terms=schedule_model.objective_cache.get("scheduling_rule_terms", []),
+        )
 
     return schedule_model

@@ -108,22 +108,39 @@
         <el-form-item label="优化目标">
           <div class="objective-controls">
             <el-tag type="info" size="small">最小化总工期</el-tag>
-            <el-switch
-              v-model="continuityEnabled"
-              :active-text="continuitySwitchLabel"
-              inactive-text=""
+            <span class="objective-rule-label">集成规则</span>
+            <el-select
+              v-model="selectedSchedulingRuleCodes"
+              multiple
+              filterable
+              collapse-tags
+              collapse-tags-tooltip
+              placeholder="选择排期规则"
+              class="scheduling-rule-select"
+              data-testid="solve-scheduling-rule-select"
+            >
+              <el-option
+                v-for="rule in schedulingRuleOptions"
+                :key="rule.code"
+                :label="schedulingRuleOptionLabel(rule)"
+                :value="rule.code"
+                :disabled="rule.activation_mode === 'required' || !rule.applicable"
+              />
+            </el-select>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="工作日历">
+          <div class="calendar-controls">
+            <el-switch v-model="calendarEnabled" active-text="启用" />
+            <el-date-picker
+              v-if="calendarEnabled"
+              v-model="scheduleStartAt"
+              type="datetime"
+              placeholder="选择计划开始时间"
+              format="YYYY-MM-DD HH:mm"
             />
-            <el-input-number
-              v-if="continuityEnabled"
-              v-model="continuityWeight"
-              :min="0.1"
-              :max="10"
-              :step="0.25"
-              :precision="2"
-              size="small"
-              controls-position="right"
-              class="objective-weight"
-            />
+            <el-input v-if="calendarEnabled" v-model="scheduleTimezone" style="width:150px" />
           </div>
         </el-form-item>
 
@@ -143,7 +160,23 @@
       </el-form>
     </el-card>
 
-    <el-empty v-if="!solveResult" class="empty-result" description="尚未执行求解" />
+    <el-card v-if="failedExceptionCandidates.length" class="version-card">
+      <template #header>无解任务的规则例外</template>
+      <el-alert title="原计划已保留。可对具体任务显式申请一次例外并生成子计划完整重排。" type="warning" :closable="false" />
+      <el-table :data="failedExceptionCandidates" size="small" border style="margin-top: 12px">
+        <el-table-column prop="step_order" label="步骤" width="80" />
+        <el-table-column prop="op_rule_code" label="活动" width="180" />
+        <el-table-column prop="op_rule_name" label="名称" />
+        <el-table-column label="可例外规则" min-width="220">
+          <template #default="{ row }">{{ (row.matched_scheduling_rules || []).join(' / ') }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="120">
+          <template #default="{ row }"><el-button type="primary" size="small" @click="openRuleException(row)">申请例外</el-button></template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
+    <el-empty v-if="!solveResult && !failedExceptionCandidates.length" class="empty-result" description="尚未执行求解" />
 
     <template v-else>
       <div class="metric-strip">
@@ -227,6 +260,44 @@
         <el-button size="small" @click="exitDiff">退出对比</el-button>
       </el-alert>
 
+      <div class="adjustment-toolbar" :class="{ selecting: adjustmentSelecting }">
+        <template v-if="!adjustmentSelecting">
+          <div>
+            <strong>计划基线调整</strong>
+            <span class="muted">显式选择活动范围后，以约束方式生成候选计划。</span>
+          </div>
+          <el-button type="primary" plain :disabled="diffMode" @click="startAdjustmentSelection">
+            计划调整 / 重排
+          </el-button>
+        </template>
+        <template v-else>
+          <div class="adjustment-selection-summary">
+            <strong>选择待调整范围</strong>
+            <el-tag type="primary">已选择 {{ adjustmentScopeStepIds.length }} 个活动</el-tag>
+            <span class="muted">可使用任务表、业务分组、甘特单击或右上角矩形框选。</span>
+          </div>
+          <div class="adjustment-group-actions">
+            <el-button
+              v-for="group in activityGroupRows"
+              :key="`adjust-group-${group.activity_group_id}`"
+              size="small"
+              @click="addActivityGroupToAdjustment(group.activity_group_id)"
+            >选择活动组 {{ group.activity_group_code || group.activity_group_id }}</el-button>
+            <el-button
+              v-for="group in stateLaneGroups"
+              :key="`adjust-state-${group.state_group_id || group.key}`"
+              size="small"
+              @click="addAdjustmentStepIds((group.tasks || []).map((task) => task.step_id))"
+            >选择状态包 {{ group.state_group_code || group.key }}</el-button>
+          </div>
+          <div class="adjustment-selection-actions">
+            <el-button @click="adjustmentScopeStepIds = []">清空</el-button>
+            <el-button @click="cancelAdjustmentSelection">取消调整</el-button>
+            <el-button type="primary" @click="confirmAdjustmentScope">确认范围并编辑约束</el-button>
+          </div>
+        </template>
+      </div>
+
       <el-tabs v-model="activeResultTab" class="result-tabs">
         <el-tab-pane label="甘特图" name="gantt">
           <div class="workspace-panel">
@@ -276,6 +347,13 @@
               :diff-steps="diffSteps"
               :lane-mode="effectiveGanttViewMode === 'state-lane'"
               :lane-groups="stateLaneGroups"
+              :time-mode="solveResult.calendar_summary?.enabled ? 'datetime' : 'minute'"
+              :schedule-start-at="solveResult.schedule_start_at || ''"
+              :rule-presentations="ganttRulePresentations"
+              :selection-mode="adjustmentSelecting"
+              :selected-step-ids="adjustmentScopeStepIds"
+              @toggle-task="toggleAdjustmentStep"
+              @brush-select="addAdjustmentStepIds"
             />
           </div>
         </el-tab-pane>
@@ -304,6 +382,15 @@
               border
               stripe
             >
+              <el-table-column v-if="adjustmentSelecting" label="调整范围" width="100" fixed="left">
+                <template #default="{ row }">
+                  <el-checkbox
+                    :model-value="isAdjustmentRowSelected(row)"
+                    :indeterminate="isAdjustmentRowIndeterminate(row)"
+                    @change="toggleAdjustmentRow(row)"
+                  />
+                </template>
+              </el-table-column>
               <el-table-column label="步骤" width="90">
                 <template #default="{ row }">
                   <span v-if="row.row_type === 'task'">{{ row.step_order }}</span>
@@ -362,11 +449,25 @@
                   {{ row.row_type === 'task' ? formatResources(row.resources) : `${row.scheduled_task_count || 0} 个任务` }}
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="110" fixed="right">
+              <el-table-column label="责任子系统" min-width="130" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.row_type === 'task' ? (row.responsible_subsystem || '-') : '-' }}</template>
+              </el-table-column>
+              <el-table-column label="命中规则" min-width="180" show-overflow-tooltip>
                 <template #default="{ row }">
-                  <el-button v-if="row.row_type === 'task'" size="small" type="warning" @click="openBlockage(row)">
-                    标记阻塞
-                  </el-button>
+                  {{ row.row_type === 'task' ? (row.matched_scheduling_rules || []).join(' / ') || '-' : '-' }}
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="210" fixed="right">
+                <template #default="{ row }">
+                  <template v-if="row.row_type === 'task'">
+                    <el-button size="small" type="warning" @click="openBlockage(row)">标记阻塞</el-button>
+                    <el-button
+                      v-if="overridableRulesForTask(row).length"
+                      size="small"
+                      type="primary"
+                      @click="openRuleException(row)"
+                    >规则例外</el-button>
+                  </template>
                   <span v-else class="muted">—</span>
                 </template>
               </el-table-column>
@@ -638,16 +739,57 @@
       :maintenance-intent-template-ids="selectedMaintenanceIntentTemplateIds"
       :blockage-reason-options="blockageReasonOptions"
       @replanned="onReplanned"
+      @adjustment-requested="openBlockageScheduleAdjustment"
     />
+    <PlanAdjustmentDrawer
+      v-model="adjustmentDrawerVisible"
+      :adjustment-id="adjustmentId"
+      :tasks="adjustmentScopeTasks"
+      :initial-constraints="adjustmentInitialConstraints"
+      :calendar-enabled="calendarEnabled"
+      :schedule-start-at="solveResult?.schedule_start_at || scheduleStartAt || ''"
+      :timezone="scheduleTimezone"
+      @edit-scope="editAdjustmentScope"
+      @confirmed="onAdjustmentConfirmed"
+      @cancelled="resetAdjustmentState"
+    />
+    <el-dialog v-model="exceptionDialogVisible" title="申请排期规则例外" width="520px">
+      <el-form :model="exceptionForm" label-width="100px">
+        <el-form-item label="活动">
+          <span>{{ selectedExceptionTask?.op_rule_name || selectedExceptionTask?.op_rule_code }}</span>
+        </el-form-item>
+        <el-form-item label="规则" required>
+          <el-select v-model="exceptionForm.rule_code" style="width: 100%">
+            <el-option
+              v-for="rule in selectedExceptionRules"
+              :key="rule.code"
+              :label="`${rule.name} (${rule.code})`"
+              :value="rule.code"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="selectedExceptionRule?.type === 'shift_restriction'" label="额外允许 shift" required>
+          <el-select v-model="exceptionForm.allow_shift_codes" multiple filterable allow-create default-first-option style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="原因" required>
+          <el-input v-model="exceptionForm.reason" type="textarea" :rows="3" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="exceptionDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="exceptionSubmitting" @click="submitRuleException">确认并完整重排</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, computed, onMounted, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import GanttChart from '../../components/GanttChart.vue'
 import ActivityNetworkBoard from '../../components/ActivityNetworkBoard.vue'
 import BlockageDialog from '../../components/BlockageDialog.vue'
+import PlanAdjustmentDrawer from '../../components/PlanAdjustmentDrawer.vue'
 import VersionHistory from './VersionHistory.vue'
 import { buildHierarchyTree, treeSelectProps } from '../../utils/hierarchyTree'
 import {
@@ -655,18 +797,33 @@ import {
   getBlockageReasons,
   getMachines,
   getMaintenanceIntentTemplates,
+  getMachineTypes,
+  getSchedulingRuleTypes,
   getStateNodes,
   getStateNodeReferences,
   getStates,
 } from '../../api/masterData'
-import { postLayeredSolve, postMaintenanceSolve, postSolve, getPlanVersions, getPlanDiff } from '../../api/solve'
+import {
+  cancelPlanAdjustment,
+  confirmPlanAdjustment,
+  createPlanAdjustment,
+  getPlanDiff,
+  getPlanVersions,
+  getSolveRequest,
+  postLayeredSolve,
+  postMaintenanceSolve,
+  postSolve,
+  updatePlanAdjustment,
+} from '../../api/solve'
 
 // ── State ─────────────────────────────────────────────────────
 const machines = ref([])
+const machineTypes = ref([])
 const states = ref([])
 const layeredActivityNodes = ref([])
 const layeredStateNodes = ref([])
 const maintenanceIntentTemplates = ref([])
+const schedulingRuleTypes = ref([])
 const blockageReasonOptions = ref([])
 const solving = ref(false)
 const activeResultTab = ref('gantt')
@@ -681,8 +838,10 @@ const solveForm = ref({
 const layeredTargetStateNodeIds = ref([])
 const layeredActivityScopeNodeIds = ref([])
 const selectedMaintenanceIntentTemplateIds = ref([])
-const continuityEnabled = ref(false)
-const continuityWeight = ref(1.0)
+const selectedSchedulingRuleCodes = ref([])
+const calendarEnabled = ref(false)
+const scheduleStartAt = ref(null)
+const scheduleTimezone = ref('Asia/Shanghai')
 const ganttHierarchyEnabled = ref(true)
 const ganttViewMode = ref('traditional')
 const collapsedActivityGroupIds = ref([])
@@ -690,9 +849,20 @@ const collapsedActivityGroupIds = ref([])
 const solveResult = ref(null)
 const currentPlanId = ref(null)
 const versionChain = ref([])
+const adjustmentSelecting = ref(false)
+const adjustmentDrawerVisible = ref(false)
+const adjustmentId = ref(null)
+const adjustmentScopeStepIds = ref([])
+const adjustmentScopeConfirmedOnce = ref(false)
+const adjustmentInitialConstraints = ref([])
 
 const blockageVisible = ref(false)
 const selectedTask = ref(null)
+const exceptionDialogVisible = ref(false)
+const exceptionSubmitting = ref(false)
+const selectedExceptionTask = ref(null)
+const exceptionForm = ref({ rule_code: '', allow_shift_codes: [], reason: '' })
+const failedExceptionCandidates = ref([])
 
 // Diff mode
 const diffMode = ref(false)
@@ -702,6 +872,46 @@ const currentPlanVersion = ref(null)
 
 // ── Computed ──────────────────────────────────────────────────
 const tasks = computed(() => solveResult.value?.schedule?.tasks ?? [])
+const adjustmentScopeTasks = computed(() => {
+  const selected = new Set(adjustmentScopeStepIds.value)
+  return tasks.value.filter((task) => selected.has(task.step_id))
+})
+const selectedMachine = computed(() => machines.value.find((item) => item.id === solveForm.value.machine_id) || null)
+const selectedMachineType = computed(() =>
+  machineTypes.value.find((item) => item.id === selectedMachine.value?.machine_type_id) || null,
+)
+const schedulingRuleTypeByCode = computed(() => new Map(
+  schedulingRuleTypes.value.map((item) => [item.type, item]),
+))
+const allSchedulingRules = computed(() => {
+  const rules = []
+  const seen = new Set()
+  const configuredTypes = new Set()
+  for (const rule of selectedMachineType.value?.scheduling_config?.rules || []) {
+    if (rule.enabled === false || seen.has(rule.code)) continue
+    seen.add(rule.code)
+    configuredTypes.add(rule.type)
+    rules.push({ ...rule, builtin: false })
+  }
+  for (const descriptor of schedulingRuleTypes.value) {
+    const rule = descriptor.builtin_rule
+    if (!rule || seen.has(rule.code) || configuredTypes.has(rule.type)) continue
+    seen.add(rule.code)
+    rules.push({ ...rule, builtin: true })
+  }
+  return rules
+})
+const schedulingRuleOptions = computed(() => allSchedulingRules.value.map((rule) => ({
+  ...rule,
+  applicable: schedulingRuleSupportedInMode(rule),
+})))
+const configuredSchedulingRules = computed(() =>
+  schedulingRuleOptions.value.filter((rule) => rule.applicable),
+)
+const selectedExceptionRules = computed(() => overridableRulesForTask(selectedExceptionTask.value))
+const selectedExceptionRule = computed(() =>
+  selectedExceptionRules.value.find((item) => item.code === exceptionForm.value.rule_code) || null,
+)
 const layeredStateTreeOptions = computed(() =>
   buildHierarchyTree(layeredStateNodes.value),
 )
@@ -712,11 +922,20 @@ const stateDelta = computed(() => solveResult.value?.state_delta ?? [])
 const criticalPath = computed(() => solveResult.value?.critical_path ?? [])
 const parallelGroups = computed(() => solveResult.value?.schedule?.parallel_groups ?? [])
 const scheduleDiagnostics = computed(() => solveResult.value?.diagnostics?.schedule ?? null)
-const stateContinuityAvailable = computed(() => solveMode.value === 'layered' || solveMode.value === 'maintenance')
-const continuityObjectiveKind = computed(() => stateContinuityAvailable.value ? 'state' : 'activity')
-const continuitySwitchLabel = computed(() =>
-  continuityObjectiveKind.value === 'state' ? '状态包连续性' : '活动连续性',
-)
+const ganttRulePresentations = computed(() => {
+  const result = {}
+  const activeRules = scheduleDiagnostics.value?.scheduling_rules?.active_rules ?? []
+  for (const rule of activeRules) {
+    const marker = rule.presentation?.gantt_marker
+    if (!rule.code || !marker?.text) continue
+    result[rule.code] = {
+      text: marker.text,
+      color: marker.color || '#f59e0b',
+      rule_name: rule.name || rule.code,
+    }
+  }
+  return result
+})
 const stateContinuitySummary = computed(() => scheduleDiagnostics.value?.state_group_continuity ?? null)
 const activityContinuitySummary = computed(() => scheduleDiagnostics.value?.activity_group_continuity ?? null)
 const continuitySummary = computed(() => {
@@ -753,7 +972,7 @@ const maintenanceSkippedActivities = computed(() =>
 )
 const continuityObjectiveActive = computed(() => {
   const weights = continuitySummary.value?.objective_weights ?? {}
-  return [
+  const legacyObjectiveActive = [
     'minimize_activity_group_span',
     'minimize_activity_group_gaps',
     'minimize_activity_group_interruptions',
@@ -761,6 +980,14 @@ const continuityObjectiveActive = computed(() => {
     'minimize_state_group_gaps',
     'minimize_state_group_interruptions',
   ].some((key) => Number(weights[key] ?? 0) > 0)
+  const activeCodes = new Set(
+    scheduleDiagnostics.value?.scheduling_rules?.active_rule_codes
+      || selectedSchedulingRuleCodes.value,
+  )
+  const registeredRuleActive = allSchedulingRules.value.some((rule) =>
+    rule.type === 'state_package_continuity' && activeCodes.has(rule.code),
+  )
+  return legacyObjectiveActive || registeredRuleActive
 })
 const continuityExplanationRows = computed(() => continuityGroups.value)
 const hasStateLaneData = computed(() => tasks.value.some(hasStateGroupMembership))
@@ -888,6 +1115,13 @@ const ganttTasks = computed(() => {
   for (const group of activityGroupRows.value) {
     const groupTasks = taskGroups.get(group.activity_group_id) ?? []
     if (collapsed.has(group.activity_group_id)) {
+      const ganttMarkerCounts = {}
+      for (const task of groupTasks) {
+        for (const ruleCode of task.matched_scheduling_rules || []) {
+          if (!ganttRulePresentations.value[ruleCode]) continue
+          ganttMarkerCounts[ruleCode] = (ganttMarkerCounts[ruleCode] || 0) + 1
+        }
+      }
       result.push({
         row_type: 'activity_group',
         step_order: null,
@@ -898,6 +1132,8 @@ const ganttTasks = computed(() => {
         end_min: group.end_min,
         duration_min: group.end_min - group.start_min,
         step_role: 'normal',
+        gantt_marker_counts: ganttMarkerCounts,
+        gantt_shift_segments: groupTasks.flatMap((task) => task.segments || []),
       })
     } else {
       for (const task of groupTasks.sort((a, b) => a.start_min - b.start_min || a.step_order - b.step_order)) {
@@ -1107,6 +1343,135 @@ function toggleActivityGroup(groupId) {
   collapsedActivityGroupIds.value = [...collapsed]
 }
 
+function validAdjustmentStepIds(stepIds = []) {
+  const available = new Set(tasks.value.map((task) => task.step_id).filter((id) => id != null))
+  return stepIds.filter((id) => id != null && available.has(id))
+}
+
+function addAdjustmentStepIds(stepIds = []) {
+  adjustmentScopeStepIds.value = [
+    ...new Set([...adjustmentScopeStepIds.value, ...validAdjustmentStepIds(stepIds)]),
+  ]
+}
+
+function toggleAdjustmentStep(stepId) {
+  if (!validAdjustmentStepIds([stepId]).length) return
+  const selected = new Set(adjustmentScopeStepIds.value)
+  if (selected.has(stepId)) selected.delete(stepId)
+  else selected.add(stepId)
+  adjustmentScopeStepIds.value = [...selected]
+}
+
+function adjustmentRowStepIds(row) {
+  if (row?.row_type === 'task') return validAdjustmentStepIds([row.step_id])
+  return (row?.children || []).flatMap((child) => adjustmentRowStepIds(child))
+}
+
+function isAdjustmentRowSelected(row) {
+  const ids = adjustmentRowStepIds(row)
+  const selected = new Set(adjustmentScopeStepIds.value)
+  return ids.length > 0 && ids.every((id) => selected.has(id))
+}
+
+function isAdjustmentRowIndeterminate(row) {
+  const ids = adjustmentRowStepIds(row)
+  const selected = new Set(adjustmentScopeStepIds.value)
+  const selectedCount = ids.filter((id) => selected.has(id)).length
+  return selectedCount > 0 && selectedCount < ids.length
+}
+
+function toggleAdjustmentRow(row) {
+  const ids = adjustmentRowStepIds(row)
+  if (!ids.length) return
+  const selected = new Set(adjustmentScopeStepIds.value)
+  if (ids.every((id) => selected.has(id))) ids.forEach((id) => selected.delete(id))
+  else ids.forEach((id) => selected.add(id))
+  adjustmentScopeStepIds.value = [...selected]
+}
+
+function addActivityGroupToAdjustment(groupId) {
+  addAdjustmentStepIds(
+    tasks.value
+      .filter((task) => task.activity_group_id === groupId)
+      .map((task) => task.step_id),
+  )
+}
+
+function resetAdjustmentState() {
+  adjustmentSelecting.value = false
+  adjustmentDrawerVisible.value = false
+  adjustmentId.value = null
+  adjustmentScopeStepIds.value = []
+  adjustmentScopeConfirmedOnce.value = false
+  adjustmentInitialConstraints.value = []
+}
+
+async function startAdjustmentSelection() {
+  if (!currentPlanId.value) return ElMessage.warning('请先生成或加载一条计划基线')
+  try {
+    const adjustment = await createPlanAdjustment(currentPlanId.value, { kind: 'schedule' })
+    adjustmentId.value = adjustment.id
+    adjustmentScopeStepIds.value = []
+    adjustmentScopeConfirmedOnce.value = false
+    adjustmentInitialConstraints.value = []
+    adjustmentSelecting.value = true
+    adjustmentDrawerVisible.value = false
+    activeResultTab.value = 'gantt'
+  } catch {
+    // The shared HTTP interceptor presents the stable backend error.
+  }
+}
+
+async function confirmAdjustmentScope() {
+  if (!adjustmentScopeStepIds.value.length) return ElMessage.warning('请至少选择一个待调整活动')
+  try {
+    if (!adjustmentScopeConfirmedOnce.value) {
+      await updatePlanAdjustment(adjustmentId.value, {
+        scope_step_ids: adjustmentScopeStepIds.value,
+        constraints: [],
+        remove_inherited_constraint_ids: [],
+      })
+      adjustmentScopeConfirmedOnce.value = true
+    }
+    adjustmentSelecting.value = false
+    adjustmentDrawerVisible.value = true
+  } catch {
+    // The shared HTTP interceptor presents the stable backend error.
+  }
+}
+
+function editAdjustmentScope() {
+  adjustmentDrawerVisible.value = false
+  adjustmentSelecting.value = true
+  activeResultTab.value = 'gantt'
+}
+
+async function cancelAdjustmentSelection() {
+  try {
+    if (adjustmentId.value) await cancelPlanAdjustment(adjustmentId.value)
+  } finally {
+    resetAdjustmentState()
+  }
+}
+
+async function onAdjustmentConfirmed({ candidatePlanId, solveRequestId }) {
+  if (!candidatePlanId || !solveRequestId) {
+    resetAdjustmentState()
+    return ElMessage.error('新基线已确认，但候选计划结果标识不完整，请刷新后加载该版本')
+  }
+  try {
+    const detail = await getSolveRequest(solveRequestId)
+    await applyResult({
+      ...detail,
+      solve_request_id: detail.id,
+      candidate_plan_id: candidatePlanId,
+    })
+    ElMessage.success('候选计划已确认为新基线')
+  } finally {
+    resetAdjustmentState()
+  }
+}
+
 function healthTagType(status) {
   if (status === 'ok') return 'success'
   if (status === 'warning') return 'warning'
@@ -1154,30 +1519,75 @@ const roleTagType = (r) => ROLE_TAG[r]
 const roleLabel = (r) => ROLE_LABEL_MAP[r] ?? r ?? 'normal'
 
 function solveObjectives() {
-  const objectives = [{ type: 'minimize_makespan', weight: 1.0 }]
-  if (!continuityEnabled.value) return objectives
+  return [{ type: 'minimize_makespan', weight: 1.0 }]
+}
 
-  const weight = Number(continuityWeight.value) || 1.0
-  if (!stateContinuityAvailable.value) {
-    return [
-      ...objectives,
-      { type: 'minimize_activity_group_span', weight },
-      { type: 'minimize_activity_group_gaps', weight },
-      { type: 'minimize_activity_group_interruptions', weight },
-    ]
+function schedulingRuleSupportedInMode(rule) {
+  const descriptor = schedulingRuleTypeByCode.value.get(rule.type)
+  const modes = descriptor?.supported_modes || ['snapshot', 'layered', 'maintenance']
+  return modes.includes(solveMode.value)
+}
+
+function schedulingRuleOptionLabel(rule) {
+  if (!rule.applicable) return `${rule.name}（仅分层/维护）`
+  if (rule.activation_mode === 'required') return `${rule.name}（必选）`
+  return rule.name
+}
+
+function syncSelectedSchedulingRules(includeDefaults = false) {
+  const applicableRules = schedulingRuleOptions.value.filter((rule) => rule.applicable)
+  const applicableCodes = new Set(applicableRules.map((rule) => rule.code))
+  const selected = new Set(
+    selectedSchedulingRuleCodes.value.filter((code) => applicableCodes.has(code)),
+  )
+  for (const rule of applicableRules) {
+    if (
+      rule.activation_mode === 'required'
+      || (includeDefaults && (rule.activation_mode || 'default_on') === 'default_on')
+    ) {
+      selected.add(rule.code)
+    }
   }
+  selectedSchedulingRuleCodes.value = [...selected]
+}
 
-  return [
-    ...objectives,
-    { type: 'minimize_state_group_span', weight },
-    { type: 'minimize_state_group_gaps', weight },
-    { type: 'minimize_state_group_interruptions', weight },
-  ]
+function calendarContext() {
+  if (!calendarEnabled.value) return { enabled: false }
+  let scheduleStart = scheduleStartAt.value
+  if (scheduleStart) {
+    const normalized = new Date(scheduleStart)
+    if (!Number.isNaN(normalized.getTime())) {
+      normalized.setSeconds(0, 0)
+      scheduleStart = normalized.toISOString()
+    }
+  }
+  return {
+    enabled: true,
+    schedule_start_at: scheduleStart,
+    display_timezone: scheduleTimezone.value,
+    revision_policy: 'latest',
+  }
+}
+
+function schedulingConstraints(extra = {}) {
+  const applicableCodes = new Set(
+    schedulingRuleOptions.value.filter((rule) => rule.applicable).map((rule) => rule.code),
+  )
+  return {
+    scheduling_rules: {
+      active_rule_codes: selectedSchedulingRuleCodes.value.filter((code) => applicableCodes.has(code)),
+      ...extra,
+    },
+  }
 }
 
 // ── API Actions ───────────────────────────────────────────────
 async function loadMachines() {
-  machines.value = await getMachines()
+  ;[machines.value, machineTypes.value, schedulingRuleTypes.value] = await Promise.all([
+    getMachines(),
+    getMachineTypes(),
+    getSchedulingRuleTypes(),
+  ])
   try {
     const reasons = await getBlockageReasons()
     blockageReasonOptions.value = Array.isArray(reasons) ? reasons : []
@@ -1194,6 +1604,7 @@ async function onMachineChange() {
   layeredTargetStateNodeIds.value = []
   layeredActivityScopeNodeIds.value = []
   selectedMaintenanceIntentTemplateIds.value = []
+  selectedSchedulingRuleCodes.value = []
   collapsedActivityGroupIds.value = []
   solveForm.value.current_state_id = null
   solveForm.value.target_state_id = null
@@ -1208,6 +1619,7 @@ async function onMachineChange() {
 
   const machine = machines.value.find((m) => m.id === solveForm.value.machine_id)
   if (!machine?.machine_type_id) return
+  syncSelectedSchedulingRules(true)
   const [activities, stateNodes, stateReferences, maintenanceTemplates] = await Promise.all([
     getActivityNodes(machine.machine_type_id),
     getStateNodes(machine.machine_type_id),
@@ -1235,7 +1647,11 @@ async function runSolve() {
   if (solveMode.value === 'maintenance' && !selectedMaintenanceIntentTemplateIds.value.length) {
     return ElMessage.warning('请选择维护意图')
   }
+  if (calendarEnabled.value && !scheduleStartAt.value) {
+    return ElMessage.warning('启用工作日历后必须选择计划开始时间')
+  }
   solving.value = true
+  failedExceptionCandidates.value = []
   diffMode.value = false
   try {
     let result
@@ -1246,6 +1662,8 @@ async function runSolve() {
         target_state_node_ids: layeredTargetStateNodeIds.value,
         activity_scope_node_ids: layeredActivityScopeNodeIds.value,
         objectives: solveObjectives(),
+        constraints: schedulingConstraints(),
+        calendar_context: calendarContext(),
       })
     } else if (solveMode.value === 'maintenance') {
       result = await postMaintenanceSolve({
@@ -1253,6 +1671,8 @@ async function runSolve() {
         current_state_id: solveForm.value.current_state_id,
         intent_template_ids: selectedMaintenanceIntentTemplateIds.value,
         objectives: solveObjectives(),
+        constraints: schedulingConstraints(),
+        calendar_context: calendarContext(),
       })
     } else {
       result = await postSolve({
@@ -1260,12 +1680,16 @@ async function runSolve() {
         current_state_id: solveForm.value.current_state_id,
         target_state_id: solveForm.value.target_state_id,
         objectives: solveObjectives(),
+        constraints: schedulingConstraints(),
+        calendar_context: calendarContext(),
       })
     }
     // HTTP 200 but solve failed (e.g. no solution, infeasible)
     if (result.status !== 'done') {
       console.error('[solve failed]', result)
       window.__lastSolveDiagnostics = result.diagnostics ?? result
+      failedExceptionCandidates.value = result.exception_candidates || []
+      if (result.candidate_plan_id) currentPlanId.value = result.candidate_plan_id
       ElMessage.error(`${result.error_code ?? 'ERROR'}: ${result.error_message ?? '求解失败'}`)
       return
     }
@@ -1280,6 +1704,7 @@ async function runSolve() {
 }
 
 async function applyResult(result) {
+  failedExceptionCandidates.value = []
   solveResult.value = result
   currentPlanId.value = result.candidate_plan_id
   collapsedActivityGroupIds.value = []
@@ -1292,6 +1717,80 @@ async function applyResult(result) {
   }
 }
 
+function overridableRulesForTask(task) {
+  if (!task) return []
+  if (Array.isArray(task.overridable_rules) && task.overridable_rules.length) return task.overridable_rules
+  const matched = new Set(task.matched_scheduling_rules || [])
+  const snapshotRules = scheduleDiagnostics.value?.scheduling_rules?.active_rules || configuredSchedulingRules.value
+  return snapshotRules.filter((rule) =>
+    matched.has(rule.code) && !!rule.enforcement?.overridable,
+  )
+}
+
+function openRuleException(task) {
+  const rules = overridableRulesForTask(task)
+  if (!rules.length) return
+  selectedExceptionTask.value = task
+  exceptionForm.value = { rule_code: rules[0].code, allow_shift_codes: [], reason: '' }
+  exceptionDialogVisible.value = true
+}
+
+async function submitRuleException() {
+  const task = selectedExceptionTask.value
+  const rule = selectedExceptionRule.value
+  if (!task?.step_id || !rule || !exceptionForm.value.reason.trim()) {
+    return ElMessage.warning('请选择规则并填写例外原因')
+  }
+  if (rule.type === 'shift_restriction' && !exceptionForm.value.allow_shift_codes.length) {
+    return ElMessage.warning('请填写至少一个额外允许的 shift code')
+  }
+  const constraints = schedulingConstraints({
+    new_override: {
+      rule_code: rule.code,
+      source_step_id: task.step_id,
+      parameters: { allow_shift_codes: exceptionForm.value.allow_shift_codes },
+      reason: exceptionForm.value.reason.trim(),
+    },
+    carry_parent_override_keys: [],
+  })
+  const common = {
+    machine_id: solveForm.value.machine_id,
+    current_state_id: solveForm.value.current_state_id,
+    parent_plan_id: currentPlanId.value,
+    objectives: solveObjectives(),
+    constraints,
+  }
+  exceptionSubmitting.value = true
+  try {
+    let result
+    if (solveMode.value === 'layered') {
+      result = await postLayeredSolve({
+        ...common,
+        target_state_node_ids: layeredTargetStateNodeIds.value,
+        activity_scope_node_ids: layeredActivityScopeNodeIds.value,
+      })
+    } else if (solveMode.value === 'maintenance') {
+      result = await postMaintenanceSolve({
+        ...common,
+        intent_template_ids: selectedMaintenanceIntentTemplateIds.value,
+      })
+    } else {
+      result = await postSolve({ ...common, target_state_id: solveForm.value.target_state_id })
+    }
+    if (result.status !== 'done') {
+      ElMessage.error(`${result.error_code ?? 'ERROR'}: ${result.error_message ?? '规则例外重排失败'}`)
+      return
+    }
+    const accepted = await confirmFullReplanCandidate('rule_exception', result, task.step_id)
+    if (accepted) {
+      exceptionDialogVisible.value = false
+      ElMessage.success('规则例外候选已确认为新基线')
+    }
+  } finally {
+    exceptionSubmitting.value = false
+  }
+}
+
 // ── Blockage ──────────────────────────────────────────────────
 function openBlockage(task) {
   selectedTask.value = task
@@ -1299,8 +1798,66 @@ function openBlockage(task) {
 }
 
 async function onReplanned(result) {
-  ElMessage.success('重排完成')
-  await applyResult(result)
+  const accepted = await confirmFullReplanCandidate(
+    'blockage',
+    result,
+    selectedTask.value?.step_id,
+  )
+  if (accepted) ElMessage.success('阻塞重排候选已确认为新基线')
+}
+
+async function openBlockageScheduleAdjustment({ stepId, notBeforeMin }) {
+  if (!currentPlanId.value || !stepId) return
+  try {
+    const constraint = {
+      type: 'not_before',
+      step_ids: [stepId],
+      value_min: notBeforeMin,
+    }
+    const adjustment = await createPlanAdjustment(currentPlanId.value, {
+      kind: 'blockage',
+      scope_step_ids: [stepId],
+      constraints: [constraint],
+    })
+    adjustmentId.value = adjustment.id
+    adjustmentScopeStepIds.value = [stepId]
+    adjustmentScopeConfirmedOnce.value = true
+    adjustmentInitialConstraints.value = [constraint]
+    adjustmentSelecting.value = false
+    adjustmentDrawerVisible.value = true
+  } catch {
+    // The shared HTTP interceptor presents the stable backend error.
+  }
+}
+
+async function confirmFullReplanCandidate(kind, result, sourceStepId) {
+  if (!currentPlanId.value || !result?.candidate_plan_id) return false
+  let adjustment
+  try {
+    adjustment = await createPlanAdjustment(currentPlanId.value, {
+      kind,
+      scope_step_ids: sourceStepId ? [sourceStepId] : [],
+      candidate_plan_id: result.candidate_plan_id,
+    })
+    const summary = adjustment.preview_summary || {}
+    await ElMessageBox.confirm(
+      `候选包含 ${summary.candidate_task_count ?? '—'} 个活动，基线包含 ${summary.base_task_count ?? '—'} 个活动，工期变化 ${summary.makespan_delta_min ?? '—'} 分钟。确认后才会替换当前计划基线。`,
+      kind === 'blockage' ? '确认阻塞重排候选' : '确认规则例外候选',
+      { type: 'warning', confirmButtonText: '确认为新基线', cancelButtonText: '保留原基线' },
+    )
+    await confirmPlanAdjustment(adjustment.id)
+    await applyResult(result)
+    return true
+  } catch (error) {
+    if (adjustment?.id) {
+      try {
+        await cancelPlanAdjustment(adjustment.id)
+      } catch {
+        // Preserve the original error/cancel outcome.
+      }
+    }
+    return false
+  }
 }
 
 // ── Diff ──────────────────────────────────────────────────────
@@ -1327,6 +1884,8 @@ function exitDiff() {
   diffMode.value = false
   diffSteps.value = []
 }
+
+watch(solveMode, () => syncSelectedSchedulingRules(true))
 
 onMounted(loadMachines)
 </script>
@@ -1370,7 +1929,8 @@ onMounted(loadMachines)
   width: 100%;
 }
 
-.objective-controls {
+.objective-controls,
+.calendar-controls {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -1380,8 +1940,12 @@ onMounted(loadMachines)
   font-size: 13px;
 }
 
-.objective-weight {
-  width: 108px;
+.objective-rule-label {
+  white-space: nowrap;
+}
+
+.scheduling-rule-select {
+  min-width: 260px;
 }
 
 .toolbar-actions {
@@ -1456,6 +2020,45 @@ onMounted(loadMachines)
 
 .diff-alert {
   margin: 0;
+}
+
+.adjustment-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+
+.adjustment-toolbar.selecting {
+  align-items: flex-start;
+  border-color: #93c5fd;
+  background: #dbeafe;
+}
+
+.adjustment-selection-summary,
+.adjustment-group-actions,
+.adjustment-selection-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.adjustment-selection-summary {
+  flex: 1 1 360px;
+}
+
+.adjustment-group-actions {
+  flex: 1 1 100%;
+}
+
+.adjustment-selection-actions {
+  margin-left: auto;
 }
 
 .result-tabs {

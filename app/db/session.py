@@ -37,6 +37,7 @@ def patch_sqlite_types(force: bool = False):
     from app.db import models
 
     json_columns = [
+        models.MachineType.__table__.c.scheduling_config,
         models.CandidatePlanStep.__table__.c.predecessor_ids,
         models.StateFeatureDef.__table__.c.allowed_values,
         models.OpRulePrecond.__table__.c.value_list,
@@ -60,7 +61,17 @@ def patch_sqlite_types(force: bool = False):
         models.SolveRequest.__table__.c.objectives,
         models.SolveRequest.__table__.c.constraints,
         models.SolveRequest.__table__.c.blockage_constraints,
+        models.SolveRequest.__table__.c.calendar_snapshot,
+        models.CandidatePlan.__table__.c.adjustment_snapshot,
         models.ScheduleResult.__table__.c.tasks,
+        models.PlanAdjustment.__table__.c.scope_step_ids,
+        models.PlanAdjustment.__table__.c.constraints,
+        models.PlanAdjustment.__table__.c.remove_inherited_constraint_ids,
+        models.PlanAdjustment.__table__.c.effective_constraints,
+        models.PlanAdjustment.__table__.c.preview_summary,
+        models.PlanAdjustment.__table__.c.diagnostics,
+        models.WorkCalendarRevision.__table__.c.weekly_windows,
+        models.WorkCalendarRevision.__table__.c.date_exceptions,
     ]
     for column in json_columns:
         column.type = JSON()

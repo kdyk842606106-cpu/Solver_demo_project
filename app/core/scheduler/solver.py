@@ -11,6 +11,8 @@ Orchestrates the full scheduling pipeline:
 """
 
 from dataclasses import dataclass, field
+from datetime import timedelta
+from zoneinfo import ZoneInfo
 from itertools import combinations
 from typing import Any, Optional
 import asyncio
@@ -27,7 +29,13 @@ from app.core.scheduler.loader import (
     load_resources,
 )
 from app.core.scheduler.model import ScheduleModel, build_model, step_resource_requirements
+from app.core.scheduler.calendar import CalendarError
 from app.core.scheduler.diagnostics import diagnose_schedule_inputs
+from app.core.scheduler.rules import (
+    SchedulingRuleError,
+    resolve_scheduling_rules,
+    scheduling_rule_result_diagnostics,
+)
 from app.core.scheduler.schedule_graph import (
     ScheduleGraph,
     build_schedule_graph,
@@ -61,6 +69,16 @@ class TaskResult:
     activity_group_code: str | None = None
     activity_group_name: str | None = None
     state_continuity_groups: list[dict[str, Any]] = field(default_factory=list)
+    start_at: str | None = None
+    end_at: str | None = None
+    elapsed_min: int | None = None
+    calendar_pause_min: int = 0
+    segments: list[dict[str, Any]] = field(default_factory=list)
+    calendar_resolution: dict[str, Any] | None = None
+    responsible_subsystem: str | None = None
+    effect_dimension_keys: list[str] = field(default_factory=list)
+    matched_scheduling_rules: list[str] = field(default_factory=list)
+    scheduling_rule_violations: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -82,7 +100,10 @@ class ScheduleResultData:
     error_message: Optional[str] = None
     schedule_graph: Optional[ScheduleGraph] = None
     critical_path: Optional[list[str]] = None
+    critical_path_segments: Optional[list[dict[str, Any]]] = None
     diagnostics: Optional[dict[str, Any]] = None
+    error_code: Optional[str] = None
+    calendar_summary: Optional[dict[str, Any]] = None
 
 
 def _normalize_state_group_membership(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -132,6 +153,7 @@ async def solve_schedule(
     max_time_seconds: float = 30.0,
     objectives: list[dict] | None = None,
     state_continuity_groups_by_step: dict[int, list[dict[str, Any]]] | None = None,
+    adjustment_context: dict[str, Any] | None = None,
 ) -> ScheduleResultData:
     """
     Main entry point: solve a schedule for a candidate plan.
@@ -163,6 +185,16 @@ async def solve_schedule(
     if state_continuity_groups_by_step:
         _apply_state_continuity_groups(rag_data, state_continuity_groups_by_step)
 
+    try:
+        scheduling_rule_context = await resolve_scheduling_rules(rag_data, session)
+    except SchedulingRuleError as exc:
+        return ScheduleResultData(
+            status="error",
+            error_code=exc.code,
+            error_message=str(exc),
+            diagnostics={"scheduling_rules": {"error_code": exc.code}},
+        )
+
     # ---- 2. Load resources ----
     resource_types = sorted({
         resource_type
@@ -171,16 +203,82 @@ async def solve_schedule(
     })
     resources = await load_resources(resource_types, session, rag_data.machine_id)
     diagnostics = diagnose_schedule_inputs(rag_data, resources)
+    diagnostics["scheduling_rules"] = scheduling_rule_context.diagnostics()
+
+    calendar_context = None
+    if rag_data.calendar_enabled:
+        from app.services.work_calendar import persist_calendar_snapshot, resolve_scheduler_calendar
+        try:
+            calendar_context = await resolve_scheduler_calendar(
+                rag_data,
+                session,
+                scheduling_rule_context=scheduling_rule_context,
+            )
+            if calendar_context is not None:
+                await persist_calendar_snapshot(rag_data.solve_request_id, calendar_context, session)
+                diagnostics["calendar"] = {
+                    "enabled": True,
+                    "warnings": calendar_context.warnings,
+                    "horizon_min": calendar_context.horizon,
+                }
+        except CalendarError as exc:
+            return ScheduleResultData(
+                status="error",
+                error_code=exc.code,
+                error_message=str(exc),
+                diagnostics={
+                    **diagnostics,
+                    "calendar": {"enabled": True, "error_code": exc.code, **exc.details},
+                },
+            )
 
     # ---- 3. Build model ----
-    schedule_model = build_model(rag_data, resources, objectives)
+    schedule_model = build_model(
+        rag_data,
+        resources,
+        objectives,
+        calendar_context=calendar_context,
+        scheduling_rule_context=scheduling_rule_context,
+        adjustment_context=adjustment_context,
+        defer_objective=adjustment_context is not None,
+    )
     diagnostics["model_horizon"] = schedule_model.horizon
 
     # ---- 4. Solve ----
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = max_time_seconds
+    stability_metadata: list[dict[str, Any]] = []
 
-    status = await asyncio.to_thread(solver.solve, schedule_model.model)
+    if adjustment_context is not None:
+        from app.core.scheduler.adjustments import build_stability_stages
+        from app.core.solver.objectives import ObjectiveRegistry
+
+        status = cp_model.UNKNOWN
+        for stage in build_stability_stages(schedule_model, adjustment_context):
+            expression = stage["expression"]
+            if isinstance(expression, int):
+                optimum = expression
+            else:
+                schedule_model.model.minimize(expression)
+                status = await asyncio.to_thread(solver.solve, schedule_model.model)
+                if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+                    break
+                optimum = int(solver.value(expression))
+                schedule_model.model.add(expression == optimum)
+            stability_metadata.append({
+                "type": stage["type"],
+                "optimum": optimum,
+                "is_proven_optimal": status in (cp_model.UNKNOWN, cp_model.OPTIMAL),
+            })
+        if status in (cp_model.UNKNOWN, cp_model.OPTIMAL, cp_model.FEASIBLE):
+            ObjectiveRegistry.apply_all(
+                objectives or [{"type": "minimize_makespan", "weight": 1.0}],
+                schedule_model,
+                additional_terms=schedule_model.objective_cache.get("scheduling_rule_terms", []),
+            )
+            status = await asyncio.to_thread(solver.solve, schedule_model.model)
+    else:
+        status = await asyncio.to_thread(solver.solve, schedule_model.model)
 
     # ---- 5. Interpret result ----
     status_name = solver.status_name(status)
@@ -193,6 +291,12 @@ async def solve_schedule(
         pred_map: dict[int, list[int]] = {s.step_order: [] for s in rag_data.steps}
         for pred_so, succ_so in rag_data.edges:
             pred_map.setdefault(succ_so, []).append(pred_so)
+        for item in (adjustment_context or {}).get("constraints", []):
+            if item.get("type") == "precedence":
+                predecessor = int(item["predecessor_step_order"])
+                successor = int(item["successor_step_order"])
+                if predecessor not in pred_map.setdefault(successor, []):
+                    pred_map[successor].append(predecessor)
 
         # Build step lookup
         step_map: dict[int, StepData] = {s.step_order: s for s in rag_data.steps}
@@ -203,13 +307,47 @@ async def solve_schedule(
             tv = schedule_model.task_vars[so]
             sd = step_map[so]
 
+            start_value = solver.value(tv.start)
+            end_value = solver.value(tv.end)
+            segments: list[dict[str, Any]] = []
+            if calendar_context is None:
+                segments.append({
+                    "segment_index": 1,
+                    "start_min": start_value,
+                    "end_min": end_value,
+                    "duration_min": sd.duration_min,
+                    "start_at": None,
+                    "end_at": None,
+                    "resources": [],
+                })
+                start_at = end_at = None
+            else:
+                display_zone = ZoneInfo(calendar_context.display_timezone)
+                for segment in tv.segments:
+                    if solver.value(segment.present):
+                        segment_start = solver.value(segment.start)
+                        segment_end = solver.value(segment.end)
+                        window_metadata = calendar_context.window_metadata_by_step.get(so, [])[segment.index]
+                        segments.append({
+                            "segment_index": len(segments) + 1,
+                            "start_min": segment_start,
+                            "end_min": segment_end,
+                            "duration_min": solver.value(segment.duration),
+                            "start_at": (calendar_context.schedule_start_at + timedelta(minutes=segment_start)).astimezone(display_zone).isoformat(),
+                            "end_at": (calendar_context.schedule_start_at + timedelta(minutes=segment_end)).astimezone(display_zone).isoformat(),
+                            "resources": [],
+                            **window_metadata,
+                        })
+                start_at = (calendar_context.schedule_start_at + timedelta(minutes=start_value)).astimezone(display_zone).isoformat()
+                end_at = (calendar_context.schedule_start_at + timedelta(minutes=end_value)).astimezone(display_zone).isoformat()
+
             tasks.append(TaskResult(
                 step_order=so,
                 op_rule_id=sd.op_rule_id,
                 op_rule_code=sd.op_rule_code,
                 op_rule_name=sd.op_rule_name,
-                start_min=solver.value(tv.start),
-                end_min=solver.value(tv.end),
+                start_min=start_value,
+                end_min=end_value,
                 duration_min=sd.duration_min,
                 predecessors=pred_map.get(so, []),
                 resources=[],  # filled next
@@ -222,6 +360,17 @@ async def solve_schedule(
                 activity_group_code=sd.activity_group_code,
                 activity_group_name=sd.activity_group_name,
                 state_continuity_groups=sd.state_continuity_groups,
+                start_at=start_at,
+                end_at=end_at,
+                elapsed_min=end_value - start_value,
+                calendar_pause_min=max(0, end_value - start_value - sd.duration_min),
+                segments=segments,
+                calendar_resolution=(
+                    calendar_context.resolution_by_step.get(so) if calendar_context is not None else None
+                ),
+                responsible_subsystem=sd.responsible_subsystem,
+                effect_dimension_keys=sd.effect_dimension_keys,
+                matched_scheduling_rules=scheduling_rule_context.matched_rule_codes_by_step.get(so, []),
             ))
 
         # Sort by start_min, then step_order
@@ -235,9 +384,22 @@ async def solve_schedule(
 
         # ---- 8. Build schedule graph and compute critical path ----
         schedule_graph = build_schedule_graph(tasks, rag_data.edges, makespan_val)
-        critical_path = compute_critical_path(schedule_graph)
+        if calendar_context is not None:
+            critical_path, critical_path_segments = _segment_critical_path(
+                tasks, rag_data.edges, makespan_val
+            )
+        else:
+            critical_path = compute_critical_path(schedule_graph)
+            critical_path_segments = _critical_path_segment_details(tasks, critical_path)
         activity_continuity = _activity_group_continuity_diagnostics(tasks, objectives)
         state_continuity = _state_group_continuity_diagnostics(tasks, objectives)
+        rule_diagnostics = scheduling_rule_result_diagnostics(scheduling_rule_context, tasks)
+        violations_by_step: dict[int, list[dict[str, Any]]] = {}
+        for violation in rule_diagnostics.get("violations", []):
+            for step_order in violation.get("step_orders", []):
+                violations_by_step.setdefault(step_order, []).append(violation)
+        for task in tasks:
+            task.scheduling_rule_violations = violations_by_step.get(task.step_order, [])
 
         stats = SolverStats(
             solver_status=status_name,
@@ -253,18 +415,51 @@ async def solve_schedule(
             solver_stats=stats,
             schedule_graph=schedule_graph,
             critical_path=critical_path,
+            critical_path_segments=critical_path_segments,
             diagnostics={
                 **diagnostics,
                 "solver_status": status_name,
                 "solver_wall_time_sec": round(solver.wall_time, 4),
                 "solver_branches": solver.num_branches,
                 "objective_terms": schedule_model.objective_cache.get("metadata", []),
+                "adjustment_optimization": stability_metadata,
                 "activity_group_continuity": activity_continuity,
                 "state_group_continuity": state_continuity,
+                "scheduling_rules": rule_diagnostics,
             },
+            calendar_summary=(
+                {
+                    "enabled": True,
+                    "revision_ids": sorted(
+                        item["revision_id"] for item in calendar_context.snapshot["calendars"].values()
+                    ),
+                    "fallback_step_orders": sorted(
+                        step_order
+                        for step_order, item in calendar_context.resolution_by_step.items()
+                        if item.get("fallback_to_default")
+                    ),
+                    "inherits_system_default": bool(
+                        calendar_context.snapshot.get("inherits_system_default")
+                    ),
+                    "effective_default_work_calendar_id": calendar_context.snapshot.get(
+                        "default_calendar_id"
+                    ),
+                    "schedule_start_at": calendar_context.schedule_start_at.astimezone(
+                        ZoneInfo(calendar_context.display_timezone)
+                    ).isoformat(),
+                    "schedule_end_at": (
+                        calendar_context.schedule_start_at + timedelta(minutes=makespan_val)
+                    ).astimezone(ZoneInfo(calendar_context.display_timezone)).isoformat(),
+                }
+                if calendar_context is not None else {"enabled": False}
+            ),
         )
 
     elif status == cp_model.INFEASIBLE:
+        conflict_constraints = []
+        if adjustment_context is not None:
+            from app.core.scheduler.adjustments import infeasible_constraint_core
+            conflict_constraints = infeasible_constraint_core(solver, schedule_model)
         return ScheduleResultData(
             status="infeasible",
             error_message="Resource constraints cannot be satisfied",
@@ -273,6 +468,10 @@ async def solve_schedule(
                 "solver_status": status_name,
                 "solver_wall_time_sec": round(solver.wall_time, 4),
                 "solver_branches": solver.num_branches,
+                "adjustment": {
+                    "conflict_constraints": conflict_constraints,
+                    "optimization": stability_metadata,
+                },
             },
         )
     else:
@@ -314,40 +513,58 @@ def _assign_resources(
     busy: dict[int, list[tuple[int, int, int]]] = {r.id: [] for r in resources}
 
     for task in tasks:
-        for req in _task_resource_requirements(task):
-            resource_type = req["resource_type"]
-            quantity_remaining = req["quantity"]
-            pool = pools.get(resource_type, [])
+        segments = task.segments or [{
+            "segment_index": 1,
+            "start_min": task.start_min,
+            "end_min": task.end_min,
+            "duration_min": task.duration_min,
+            "resources": [],
+        }]
+        if not task.segments:
+            task.segments = segments
+        for segment in segments:
+            segment_resources: list[dict[str, Any]] = segment.setdefault("resources", [])
+            for req in _task_resource_requirements(task):
+                resource_type = req["resource_type"]
+                quantity_remaining = req["quantity"]
+                pool = pools.get(resource_type, [])
 
-            for res in pool:
-                if quantity_remaining <= 0:
-                    break
+                for res in pool:
+                    if quantity_remaining <= 0:
+                        break
 
-                capacity = max(int(res.capacity), 1)
-                available = _available_capacity(
-                    busy[res.id],
-                    task.start_min,
-                    task.end_min,
-                    capacity,
-                )
-                if available <= 0:
-                    continue
+                    capacity = max(int(res.capacity), 1)
+                    available = _available_capacity(
+                        busy[res.id],
+                        segment["start_min"],
+                        segment["end_min"],
+                        capacity,
+                    )
+                    if available <= 0:
+                        continue
 
-                assigned_quantity = min(quantity_remaining, available)
-                task.resources.append({
-                    "resource_id": res.id,
-                    "resource_code": res.code,
-                    "resource_type": resource_type,
-                    "quantity": assigned_quantity,
-                })
-                busy[res.id].append((
-                    task.start_min,
-                    task.end_min,
-                    assigned_quantity,
-                ))
-                quantity_remaining -= assigned_quantity
-            # If no full assignment is found, leave the remaining quantity
-            # unassigned as degraded mode; CP-SAT should normally prevent this.
+                    assigned_quantity = min(quantity_remaining, available)
+                    assignment = {
+                        "resource_id": res.id,
+                        "resource_code": res.code,
+                        "resource_type": resource_type,
+                        "quantity": assigned_quantity,
+                    }
+                    segment_resources.append(assignment)
+                    if not any(
+                        item["resource_id"] == res.id
+                        and item["resource_type"] == resource_type
+                        for item in task.resources
+                    ):
+                        task.resources.append(dict(assignment))
+                    busy[res.id].append((
+                        segment["start_min"],
+                        segment["end_min"],
+                        assigned_quantity,
+                    ))
+                    quantity_remaining -= assigned_quantity
+                # If no full assignment is found, leave the remaining quantity
+                # unassigned as degraded mode; CP-SAT should normally prevent this.
 
 
 def _task_resource_requirements(task: TaskResult) -> list[dict[str, Any]]:
@@ -400,12 +617,144 @@ def _detect_actual_parallel(tasks: list[TaskResult]) -> list[list[int]]:
     parallel_groups: list[list[int]] = []
 
     for t1, t2 in combinations(tasks, 2):
-        if t1.start_min < t2.end_min and t2.start_min < t1.end_min:
+        if any(
+            left["start_min"] < right["end_min"] and right["start_min"] < left["end_min"]
+            for left in t1.segments
+            for right in t2.segments
+        ):
             group = sorted([t1.step_order, t2.step_order])
             if group not in parallel_groups:
                 parallel_groups.append(group)
 
     return parallel_groups
+
+
+def _critical_path_segment_details(
+    tasks: list[TaskResult],
+    critical_path: list[str],
+) -> list[dict[str, Any]]:
+    """Expose work and calendar-wait portions for critical tasks."""
+    critical_codes = set(critical_path)
+    details: list[dict[str, Any]] = []
+    for task in sorted(
+        (item for item in tasks if item.op_rule_code in critical_codes),
+        key=lambda item: (item.start_min, item.step_order),
+    ):
+        segments = sorted(task.segments, key=lambda item: item["start_min"])
+        for index, segment in enumerate(segments):
+            if index:
+                previous = segments[index - 1]
+                if segment["start_min"] > previous["end_min"]:
+                    details.append({
+                        "kind": "calendar_wait",
+                        "step_order": task.step_order,
+                        "op_rule_code": task.op_rule_code,
+                        "start_min": previous["end_min"],
+                        "end_min": segment["start_min"],
+                        "duration_min": segment["start_min"] - previous["end_min"],
+                    })
+            details.append({
+                "kind": "work",
+                "step_order": task.step_order,
+                "op_rule_code": task.op_rule_code,
+                "segment_index": segment.get("segment_index"),
+                "start_min": segment["start_min"],
+                "end_min": segment["end_min"],
+                "duration_min": segment["duration_min"],
+            })
+    return details
+
+
+def _segment_critical_path(
+    tasks: list[TaskResult],
+    rag_edges: list[tuple[int, int]],
+    makespan: int,
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """Trace one critical path through work segments and lag-bearing edges."""
+    nodes: dict[tuple[int, int], dict[str, Any]] = {}
+    first_by_step: dict[int, tuple[int, int]] = {}
+    last_by_step: dict[int, tuple[int, int]] = {}
+    predecessors: dict[tuple[int, int], list[tuple[tuple[int, int], str]]] = {}
+    task_by_step = {task.step_order: task for task in tasks}
+    for task in tasks:
+        ordered = sorted(task.segments, key=lambda item: item["start_min"])
+        previous_key = None
+        for segment in ordered:
+            key = (task.step_order, int(segment.get("segment_index") or len(nodes) + 1))
+            nodes[key] = {**segment, "step_order": task.step_order, "op_rule_code": task.op_rule_code}
+            predecessors.setdefault(key, [])
+            first_by_step.setdefault(task.step_order, key)
+            last_by_step[task.step_order] = key
+            if previous_key is not None:
+                predecessors[key].append((previous_key, "calendar_wait"))
+            previous_key = key
+    for left, right in rag_edges:
+        if left in last_by_step and right in first_by_step:
+            predecessors[first_by_step[right]].append((last_by_step[left], "precedence_wait"))
+    usage: dict[int, list[tuple[int, int, tuple[int, int]]]] = {}
+    for key, node in nodes.items():
+        for resource in node.get("resources", []):
+            usage.setdefault(resource["resource_id"], []).append(
+                (node["start_min"], node["end_min"], key)
+            )
+    for resource_segments in usage.values():
+        ordered = sorted(resource_segments)
+        for left, right in zip(ordered, ordered[1:]):
+            if left[1] <= right[0] and left[2] != right[2]:
+                predecessors[right[2]].append((left[2], "resource_wait"))
+    if not nodes:
+        return [], []
+    current = max(nodes, key=lambda key: (nodes[key]["end_min"], nodes[key]["start_min"]))
+    reverse_details: list[dict[str, Any]] = []
+    reverse_codes: list[str] = []
+    visited: set[tuple[int, int]] = set()
+    priority = {"calendar_wait": 3, "resource_wait": 2, "precedence_wait": 1}
+    while current not in visited:
+        visited.add(current)
+        node = nodes[current]
+        reverse_details.append({
+            "kind": "work",
+            "step_order": node["step_order"],
+            "op_rule_code": node["op_rule_code"],
+            "segment_index": node.get("segment_index"),
+            "start_min": node["start_min"],
+            "end_min": node["end_min"],
+            "duration_min": node["duration_min"],
+        })
+        reverse_codes.append(node["op_rule_code"])
+        candidates = predecessors.get(current, [])
+        if not candidates:
+            if node["start_min"] > 0:
+                reverse_details.append({
+                    "kind": "calendar_wait",
+                    "step_order": node["step_order"],
+                    "op_rule_code": node["op_rule_code"],
+                    "start_min": 0,
+                    "end_min": node["start_min"],
+                    "duration_min": node["start_min"],
+                })
+            break
+        previous, edge_kind = max(
+            candidates,
+            key=lambda item: (nodes[item[0]]["end_min"], priority[item[1]]),
+        )
+        previous_node = nodes[previous]
+        if node["start_min"] > previous_node["end_min"]:
+            reverse_details.append({
+                "kind": edge_kind,
+                "from_step_order": previous_node["step_order"],
+                "step_order": node["step_order"],
+                "start_min": previous_node["end_min"],
+                "end_min": node["start_min"],
+                "duration_min": node["start_min"] - previous_node["end_min"],
+            })
+        current = previous
+    details = list(reversed(reverse_details))
+    codes: list[str] = []
+    for code in reversed(reverse_codes):
+        if not codes or codes[-1] != code:
+            codes.append(code)
+    return codes, details
 
 
 def _activity_group_continuity_diagnostics(
@@ -586,6 +935,16 @@ async def save_schedule_result(
                 "activity_group_code": t.activity_group_code,
                 "activity_group_name": t.activity_group_name,
                 "state_continuity_groups": t.state_continuity_groups,
+                "start_at": t.start_at,
+                "end_at": t.end_at,
+                "elapsed_min": t.elapsed_min,
+                "calendar_pause_min": t.calendar_pause_min,
+                "segments": t.segments,
+                "calendar_resolution": t.calendar_resolution,
+                "responsible_subsystem": t.responsible_subsystem,
+                "effect_dimension_keys": t.effect_dimension_keys,
+                "matched_scheduling_rules": t.matched_scheduling_rules,
+                "scheduling_rule_violations": t.scheduling_rule_violations,
             })
 
     record = ScheduleResult(

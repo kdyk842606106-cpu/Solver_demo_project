@@ -255,6 +255,7 @@ async def solve_maintenance(
         constraints=request.constraints,
         parent_plan_id=request.parent_plan_id,
         blockage_constraints=request.blockage_constraints,
+        calendar_context=request.calendar_context,
         current_state_overrides=current_state_overrides,
         direct_goal_facts=direct_goal_facts,
         context={

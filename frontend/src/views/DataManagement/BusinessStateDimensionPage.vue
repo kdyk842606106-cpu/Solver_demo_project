@@ -176,8 +176,10 @@ function normalizeBinaryValues(values) {
 }
 
 function isDimensionTemplate(def) {
-  return String(def?.feature_key || '').includes('_dim_') &&
+  return def?.is_dimension_template === true || (
+    String(def?.feature_key || '').includes('_dim_') &&
     !String(def?.feature_key || '').includes('__')
+  )
 }
 
 function normalizeCodeToken(value, fallback) {
@@ -274,6 +276,8 @@ async function save() {
       feature_name: name,
       value_type: 'enum',
       allowed_values: values,
+      is_dimension_template: true,
+      dimension_template_id: null,
     }
     if (editId.value) await updateFeatureDef(editId.value, payload)
     else {

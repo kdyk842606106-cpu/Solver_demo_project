@@ -32,7 +32,59 @@
         <span class="legend-dot" style="background:#94a3b8;opacity:.5" />基准计划
       </span>
     </div>
-    <div ref="chartEl" :style="{ width: '100%', height: chartHeight + 'px' }" />
+    <div
+      v-if="markerLegend.length || shiftLegend.length"
+      class="legend presentation-legend"
+      aria-label="甘特图例"
+      data-testid="gantt-presentation-legend"
+    >
+      <div class="presentation-legend-title">甘特图例</div>
+      <div
+        v-if="markerLegend.length"
+        class="presentation-legend-row"
+        data-testid="gantt-marker-legend-section"
+      >
+        <span class="presentation-legend-label">作业标识</span>
+        <span
+          v-for="marker in markerLegend"
+          :key="`marker-${marker.key}`"
+          class="legend-item presentation-legend-item"
+          data-testid="gantt-marker-legend-item"
+        >
+          <span
+            class="marker-swatch"
+            :style="{ background: marker.color, color: contrastTextColor(marker.color) }"
+          >{{ marker.text }}</span>
+          {{ marker.ruleNames.join(' / ') }}
+        </span>
+      </div>
+      <div
+        v-if="shiftLegend.length"
+        class="presentation-legend-row"
+        data-testid="gantt-shift-legend-section"
+      >
+        <span class="presentation-legend-label">班次</span>
+        <span
+          v-for="shift in shiftLegend"
+          :key="`shift-${shift.key}`"
+          class="legend-item presentation-legend-item"
+          data-testid="gantt-shift-legend-item"
+        >
+          <span class="shift-swatch" :style="{ background: shift.color }" />
+          {{ shift.detailLabel }}
+        </span>
+      </div>
+    </div>
+    <div class="sr-only" data-testid="gantt-accessibility-summary">
+      <span v-for="(task, index) in presentationTasks" :key="task.step_order ?? task.op_rule_code ?? index">
+        {{ accessibilityTaskSummary(task) }}
+      </span>
+    </div>
+    <div
+      ref="chartEl"
+      data-testid="gantt-chart-canvas"
+      :style="{ width: '100%', height: chartHeight + 'px' }"
+    />
   </div>
 </template>
 
@@ -51,7 +103,13 @@ const props = defineProps({
   timeMode: { type: String, default: 'minute' },
   dayMinutes: { type: Number, default: 480 },
   labelMode: { type: String, default: 'full' },
+  scheduleStartAt: { type: String, default: '' },
+  rulePresentations: { type: Object, default: () => ({}) },
+  selectionMode: { type: Boolean, default: false },
+  selectedStepIds: { type: Array, default: () => [] },
 })
+
+const emit = defineEmits(['toggle-task', 'brush-select'])
 
 const ROLE_COLORS = {
   normal: '#0f766e',
@@ -66,14 +124,61 @@ const ROLE_LABELS = {
   delayed: '延后',
 }
 const LANE_COLORS = ['#0f766e', '#2563eb', '#7c3aed', '#b45309', '#be123c', '#0369a1', '#4d7c0f', '#9333ea']
+const SHIFT_COLORS = ['#2563eb', '#7c3aed', '#0891b2', '#65a30d', '#db2777', '#ea580c', '#4f46e5', '#0d9488']
 
 const chartEl = ref(null)
 let chart = null
 let resizeObserver = null
+let selectableSeriesData = []
+let selectableSeriesIndex = 0
 
 const activeTasks = computed(() => {
   if (!props.laneMode) return props.tasks
   return props.laneGroups.flatMap((group) => group.tasks ?? [])
+})
+
+const presentationTasks = computed(() => (props.diffMode ? [] : activeTasks.value))
+
+const shiftAxisIntervals = computed(() => presentationTasks.value.flatMap((task) => {
+  const segments = task.gantt_shift_segments || task.segments || []
+  return segments.map((segment) => ({
+    start: Number(segment.start_min),
+    end: Number(segment.end_min),
+    shift: shiftDescriptor(segment),
+  })).filter((item) => Number.isFinite(item.start) && Number.isFinite(item.end) && item.shift)
+}))
+
+const shiftLegend = computed(() => {
+  const byKey = new Map()
+  for (const task of presentationTasks.value) {
+    const segments = task.gantt_shift_segments || task.segments || []
+    for (const segment of segments) {
+      const shift = shiftDescriptor(segment)
+      if (shift) byKey.set(shift.key, shift)
+    }
+  }
+  return [...byKey.values()]
+    .sort((left, right) => left.key.localeCompare(right.key))
+    .map((shift, index) => ({ ...shift, color: SHIFT_COLORS[index % SHIFT_COLORS.length] }))
+})
+
+const shiftColorByKey = computed(() => new Map(
+  shiftLegend.value.map((shift) => [shift.key, shift.color]),
+))
+
+const markerLegend = computed(() => {
+  const byKey = new Map()
+  for (const task of presentationTasks.value) {
+    for (const marker of taskMarkers(task)) {
+      const existing = byKey.get(marker.key)
+      if (existing) {
+        existing.ruleNames = [...new Set([...existing.ruleNames, ...marker.ruleNames])]
+      } else {
+        byKey.set(marker.key, { ...marker })
+      }
+    }
+  }
+  return [...byKey.values()].sort((left, right) => left.key.localeCompare(right.key))
 })
 
 const hasRoles = computed(() => {
@@ -188,10 +293,12 @@ function buildNormalOption() {
   const sorted = [...props.tasks].sort((a, b) => a.start_min - b.start_min)
   const categories = sorted.map((task) => formatNormalLabel(task, isCriticalPath(task)))
 
-  const data = sorted.map((task, index) => taskBarData(task, index))
+  const data = sorted.flatMap((task, index) => taskBarData(task, index))
+  selectableSeriesData = data
+  selectableSeriesIndex = 0
   return makeOption(categories, data, maxEndForTasks(sorted), {
     gridLeft: 170,
-    tooltipFormatter: (p) => taskTooltip(p.data?.task, p.data?.label, p.data?.group),
+    tooltipFormatter: (p) => taskTooltip(p.data?.task, p.data?.label, p.data?.group, p.data?.segment),
   })
 }
 
@@ -213,13 +320,14 @@ function buildLaneOption() {
     isLaneHeader: row.type === 'lane',
   }))
   const barData = rows
-    .map((row, rowIndex) => row.type === 'task' ? taskBarData(row.task, rowIndex, row.group) : null)
-    .filter(Boolean)
+    .flatMap((row, rowIndex) => row.type === 'task' ? taskBarData(row.task, rowIndex, row.group) : [])
+  selectableSeriesData = barData
+  selectableSeriesIndex = 1
 
   return makeOption(yAxisData, barData, maxTime, {
     gridLeft: 260,
     rowLabels,
-    tooltipFormatter: (p) => taskTooltip(p.data?.task, p.data?.label, p.data?.group),
+    tooltipFormatter: (p) => taskTooltip(p.data?.task, p.data?.label, p.data?.group, p.data?.segment),
     extraSeries: [
       {
         type: 'custom',
@@ -234,22 +342,103 @@ function buildLaneOption() {
   })
 }
 
+function shiftDescriptor(segment) {
+  if (!segment) return null
+  const rawItems = Array.isArray(segment.shifts) && segment.shifts.length
+    ? segment.shifts
+    : segment.shift_code || segment.shift_name
+      ? [{ shift_code: segment.shift_code, shift_name: segment.shift_name }]
+      : []
+  const items = rawItems
+    .map((item) => ({
+      code: String(item?.shift_code || '').trim(),
+      name: String(item?.shift_name || '').trim(),
+    }))
+    .filter((item) => item.code || item.name)
+  if (!items.length) return null
+  const unique = [...new Map(items.map((item) => [`${item.code}|${item.name}`, item])).values()]
+  const key = unique
+    .map((item) => `${item.code}|${item.name}`)
+    .sort()
+    .join('&')
+  const shortLabel = unique.map((item) => item.name || item.code).join(' ∩ ')
+  const detailLabel = unique.map((item) =>
+    item.name && item.code ? `${item.name} (${item.code})` : item.name || item.code,
+  ).join(' ∩ ')
+  return { key, shortLabel, detailLabel }
+}
+
+function taskMarkers(task) {
+  const counts = task?.gantt_marker_counts
+  const aggregate = !!counts && typeof counts === 'object'
+  const ruleCodes = counts && typeof counts === 'object'
+    ? Object.keys(counts)
+    : task?.matched_scheduling_rules || []
+  const byKey = new Map()
+  for (const ruleCode of ruleCodes) {
+    const presentation = props.rulePresentations?.[ruleCode]
+    if (!presentation?.text) continue
+    const text = String(presentation.text).trim()
+    if (!text) continue
+    const color = presentation.color || '#f59e0b'
+    const key = `${text}|${color}`
+    const count = Math.max(1, Number(counts?.[ruleCode] || 1))
+    const ruleName = presentation.rule_name || ruleCode
+    const existing = byKey.get(key)
+    if (existing) {
+      existing.count = Math.max(existing.count, count)
+      existing.aggregate = existing.aggregate || aggregate
+      existing.ruleNames = [...new Set([...existing.ruleNames, ruleName])]
+    } else {
+      byKey.set(key, { key, text, color, count, aggregate, ruleNames: [ruleName] })
+    }
+  }
+  return [...byKey.values()]
+}
+
+function accessibilityTaskSummary(task) {
+  const label = formatNormalLabel(task, isCriticalPath(task))
+  const markers = taskMarkers(task).map((marker) =>
+    `${marker.text}${marker.aggregate || marker.count > 1 ? `×${marker.count}` : ''}`,
+  )
+  const segments = task.gantt_shift_segments || task.segments || []
+  const shifts = [...new Map(
+    segments.map(shiftDescriptor).filter(Boolean).map((shift) => [shift.key, shift]),
+  ).values()].map((shift) => shift.detailLabel)
+  return [label, markers.length ? `甘特标识 ${markers.join(' / ')}` : '', shifts.length ? `班次 ${shifts.join(' / ')}` : '']
+    .filter(Boolean)
+    .join('；')
+}
+
 function taskBarData(task, rowIndex, group = null) {
   const role = task.step_role ?? 'normal'
   const color = ROLE_COLORS[role] ?? ROLE_COLORS.normal
   const critical = isCriticalPath(task)
   const label = formatNormalLabel(task, critical)
-  return {
-    value: [rowIndex, task.start_min, task.end_min],
-    task,
-    group,
-    label,
-    itemStyle: {
-      color,
-      borderColor: critical ? '#f59e0b' : color,
-      borderWidth: critical ? 2 : 0,
-    },
-  }
+  const segments = Array.isArray(task.segments) && task.segments.length
+    ? task.segments
+    : [{ start_min: task.start_min, end_min: task.end_min, segment_index: 1 }]
+  const markers = taskMarkers(task)
+  return segments.map((segment, segmentArrayIndex) => {
+    const shift = shiftDescriptor(segment)
+    return {
+      value: [rowIndex, segment.start_min, segment.end_min],
+      task,
+      segment,
+      shift,
+      shiftColor: shift ? shiftColorByKey.value.get(shift.key) : null,
+      markers: segmentArrayIndex === 0 ? markers : [],
+      group,
+      label,
+      itemStyle: {
+        color,
+        borderColor: props.selectedStepIds.includes(task.step_id)
+          ? '#2563eb'
+          : critical ? '#f59e0b' : color,
+        borderWidth: props.selectedStepIds.includes(task.step_id) ? 4 : critical ? 2 : 0,
+      },
+    }
+  })
 }
 
 function buildDiffOption() {
@@ -301,7 +490,7 @@ function makeSeries(data, name) {
   return {
     type: 'custom',
     name,
-    renderItem,
+    renderItem: (params, api) => renderItem(params, api, data[params.dataIndex]),
     encode: { x: [1, 2], y: 0 },
     data,
     z: 2,
@@ -313,8 +502,29 @@ function maxEndForTasks(tasks) {
 }
 
 function formatTimePoint(value) {
+  if (props.timeMode === 'datetime' && props.scheduleStartAt) {
+    const date = new Date(new Date(props.scheduleStartAt).getTime() + Number(value) * 60000)
+    return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+  }
   if (props.timeMode !== 'day') return `${value}m`
   return `D${Math.floor(value / props.dayMinutes) + 1}`
+}
+
+function shiftLabelsAtTime(value) {
+  const labels = new Set()
+  const isScheduleEnd = value === Number(props.makespan)
+  for (const interval of shiftAxisIntervals.value) {
+    const contains = value >= interval.start && value < interval.end
+    const closesSchedule = isScheduleEnd && value === interval.end
+    if (contains || closesSchedule) labels.add(interval.shift.shortLabel)
+  }
+  return [...labels].sort().join(' / ')
+}
+
+function formatTimeAxisLabel(value) {
+  const time = formatTimePoint(value)
+  const shifts = shiftLabelsAtTime(Number(value))
+  return shifts ? `${time}\n${shifts}` : time
 }
 
 function formatTimeRange(start, end) {
@@ -327,17 +537,58 @@ function formatTimeRange(start, end) {
   return `开始: D${startDay}<br>结束: D${endDay}<br>工期: ${durationDays} 天`
 }
 
-function taskTooltip(task, label, group) {
+function taskTooltip(task, label, group, segment) {
   if (!task) return ''
   const lines = [
     escapeHtml(label || formatNormalLabel(task, isCriticalPath(task))),
     formatTimeRange(task.start_min, task.end_min),
     `步骤状态: ${ROLE_LABELS[task.step_role ?? 'normal'] ?? task.step_role ?? 'normal'}`,
   ]
+  if (task.start_at && task.end_at) {
+    lines.push(`绝对时间: ${escapeHtml(task.start_at)} → ${escapeHtml(task.end_at)}`)
+    lines.push(`工作量: ${task.duration_min} min / 实际历时: ${task.elapsed_min ?? task.end_min - task.start_min} min`)
+    if (task.calendar_pause_min) lines.push(`日历暂停: ${task.calendar_pause_min} min / 片段: ${task.segments?.length ?? 1}`)
+  }
+  if (segment?.shift_name || segment?.shift_code) {
+    const shift = segment.shift_name && segment.shift_code
+      ? `${segment.shift_name} (${segment.shift_code})`
+      : segment.shift_name || segment.shift_code
+    lines.push(`班次: ${escapeHtml(shift)}`)
+  } else if (Array.isArray(segment?.shifts) && segment.shifts.length) {
+    lines.push(`班次: ${escapeHtml(segment.shifts.map((item) => item.shift_name || item.shift_code).filter(Boolean).join(' ∩ '))}`)
+  }
+  const markers = taskMarkers(task)
+  if (markers.length) {
+    lines.push(`甘特标识: ${escapeHtml(markers.map((marker) => {
+      const count = marker.aggregate || marker.count > 1 ? `×${marker.count}` : ''
+      return `${marker.text}${count}（${marker.ruleNames.join(' / ')}）`
+    }).join(' / '))}`)
+  }
+  if (!segment && Array.isArray(task.gantt_shift_segments)) {
+    const shifts = [...new Map(
+      task.gantt_shift_segments
+        .map(shiftDescriptor)
+        .filter(Boolean)
+        .map((shift) => [shift.key, shift]),
+    ).values()]
+    if (shifts.length) {
+      lines.push(`班次汇总: ${escapeHtml(shifts.map((shift) => shift.detailLabel).join(' / '))}`)
+    }
+  }
   const statePath = stateGroupPathLabel(task, group)
   if (statePath) lines.push(`状态包: ${escapeHtml(statePath)}`)
   const activityGroup = task.activity_group_code || task.activity_group_name
   if (activityGroup) lines.push(`活动组: ${escapeHtml(activityGroup)}`)
+  if (task.responsible_subsystem) lines.push(`责任子系统: ${escapeHtml(task.responsible_subsystem)}`)
+  if (Array.isArray(task.effect_dimension_keys) && task.effect_dimension_keys.length) {
+    lines.push(`效果维度: ${escapeHtml(task.effect_dimension_keys.join(' / '))}`)
+  }
+  if (Array.isArray(task.matched_scheduling_rules) && task.matched_scheduling_rules.length) {
+    lines.push(`命中规则: ${escapeHtml(task.matched_scheduling_rules.join(' / '))}`)
+  }
+  if (Array.isArray(task.scheduling_rule_violations) && task.scheduling_rule_violations.length) {
+    lines.push(`软规则违反: ${task.scheduling_rule_violations.length}`)
+  }
   const resources = formatResources(task.resources)
   if (resources) lines.push(`资源: ${escapeHtml(resources)}`)
   return lines.join('<br>')
@@ -373,27 +624,82 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;')
 }
 
-function renderItem(params, api) {
+function renderItem(params, api, sourceData = null) {
   const categoryIndex = api.value(0)
   const start = api.coord([api.value(1), categoryIndex])
   const end = api.coord([api.value(2), categoryIndex])
   const height = api.size([0, 1])[1] * 0.58
+  const width = Math.max(end[0] - start[0], 2)
+  const top = start[1] - height / 2
+  const data = sourceData || {}
+  const children = [
+    {
+      type: 'rect',
+      shape: { x: start[0], y: top, width, height, r: 3 },
+      style: { ...api.style() },
+    },
+  ]
 
-  return {
-    type: 'rect',
-    shape: {
-      x: start[0],
-      y: start[1] - height / 2,
-      width: Math.max(end[0] - start[0], 2),
-      height,
-      r: 3,
-    },
-    style: {
-      ...api.style(),
-      textFill: '#fff',
-      fontSize: 11,
-    },
+  if (data.shiftColor) {
+    children.push({
+      type: 'rect',
+      shape: {
+        x: start[0] + 1,
+        y: top + 1,
+        width: Math.max(width - 2, 1),
+        height: Math.min(4, Math.max(height - 2, 1)),
+        r: [2, 2, 0, 0],
+      },
+      style: { fill: data.shiftColor },
+    })
   }
+
+  let contentOffset = 4
+  for (const marker of data.markers || []) {
+    const markerLabel = marker.aggregate || marker.count > 1 ? `${marker.text}×${marker.count}` : marker.text
+    const markerWidth = Math.max(18, markerLabel.length * 11 + 8)
+    children.push({
+      type: 'rect',
+      shape: {
+        x: start[0] + contentOffset,
+        y: start[1] - 9,
+        width: markerWidth,
+        height: 18,
+        r: 5,
+      },
+      style: {
+        fill: marker.color,
+        stroke: 'rgba(255,255,255,.9)',
+        lineWidth: 1,
+      },
+    })
+    children.push({
+      type: 'text',
+      style: {
+        x: start[0] + contentOffset + markerWidth / 2,
+        y: start[1],
+        text: markerLabel,
+        fill: contrastTextColor(marker.color),
+        font: '600 11px sans-serif',
+        align: 'center',
+        verticalAlign: 'middle',
+      },
+    })
+    contentOffset += markerWidth + 4
+  }
+
+  return { type: 'group', children }
+}
+
+function contrastTextColor(color) {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color || '')
+  if (!match) return '#ffffff'
+  const luminance = (
+    Number.parseInt(match[1], 16) * 0.299
+    + Number.parseInt(match[2], 16) * 0.587
+    + Number.parseInt(match[3], 16) * 0.114
+  )
+  return luminance > 155 ? '#1f2937' : '#ffffff'
 }
 
 function renderLaneBackground(params, api) {
@@ -451,12 +757,24 @@ function makeOption(categories, data, maxTime, options = {}) {
         ? options.tooltipFormatter(p)
         : defaultTooltip(p, rowLabels),
     },
-    grid: { left: options.gridLeft ?? 170, right: 24, top: 10, bottom: 32 },
+    toolbox: props.selectionMode ? {
+      right: 12,
+      feature: {
+        brush: {
+          type: ['rect', 'clear'],
+          title: { rect: '框选活动', clear: '清除框选图形' },
+        },
+      },
+    } : undefined,
+    brush: props.selectionMode
+      ? { brushMode: 'multiple', throttleType: 'debounce', throttleDelay: 120 }
+      : undefined,
+    grid: { left: options.gridLeft ?? 170, right: 24, top: 10, bottom: shiftLegend.value.length ? 52 : 32 },
     xAxis: {
       min: 0,
       max: maxTime,
       scale: true,
-      axisLabel: { formatter: formatTimePoint },
+      axisLabel: { formatter: formatTimeAxisLabel, lineHeight: 16, hideOverlap: true },
     },
     yAxis: {
       data: categories,
@@ -481,8 +799,88 @@ function updateChart() {
   chart.resize()
 }
 
+function normalizeBrushRange(range) {
+  if (!Array.isArray(range) || range.length < 2) return null
+  const xRange = range[0]
+  const yRange = range[1]
+  if (!Array.isArray(xRange) || !Array.isArray(yRange)) return null
+  return {
+    xMin: Math.min(Number(xRange[0]), Number(xRange[1])),
+    xMax: Math.max(Number(xRange[0]), Number(xRange[1])),
+    yMin: Math.min(Number(yRange[0]), Number(yRange[1])),
+    yMax: Math.max(Number(yRange[0]), Number(yRange[1])),
+  }
+}
+
+function selectableRowHalfHeight() {
+  const rowIndexes = [...new Set(selectableSeriesData.map((item) => Number(item.value?.[0])))]
+  const centers = rowIndexes
+    .map((rowIndex) => chart?.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [0, rowIndex])?.[1])
+    .filter(Number.isFinite)
+    .sort((left, right) => left - right)
+  const spacings = centers.slice(1).map((center, index) => center - centers[index]).filter((value) => value > 0)
+  const rowSpacing = spacings.length ? Math.min(...spacings) : 28
+  return rowSpacing * 0.29
+}
+
+function stepIdsIntersectingBrushAreas(areas = []) {
+  if (!chart) return []
+  const stepIds = new Set()
+  const halfHeight = selectableRowHalfHeight()
+  for (const area of areas) {
+    if (area?.brushType !== 'rect') continue
+    const brush = normalizeBrushRange(area.range)
+    if (!brush) continue
+    for (const item of selectableSeriesData) {
+      const [rowIndex, startMin, endMin] = item.value || []
+      const start = chart.convertToPixel(
+        { xAxisIndex: 0, yAxisIndex: 0 },
+        [Number(startMin), Number(rowIndex)],
+      )
+      const end = chart.convertToPixel(
+        { xAxisIndex: 0, yAxisIndex: 0 },
+        [Number(endMin), Number(rowIndex)],
+      )
+      if (!Array.isArray(start) || !Array.isArray(end)) continue
+      const bar = {
+        xMin: Math.min(start[0], end[0]),
+        xMax: Math.max(start[0], end[0]),
+        yMin: start[1] - halfHeight,
+        yMax: start[1] + halfHeight,
+      }
+      const intersects = bar.xMax >= brush.xMin
+        && bar.xMin <= brush.xMax
+        && bar.yMax >= brush.yMin
+        && bar.yMin <= brush.yMax
+      const stepId = item.task?.step_id
+      if (intersects && stepId != null) stepIds.add(stepId)
+    }
+  }
+  return [...stepIds]
+}
+
 onMounted(() => {
   chart = echarts.init(chartEl.value)
+  chart.on('click', (params) => {
+    if (!props.selectionMode) return
+    const stepId = params?.data?.task?.step_id
+    if (stepId != null) emit('toggle-task', stepId)
+  })
+  chart.on('brushSelected', (params) => {
+    if (!props.selectionMode) return
+    const batch = params?.batch?.[0] || {}
+    const selected = batch.selected || []
+    const stepIds = new Set()
+    for (const series of selected) {
+      if (series.seriesIndex !== selectableSeriesIndex) continue
+      for (const dataIndex of series.dataIndex || []) {
+        const stepId = selectableSeriesData[dataIndex]?.task?.step_id
+        if (stepId != null) stepIds.add(stepId)
+      }
+    }
+    for (const stepId of stepIdsIntersectingBrushAreas(batch.areas || [])) stepIds.add(stepId)
+    if (stepIds.size) emit('brush-select', [...stepIds])
+  })
   updateChart()
   resizeObserver = new ResizeObserver(() => chart?.resize())
   resizeObserver.observe(chartEl.value)
@@ -504,6 +902,10 @@ watch(
     props.makespan,
     props.timeMode,
     props.labelMode,
+    props.scheduleStartAt,
+    props.rulePresentations,
+    props.selectionMode,
+    props.selectedStepIds,
   ],
   () => nextTick(updateChart),
 )
@@ -563,5 +965,71 @@ watch(
   width: 12px;
   height: 12px;
   border-radius: 3px;
+}
+
+.presentation-legend {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.97);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.presentation-legend-title {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.presentation-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.presentation-legend-label {
+  flex: 0 0 64px;
+  color: #334155;
+  font-weight: 600;
+}
+
+.presentation-legend-item {
+  padding: 2px 0;
+}
+
+.marker-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 5px;
+  color: #1f2937;
+  font-weight: 700;
+}
+
+.shift-swatch {
+  display: inline-block;
+  width: 24px;
+  height: 5px;
+  border-radius: 3px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 </style>

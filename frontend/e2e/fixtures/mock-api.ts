@@ -6,7 +6,63 @@ export const MOCK_MACHINES = [
 ]
 
 export const MOCK_MACHINE_TYPES = [
-  { id: 1, code: 'LATHE', name: 'CNC Lathe', description: 'Standard lathe' },
+  {
+    id: 1,
+    code: 'LATHE',
+    name: 'CNC Lathe',
+    description: 'Standard lathe',
+    scheduling_config: {
+      responsible_subsystems: [{ code: 'PROPULSION', name: '推进子系统' }],
+      rules: [
+        {
+          code: 'CRANE_EXCLUSIVE', name: '行吊作业独占', type: 'scope_exclusivity',
+          enabled: true, activation_mode: 'required', selector: { required_resource_type: 'OVERHEAD_CRANE' },
+          enforcement: { mode: 'hard', overridable: false }, parameters: { against: 'all_other_tasks' },
+          presentation: { gantt_marker: { text: '吊', color: '#f59e0b' } },
+        },
+        {
+          code: 'CRANE_DAY_SHIFT_ONLY', name: '行吊作业仅允许指定班次', type: 'shift_restriction',
+          enabled: true, activation_mode: 'required', selector: { required_resource_type: 'OVERHEAD_CRANE' },
+          enforcement: { mode: 'hard', overridable: true }, parameters: { allowed_shift_codes: ['DAY_SHIFT'] },
+        },
+        {
+          code: 'FUNCTION_TEST_EXCLUSIVE', name: '功能调测优先独占', type: 'scope_exclusivity',
+          enabled: true, activation_mode: 'default_on', selector: { effect_dimension_keys: ['FUNCTION_TEST'] },
+          enforcement: { mode: 'soft', overridable: false }, parameters: { against: 'all_other_tasks' },
+        },
+      ],
+    },
+  },
+]
+
+export const MOCK_SCHEDULING_RULE_TYPES = [
+  {
+    type: 'scope_exclusivity',
+    name: '作用域排他',
+    supported_modes: ['snapshot', 'layered', 'maintenance'],
+    builtin_rule: null,
+  },
+  {
+    type: 'shift_restriction',
+    name: '班次限制',
+    supported_modes: ['snapshot', 'layered', 'maintenance'],
+    builtin_rule: null,
+  },
+  {
+    type: 'state_package_continuity',
+    name: '状态包连续性',
+    supported_modes: ['layered', 'maintenance'],
+    builtin_rule: {
+      code: 'STATE_PACKAGE_CONTINUITY',
+      name: '状态包连续性',
+      type: 'state_package_continuity',
+      enabled: true,
+      activation_mode: 'optional',
+      selector: { state_package_membership: true },
+      enforcement: { mode: 'soft', priority: 2, overridable: false },
+      parameters: { group_by: 'state_package' },
+    },
+  },
 ]
 
 export const MOCK_RESOURCES = [
@@ -156,6 +212,7 @@ export const BASE_SCHEDULE = {
   tasks: [
     {
       task_id: 1,
+      step_id: 501,
       step_order: 1,
       op_rule_id: 1,
       op_rule_code: 'OP_WARMUP',
@@ -173,9 +230,14 @@ export const BASE_SCHEDULE = {
       is_blocked: false,
       is_delayed: false,
       step_role: 'normal',
+      responsible_subsystem: 'PROPULSION',
+      effect_dimension_keys: [],
+      matched_scheduling_rules: ['CRANE_DAY_SHIFT_ONLY'],
+      scheduling_rule_violations: [],
     },
     {
       task_id: 2,
+      step_id: 502,
       step_order: 2,
       op_rule_id: 3,
       op_rule_code: 'OP_CALIBRATE',
@@ -212,6 +274,15 @@ export const STATE_LANE_SCHEDULE = {
       start_min: 0,
       end_min: 20,
       duration_min: 20,
+      resource_reqs: [{ resource_type: 'OVERHEAD_CRANE', quantity: 1 }],
+      matched_scheduling_rules: ['CRANE_EXCLUSIVE', 'CRANE_DAY_SHIFT_ONLY'],
+      calendar_pause_min: 0,
+      segments: [
+        {
+          segment_index: 1, start_min: 0, end_min: 20, duration_min: 20,
+          shift_code: 'DAY_SHIFT', shift_name: '白班',
+        },
+      ],
       activity_group_id: 301,
       activity_group_code: 'MECH_ASSEMBLY',
       activity_group_name: 'Mechanical Assembly',
@@ -242,6 +313,18 @@ export const STATE_LANE_SCHEDULE = {
       start_min: 20,
       end_min: 40,
       duration_min: 20,
+      matched_scheduling_rules: [],
+      calendar_pause_min: 0,
+      segments: [
+        {
+          segment_index: 1, start_min: 20, end_min: 30, duration_min: 10,
+          shift_code: 'DAY_SHIFT', shift_name: '白班',
+        },
+        {
+          segment_index: 2, start_min: 30, end_min: 40, duration_min: 10,
+          shift_code: 'NIGHT_SHIFT', shift_name: '夜班',
+        },
+      ],
       activity_group_id: 302,
       activity_group_code: 'TRANSFER_READY',
       activity_group_name: 'Transfer Mechanism',
@@ -271,6 +354,17 @@ export const STATE_LANE_SCHEDULE = {
       start_min: 40,
       end_min: 55,
       duration_min: 15,
+      matched_scheduling_rules: [],
+      calendar_pause_min: 0,
+      segments: [
+        {
+          segment_index: 1, start_min: 40, end_min: 55, duration_min: 15,
+          shifts: [
+            { shift_code: 'NIGHT_SHIFT', shift_name: '夜班' },
+            { shift_code: 'SUPPORT_SHIFT', shift_name: '保障班' },
+          ],
+        },
+      ],
       assigned_resource_ids: [2],
       assigned_resource_codes: ['TECH-02'],
       resources: [{ resource_code: 'TECH-02', resource_name: 'Technician Bob' }],
@@ -288,6 +382,8 @@ export const STATE_LANE_SCHEDULE = {
 }
 
 export const STATE_LANE_RESULT_EXTRAS = {
+  schedule_start_at: '2026-07-14T08:00:00+08:00',
+  calendar_summary: { enabled: true },
   layered: {
     preflight_health: { status: 'ok', checks: [] },
     state_tree: [],
@@ -297,6 +393,21 @@ export const STATE_LANE_RESULT_EXTRAS = {
   },
   diagnostics: {
     schedule: {
+      scheduling_rules: {
+        active_rule_codes: ['CRANE_EXCLUSIVE', 'CRANE_DAY_SHIFT_ONLY'],
+        active_rules: [
+          {
+            code: 'CRANE_EXCLUSIVE', name: '行吊作业独占', type: 'scope_exclusivity',
+            selector: { required_resource_type: 'OVERHEAD_CRANE' },
+            presentation: { gantt_marker: { text: '吊', color: '#f59e0b' } },
+          },
+          {
+            code: 'CRANE_DAY_SHIFT_ONLY', name: '行吊仅允许白班', type: 'shift_restriction',
+            selector: { required_resource_type: 'OVERHEAD_CRANE' },
+            presentation: { gantt_marker: { text: '吊', color: '#f59e0b' } },
+          },
+        ],
+      },
       state_group_continuity: {
         group_count: 2,
         objective_weights: {},
@@ -459,6 +570,11 @@ export function createMockRouteHandler(schedule: any, resultExtras: Record<strin
       return
     }
 
+    if (url.includes('/api/v1/scheduling-rule-types')) {
+      await route.fulfill({ status: 200, body: JSON.stringify(MOCK_SCHEDULING_RULE_TYPES) })
+      return
+    }
+
     if (url.includes('/api/v1/machine-types')) {
       await route.fulfill({ status: 200, body: JSON.stringify(MOCK_MACHINE_TYPES) })
       return
@@ -510,6 +626,106 @@ export function createMockRouteHandler(schedule: any, resultExtras: Record<strin
           critical_path: [],
           ...resultExtras,
         })
+      })
+      return
+    }
+
+    if (/\/api\/v1\/plans\/\d+\/adjustments$/.test(url) && method === 'POST') {
+      const payload = JSON.parse(request.postData() || '{}')
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({
+          id: 901,
+          plan_family_id: 1,
+          baseline_plan_id: schedule.schedule_id,
+          candidate_plan_id: payload.candidate_plan_id || null,
+          kind: payload.kind || 'schedule',
+          status: payload.candidate_plan_id ? 'preview_ready' : 'draft',
+          scope_step_ids: payload.scope_step_ids || [],
+          constraints: payload.constraints || [],
+          remove_inherited_constraint_ids: [],
+          effective_constraints: null,
+          preview_summary: payload.candidate_plan_id ? {
+            base_task_count: schedule.tasks.length,
+            candidate_task_count: schedule.tasks.length,
+            makespan_delta_min: 0,
+            candidate_solve_request_id: 777,
+            candidate_plan_id: payload.candidate_plan_id,
+          } : null,
+          diagnostics: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }),
+      })
+      return
+    }
+
+    if (/\/api\/v1\/plan-adjustments\/\d+$/.test(url) && method === 'PATCH') {
+      const payload = JSON.parse(request.postData() || '{}')
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({
+          id: 901, plan_family_id: 1, baseline_plan_id: schedule.schedule_id,
+          candidate_plan_id: null, kind: 'schedule', status: 'draft',
+          scope_step_ids: payload.scope_step_ids || [], constraints: payload.constraints || [],
+          remove_inherited_constraint_ids: [], effective_constraints: null,
+          preview_summary: null, diagnostics: null,
+          created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        }),
+      })
+      return
+    }
+
+    if (/\/api\/v1\/plan-adjustments\/\d+\/preview$/.test(url) && method === 'POST') {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({
+          adjustment: { id: 901, status: 'preview_ready' },
+          candidate_plan_id: schedule.schedule_id,
+          status: 'preview_ready',
+          summary: {
+            base_makespan_min: schedule.makespan,
+            candidate_makespan_min: schedule.makespan,
+            makespan_delta_min: 0,
+            scope_changed_task_count: 1,
+            outside_changed_task_count: 0,
+            scope_total_shift_min: 25,
+            outside_total_shift_min: 0,
+            candidate_solve_request_id: 777,
+            candidate_plan_id: schedule.schedule_id,
+          },
+          task_diffs: schedule.tasks.map((task: any) => ({
+            step_order: task.step_order,
+            op_rule_code: task.op_rule_code,
+            in_scope: task.step_order === 1,
+            base_start_min: task.step_order === 1 ? 0 : task.start_min,
+            new_start_min: task.start_min,
+            shift_min: task.step_order === 1 ? Math.abs(task.start_min) : 0,
+            changed: task.step_order === 1 && task.start_min !== 0,
+          })),
+          diagnostics: {},
+        }),
+      })
+      return
+    }
+
+    if (/\/api\/v1\/plan-adjustments\/\d+\/(confirm|cancel)$/.test(url) && method === 'POST') {
+      await route.fulfill({ status: 200, body: JSON.stringify({ id: 901, status: url.endsWith('/confirm') ? 'confirmed' : 'cancelled' }) })
+      return
+    }
+
+
+    if (url.endsWith('/api/v1/solve-requests/777') && method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({
+          id: 777,
+          machine_id: 1,
+          status: 'done',
+          objective: 'minimize_makespan',
+          candidate_plan_id: schedule.schedule_id,
+          schedule,
+        }),
       })
       return
     }

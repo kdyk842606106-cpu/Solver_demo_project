@@ -37,7 +37,11 @@ from app.db.models import (
     ScopeGuardPrecond,
     StateFeatureDef,
     StateNode,
+    WorkCalendar,
+    WorkCalendarRevision,
+    MachineStateDimensionCalendar,
 )
+from app.core.scheduler.calendar import CalendarError, definition_checksum, validate_definition
 from app.db.schemas import LayeredExpansionRequest
 from app.services.layered_health import check_layered_health
 
@@ -65,6 +69,10 @@ OPTIONAL_SHEETS = [
     "layered_health_checks",
     "rule_groups",
     "notes",
+    "work_calendars",
+    "work_calendar_windows",
+    "work_calendar_exceptions",
+    "machine_calendar_bindings",
 ]
 
 SHEET_FIELDS = {
@@ -74,6 +82,10 @@ SHEET_FIELDS = {
     "machines": ["code", "machine_type_code", "name", "location"],
     "state_feature_defs": ["machine_type_code", "feature_key", "feature_name", "value_type", "allowed_values"],
     "resources": ["machine_code", "code", "name", "resource_type", "capacity", "is_available", "meta_json"],
+    "work_calendars": ["code", "name", "description", "is_active", "timezone"],
+    "work_calendar_windows": ["calendar_code", "weekday", "start_time", "end_time", "spans_next_day", "shift_code", "shift_name"],
+    "work_calendar_exceptions": ["calendar_code", "date", "mode", "windows_json"],
+    "machine_calendar_bindings": ["machine_code", "binding_kind", "dimension_template_key", "calendar_code"],
     "rules": [
         "code",
         "machine_type_code",
@@ -1182,6 +1194,51 @@ async def validate_scenario_workbook(parsed: ScenarioWorkbook, session: AsyncSes
             }
         )
 
+    calendar_rows = parsed.sheet("work_calendars")
+    calendar_codes = {_text(row.data.get("code")) for row in calendar_rows}
+    windows_by_calendar: dict[str, list[dict[str, Any]]] = {}
+    for row in parsed.sheet("work_calendar_windows"):
+        code = _text(row.data.get("calendar_code"))
+        windows_by_calendar.setdefault(code, []).append({
+            "weekday": _parse_int(row.data.get("weekday")),
+            "start_time": _text(row.data.get("start_time")),
+            "end_time": _text(row.data.get("end_time")),
+            "spans_next_day": bool(_parse_bool(row.data.get("spans_next_day"), default=False)),
+            **({"shift_code": _text(row.data.get("shift_code"))} if not _blank(row.data.get("shift_code")) else {}),
+            **({"shift_name": _text(row.data.get("shift_name"))} if not _blank(row.data.get("shift_name")) else {}),
+        })
+        if code not in calendar_codes:
+            errors.append(ImportErrorItem(row.sheet, row.row_number, "calendar_code", f"Unknown calendar_code: {code}"))
+    exceptions_by_calendar: dict[str, list[dict[str, Any]]] = {}
+    for row in parsed.sheet("work_calendar_exceptions"):
+        code = _text(row.data.get("calendar_code"))
+        try:
+            windows = _parse_json(row.data.get("windows_json")) if not _blank(row.data.get("windows_json")) else []
+        except json.JSONDecodeError:
+            windows = []
+            errors.append(ImportErrorItem(row.sheet, row.row_number, "windows_json", "Invalid JSON"))
+        exceptions_by_calendar.setdefault(code, []).append({
+            "date": _text(row.data.get("date")), "mode": _text(row.data.get("mode")), "windows": windows,
+        })
+    for row in calendar_rows:
+        code = _text(row.data.get("code"))
+        try:
+            validate_definition(
+                _text(row.data.get("timezone")),
+                windows_by_calendar.get(code, []),
+                exceptions_by_calendar.get(code, []),
+            )
+        except CalendarError as exc:
+            errors.append(ImportErrorItem(row.sheet, row.row_number, "timezone", f"{exc.code}: {exc}"))
+    for row in parsed.sheet("machine_calendar_bindings"):
+        if _text(row.data.get("machine_code")) not in machine_to_type:
+            errors.append(ImportErrorItem(row.sheet, row.row_number, "machine_code", "Unknown machine_code"))
+        if _text(row.data.get("calendar_code")) not in calendar_codes:
+            errors.append(ImportErrorItem(row.sheet, row.row_number, "calendar_code", "Unknown calendar_code"))
+        kind = _text(row.data.get("binding_kind"))
+        if kind not in {"default", "dimension"}:
+            errors.append(ImportErrorItem(row.sheet, row.row_number, "binding_kind", "Use default or dimension"))
+
     preview = {
         "feature_catalog": _preview(feature_rows, "feature_key", existing["features"]),
         "machine_types": _preview(machine_type_rows, "code", existing["machine_types"]),
@@ -1201,6 +1258,8 @@ async def validate_scenario_workbook(parsed: ScenarioWorkbook, session: AsyncSes
         "rules": _preview(rule_rows, "code", existing["rules"]),
         "state_feature_defs": await _preview_state_defs(state_def_rows, session, existing["machine_types"], machine_type_rows),
         "states": {"create": len(state_rows), "update": 0},
+        "work_calendars": {"create": len(calendar_rows), "update": 0},
+        "machine_calendar_bindings": {"create": len(parsed.sheet("machine_calendar_bindings")), "update": 0},
     }
 
     summary = {
@@ -1221,6 +1280,8 @@ async def validate_scenario_workbook(parsed: ScenarioWorkbook, session: AsyncSes
         "rules_total": len(rule_rows),
         "states_total": len(state_rows),
         "solve_cases_total": len(solve_case_rows),
+        "work_calendars_total": len(calendar_rows),
+        "machine_calendar_bindings_total": len(parsed.sheet("machine_calendar_bindings")),
         "error_count": len(errors),
     }
 
@@ -1436,6 +1497,97 @@ async def import_scenario_workbook(parsed: ScenarioWorkbook, session: AsyncSessi
             obj.feature_name = payload["feature_name"]
             obj.value_type = payload["value_type"]
             obj.allowed_values = payload["allowed_values"]
+
+    await session.flush()
+
+    # Optional reusable work calendars and per-machine dimension mappings.
+    calendar_windows: dict[str, list[dict[str, Any]]] = {}
+    for row in parsed.sheet("work_calendar_windows"):
+        calendar_windows.setdefault(_text(row.data.get("calendar_code")), []).append({
+            "weekday": _parse_int(row.data.get("weekday")),
+            "start_time": _text(row.data.get("start_time")),
+            "end_time": _text(row.data.get("end_time")),
+            "spans_next_day": bool(_parse_bool(row.data.get("spans_next_day"), default=False)),
+            **({"shift_code": _text(row.data.get("shift_code"))} if not _blank(row.data.get("shift_code")) else {}),
+            **({"shift_name": _text(row.data.get("shift_name"))} if not _blank(row.data.get("shift_name")) else {}),
+        })
+    calendar_exceptions: dict[str, list[dict[str, Any]]] = {}
+    for row in parsed.sheet("work_calendar_exceptions"):
+        windows = _parse_json(row.data.get("windows_json")) if not _blank(row.data.get("windows_json")) else []
+        calendar_exceptions.setdefault(_text(row.data.get("calendar_code")), []).append({
+            "date": _text(row.data.get("date")),
+            "mode": _text(row.data.get("mode")),
+            "windows": windows,
+        })
+    work_calendars: dict[str, WorkCalendar] = {}
+    for row in parsed.sheet("work_calendars"):
+        code = _text(row.data.get("code"))
+        timezone_name = _text(row.data.get("timezone"))
+        weekly = calendar_windows.get(code, [])
+        exceptions = calendar_exceptions.get(code, [])
+        validate_definition(timezone_name, weekly, exceptions)
+        checksum = definition_checksum(timezone_name, weekly, exceptions)
+        calendar = await _get_one(session, WorkCalendar, WorkCalendar.code == code)
+        if calendar is None:
+            calendar = WorkCalendar(code=code, name=_text(row.data.get("name")))
+            session.add(calendar)
+            await session.flush()
+        calendar.name = _text(row.data.get("name"))
+        calendar.description = _text(row.data.get("description")) or None
+        calendar.is_active = bool(_parse_bool(row.data.get("is_active"), default=True))
+        current = await session.get(WorkCalendarRevision, calendar.current_revision_id) if calendar.current_revision_id else None
+        if current is None or current.checksum != checksum:
+            latest = await session.scalar(
+                select(WorkCalendarRevision.revision_no)
+                .where(WorkCalendarRevision.work_calendar_id == calendar.id)
+                .order_by(WorkCalendarRevision.revision_no.desc())
+                .limit(1)
+            )
+            revision = WorkCalendarRevision(
+                work_calendar_id=calendar.id,
+                revision_no=int(latest or 0) + 1,
+                timezone=timezone_name,
+                weekly_windows=weekly,
+                date_exceptions=exceptions,
+                checksum=checksum,
+            )
+            session.add(revision)
+            await session.flush()
+            calendar.current_revision_id = revision.id
+        work_calendars[code] = calendar
+    await session.flush()
+    for row in parsed.sheet("machine_calendar_bindings"):
+        machine = machines.get(_text(row.data.get("machine_code"))) or await _get_one(
+            session, Machine, Machine.code == _text(row.data.get("machine_code"))
+        )
+        calendar = work_calendars.get(_text(row.data.get("calendar_code"))) or await _get_one(
+            session, WorkCalendar, WorkCalendar.code == _text(row.data.get("calendar_code"))
+        )
+        if _text(row.data.get("binding_kind")) == "default":
+            machine.default_work_calendar_id = calendar.id
+            continue
+        dimension_key = _text(row.data.get("dimension_template_key"))
+        dimension = await _get_one(
+            session,
+            StateFeatureDef,
+            (StateFeatureDef.machine_type_id == machine.machine_type_id)
+            & (StateFeatureDef.feature_key == dimension_key),
+        )
+        dimension.is_dimension_template = True
+        binding = await _get_one(
+            session,
+            MachineStateDimensionCalendar,
+            (MachineStateDimensionCalendar.machine_id == machine.id)
+            & (MachineStateDimensionCalendar.state_dimension_template_id == dimension.id),
+        )
+        if binding is None:
+            session.add(MachineStateDimensionCalendar(
+                machine_id=machine.id,
+                state_dimension_template_id=dimension.id,
+                work_calendar_id=calendar.id,
+            ))
+        else:
+            binding.work_calendar_id = calendar.id
 
     await session.flush()
 
@@ -2168,6 +2320,8 @@ def build_scenario_template() -> bytes:
             worksheet.append(["states.features", "格式：feature_key:value，多项用分号分隔。"])
             worksheet.append(["maintenance_intents", "Optional: level-2 scope_activity_node_code; comma/semicolon target_state_node_codes and candidate_activity_scope_codes; facts as feature:eq:value or JSON array."])
             worksheet.append(["layered_health_checks", "Optional post-import diagnostics: target_state_node_codes and activity_scope_node_codes use comma or semicolon separated node codes."])
+            worksheet.append(["work_calendars", "Optional reusable calendars; weekly windows and date exceptions create an immutable revision."])
+            worksheet.append(["machine_calendar_bindings", "binding_kind=default or dimension; dimension rows provide dimension_template_key."])
         elif sheet_name == "rule_groups":
             worksheet.append(["group_code", "group_name", "rule_codes", "description"])
         elif sheet_name == "notes":
@@ -2181,6 +2335,11 @@ def build_scenario_template() -> bytes:
     workbook["state_feature_defs"].append(["BUSINESS_OBJECT", "prep_done", "准备完成", "enum", "false,true"])
     workbook["state_feature_defs"].append(["BUSINESS_OBJECT", "delivery_ready", "交付就绪", "enum", "false,true"])
     workbook["resources"].append(["BO-001", "TECH-01", "技术员 01", "technician", 1, "true", ""])
+    workbook["work_calendars"].append(["DAY_SHIFT", "白班", "周一至周五白班", "true", "Asia/Shanghai"])
+    for weekday in range(1, 6):
+        workbook["work_calendar_windows"].append(["DAY_SHIFT", weekday, "08:00", "12:00", "false", "DAY_SHIFT", "白班"])
+        workbook["work_calendar_windows"].append(["DAY_SHIFT", weekday, "13:00", "17:00", "false", "DAY_SHIFT", "白班"])
+    workbook["machine_calendar_bindings"].append(["BO-001", "default", "", "DAY_SHIFT"])
     workbook["activity_nodes"].append(["BUSINESS_OBJECT", "BUSINESS_FLOW", "", 1, "业务流程", "normal", 0, "true", ""])
     workbook["activity_nodes"].append(["BUSINESS_OBJECT", "PREP_PACK", "BUSINESS_FLOW", 2, "准备包", "normal", 10, "true", ""])
     workbook["activity_nodes"].append(["BUSINESS_OBJECT", "DELIVERY_PACK", "BUSINESS_FLOW", 2, "交付包", "normal", 20, "true", ""])

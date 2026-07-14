@@ -23,6 +23,7 @@ from app.db.models import (
 )
 from app.db.schemas import LayeredExpansionRequest, NetworkEditorImpactRequest, NetworkEditorRequest
 from app.services.layered_health import check_layered_health
+from app.services.scheduling_rule_config import validate_machine_type_scheduling_rules
 
 
 INPUT_ROLES = {"input"}
@@ -2095,6 +2096,13 @@ async def validate_network_editor_model(
             ),
         )
         solver_ready_issues.extend(_health_diagnostics_to_issues(health["diagnostics"], context))
+
+    rule_modeling_issues, rule_solver_ready_issues = await validate_machine_type_scheduling_rules(
+        machine_type_id,
+        session,
+    )
+    modeling_issues.extend(rule_modeling_issues)
+    solver_ready_issues.extend(rule_solver_ready_issues)
 
     blocking_count = sum(1 for issue in solver_ready_issues if issue["severity"] == "error")
     summary = {

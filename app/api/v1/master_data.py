@@ -19,6 +19,13 @@ from sqlalchemy import Select, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.scheduling_rule_config import (
+    SchedulingRuleError,
+    scheduling_rule_type_descriptors,
+    validate_scheduling_config,
+    validate_scheduling_config_references,
+)
+
 from app.db.models import (
     ActivityStateBinding,
     ActivityPackageAtomicRef,
@@ -159,6 +166,8 @@ def _serialize_feature_def(feature_def: StateFeatureDef) -> dict[str, Any]:
         "feature_name": feature_def.feature_name,
         "value_type": feature_def.value_type,
         "allowed_values": _normalize_allowed_values(feature_def.allowed_values),
+        "is_dimension_template": feature_def.is_dimension_template,
+        "dimension_template_id": feature_def.dimension_template_id,
     }
 
 
@@ -673,12 +682,14 @@ async def _ensure_state_feature_def_from_template(
                 feature_name=concrete_name,
                 value_type=template_def.value_type,
                 allowed_values=allowed_values,
+                dimension_template_id=template_def.id,
             )
         )
     else:
         feature_def.feature_name = concrete_name
         feature_def.value_type = template_def.value_type
         feature_def.allowed_values = allowed_values
+        feature_def.dimension_template_id = template_def.id
 
 
 async def _ensure_state_feature_def_for_leaf(
@@ -1931,11 +1942,17 @@ async def list_machine_types(db: AsyncSession = Depends(get_db_session)):
             "code": item.code,
             "name": item.name,
             "description": item.description,
+            "scheduling_config": item.scheduling_config,
             "created_at": item.created_at,
             "feature_defs": [_serialize_feature_def(feature_def) for feature_def in item.state_feature_defs],
         }
         for item in items
     ]
+
+
+@router.get("/scheduling-rule-types")
+async def list_scheduling_rule_types():
+    return scheduling_rule_type_descriptors()
 
 
 @router.post("/machine-types", response_model=MachineTypeResponse, status_code=status.HTTP_201_CREATED)
@@ -1944,7 +1961,16 @@ async def create_machine_type(
     db: AsyncSession = Depends(get_db_session),
 ):
     await _ensure_unique(db, MachineType, "code", payload.code)
-    obj = MachineType(code=payload.code, name=payload.name, description=payload.description)
+    try:
+        scheduling_config = validate_scheduling_config(payload.scheduling_config)
+    except SchedulingRuleError as exc:
+        raise HTTPException(status_code=422, detail={"error_code": exc.code, "error_message": str(exc)}) from exc
+    obj = MachineType(
+        code=payload.code,
+        name=payload.name,
+        description=payload.description,
+        scheduling_config=scheduling_config,
+    )
     db.add(obj)
     await db.flush()
     await db.refresh(obj)
@@ -1959,9 +1985,35 @@ async def update_machine_type(
 ):
     obj = await _get_machine_type_or_404(machine_type_id, db)
     await _ensure_unique(db, MachineType, "code", payload.code, exclude_id=machine_type_id)
+    try:
+        scheduling_config = validate_scheduling_config(payload.scheduling_config)
+        await validate_scheduling_config_references(machine_type_id, scheduling_config, db)
+    except SchedulingRuleError as exc:
+        raise HTTPException(status_code=422, detail={"error_code": exc.code, "error_message": str(exc)}) from exc
+    configured_subsystems = {
+        item["code"] for item in (scheduling_config or {}).get("responsible_subsystems", [])
+    }
+    atomic_result = await db.execute(
+        select(AtomicActivity).where(AtomicActivity.machine_type_id == machine_type_id)
+    )
+    used_subsystems = {
+        str(item.metadata_json.get("responsible_subsystem"))
+        for item in atomic_result.scalars().all()
+        if isinstance(item.metadata_json, dict) and item.metadata_json.get("responsible_subsystem")
+    }
+    missing = used_subsystems - configured_subsystems
+    if missing:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error_code": "RESPONSIBLE_SUBSYSTEM_IN_USE",
+                "error_message": f"Responsible subsystems are still used: {sorted(missing)}",
+            },
+        )
     obj.code = payload.code
     obj.name = payload.name
     obj.description = payload.description
+    obj.scheduling_config = scheduling_config
     await db.flush()
     await db.refresh(obj)
     return obj
@@ -2027,6 +2079,8 @@ async def create_feature_def(
         feature_name=payload.feature_name,
         value_type=payload.value_type,
         allowed_values=payload.allowed_values,
+        is_dimension_template=payload.is_dimension_template,
+        dimension_template_id=payload.dimension_template_id,
     )
     db.add(obj)
     await db.flush()
@@ -2097,6 +2151,8 @@ async def update_feature_def(
     obj.feature_name = payload.feature_name
     obj.value_type = payload.value_type
     obj.allowed_values = payload.allowed_values
+    obj.is_dimension_template = payload.is_dimension_template
+    obj.dimension_template_id = payload.dimension_template_id
     concrete_defs = await db.execute(
         select(StateFeatureDef).where(
             StateFeatureDef.machine_type_id == obj.machine_type_id,
@@ -2163,6 +2219,28 @@ async def delete_feature_def(feature_def_id: int, db: AsyncSession = Depends(get
 # ============================================================
 
 
+def _validate_atomic_responsible_subsystem(
+    machine_type: MachineType,
+    metadata_json: Optional[dict[str, Any]],
+) -> None:
+    if not isinstance(metadata_json, dict) or not metadata_json.get("responsible_subsystem"):
+        return
+    value = str(metadata_json["responsible_subsystem"]).strip()
+    configured = {
+        str(item.get("code"))
+        for item in (machine_type.scheduling_config or {}).get("responsible_subsystems", [])
+        if item.get("code")
+    }
+    if value not in configured:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "RESPONSIBLE_SUBSYSTEM_INVALID",
+                "error_message": f"Unknown responsible subsystem: {value}",
+            },
+        )
+
+
 @router.get("/machine-types/{machine_type_id}/atomic-activities", response_model=list[AtomicActivityResponse])
 async def list_atomic_activities(machine_type_id: int, db: AsyncSession = Depends(get_db_session)):
     await _get_machine_type_or_404(machine_type_id, db)
@@ -2187,6 +2265,7 @@ async def create_atomic_activity(
     machine_type = await _get_machine_type_or_404(machine_type_id, db)
     if payload.machine_type_id != machine_type_id:
         raise HTTPException(status_code=422, detail="Payload machine_type_id must match path machine_type_id")
+    _validate_atomic_responsible_subsystem(machine_type, payload.metadata_json)
     code = _clean_optional_code(payload.code)
     if code:
         await _ensure_atomic_code_unique(db, machine_type_id, code)
@@ -2208,6 +2287,8 @@ async def update_atomic_activity(
     db: AsyncSession = Depends(get_db_session),
 ):
     obj = await _get_atomic_activity_or_404(atomic_activity_id, db)
+    machine_type = await _get_machine_type_or_404(obj.machine_type_id, db)
+    _validate_atomic_responsible_subsystem(machine_type, payload.metadata_json)
     code = _clean_optional_code(payload.code)
     if code:
         await _ensure_atomic_code_unique(db, obj.machine_type_id, code, exclude_id=atomic_activity_id)

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { BASE_SCHEDULE, REPAIR_SCHEDULE } from '../fixtures/mock-api'
+import { BASE_SCHEDULE, REPAIR_SCHEDULE, createMockRouteHandler } from '../fixtures/mock-api'
 
 // Shared mock data
 const MOCK_MACHINES = [
@@ -22,6 +22,7 @@ const MOCK_STATES = [
 // - Initial POST /solve  → returns BASE_SCHEDULE
 // - Replan POST /solve   → returns REPAIR_SCHEDULE (when parent_plan_id or blockage_constraints present)
 function createSmartMockHandler() {
+  const fallback = createMockRouteHandler(BASE_SCHEDULE)
   return async (route: any, request: any) => {
     const url = request.url()
     const method = request.method()
@@ -115,7 +116,7 @@ function createSmartMockHandler() {
       return
     }
 
-    await route.continue()
+    await fallback(route, request)
   }
 }
 
@@ -180,6 +181,7 @@ test.describe('Blockage — Strategy B (repair insertion)', () => {
 
     // Submit replan → mock will return REPAIR_SCHEDULE
     await page.click('.el-dialog__footer button:has-text("提交重排")')
+    await page.getByRole('button', { name: '确认为新基线' }).click()
     await page.waitForSelector('.el-message--success', { timeout: 30000 })
     await page.waitForTimeout(800)
     await takeShot('05-replan-success');

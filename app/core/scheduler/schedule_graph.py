@@ -57,27 +57,33 @@ def build_schedule_graph(
 
     # Resource edges: from assigned resources
     # Group by resource_id, sort by start time, link adjacent pairs
-    resource_usage: dict[int, list[tuple[int, int, int]]] = {}
+    resource_usage: dict[int, dict[int, list[tuple[int, int]]]] = {}
     for t in tasks:
-        for r in t.resources:
-            rid = r["resource_id"]
-            resource_usage.setdefault(rid, []).append(
-                (t.start_min, t.end_min, t.step_order)
-            )
+        segments = getattr(t, "segments", []) or [{
+            "start_min": t.start_min,
+            "end_min": t.end_min,
+            "resources": t.resources,
+        }]
+        for segment in segments:
+            for resource in segment.get("resources", []):
+                rid = resource["resource_id"]
+                resource_usage.setdefault(rid, {}).setdefault(t.step_order, []).append(
+                    (segment["start_min"], segment["end_min"])
+                )
 
     resource_edges: list[tuple[int, int]] = []
-    for rid, usages in resource_usage.items():
-        usages_sorted = sorted(usages, key=lambda x: x[0])
-        for i in range(len(usages_sorted) - 1):
-            _, end_i, order_i = usages_sorted[i]
-            start_j, _, order_j = usages_sorted[i + 1]
-            if end_i > start_j:
-                continue
-            # All adjacent resource usages form an ordering edge,
-            # not just tight ones.  The critical-path algorithm uses
-            # the actual scheduled times (start/end) to compute slack,
-            # so a gap here simply means the predecessor has slack.
-            resource_edges.append((order_i, order_j))
+    for usages_by_step in resource_usage.values():
+        ranges = sorted(
+            (
+                min(start for start, _ in usages),
+                max(end for _, end in usages),
+                step_order,
+            )
+            for step_order, usages in usages_by_step.items()
+        )
+        for left, right in zip(ranges, ranges[1:]):
+            if left[1] <= right[0] and left[2] != right[2]:
+                resource_edges.append((left[2], right[2]))
 
     # Flatten tasks for serialization
     task_dicts: list[dict[str, Any]] = []
@@ -94,6 +100,8 @@ def build_schedule_graph(
                 "resources": t.resources,
                 "resource_type": t.resource_type,
                 "resource_reqs": getattr(t, "resource_reqs", []),
+                "segments": getattr(t, "segments", []),
+                "elapsed_min": getattr(t, "elapsed_min", None),
             }
         )
 
@@ -132,7 +140,7 @@ def compute_critical_path(graph: ScheduleGraph) -> list[str]:
     lf: dict[int, int] = {}
     for t in sorted(graph.tasks, key=lambda x: -x["end_min"]):
         so = t["step_order"]
-        dur = t["duration_min"]
+        dur = t.get("elapsed_min") or t["duration_min"]
         if not children[so]:
             lf[so] = makespan
         else:

@@ -21,6 +21,7 @@ from app.db.models import (
     OpRule,
     OpRuleResourceReq,
     Resource,
+    StateFeatureDef,
 )
 
 
@@ -32,6 +33,7 @@ class StepData:
     op_rule_code: str
     op_rule_name: str | None
     duration_min: int
+    step_id: int | None = None
     resource_reqs: list[dict[str, Any]] = field(default_factory=list)
     resource_type: str = "NONE"       # backward compat: primary resource
     resource_qty: int = 0             # backward compat: primary qty
@@ -43,6 +45,9 @@ class StepData:
     activity_group_code: str | None = None
     activity_group_name: str | None = None
     state_continuity_groups: list[dict[str, Any]] = field(default_factory=list)
+    atomic_activity_id: int | None = None
+    responsible_subsystem: str | None = None
+    effect_dimension_keys: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -52,6 +57,13 @@ class RagData:
     steps: list[StepData]
     edges: list[tuple[int, int]]  # (from_step_order, to_step_order)
     machine_id: int = 0
+    solve_request_id: int = 0
+    parent_plan_id: int | None = None
+    calendar_enabled: bool = False
+    schedule_start_at: Any | None = None
+    schedule_timezone: str | None = None
+    calendar_snapshot: dict[str, Any] | None = None
+    constraints: dict[str, Any] | None = None
 
 
 @dataclass
@@ -109,6 +121,7 @@ async def load_rag(
         .where(OpRule.id.in_(op_rule_ids))
         .options(
             selectinload(OpRule.resource_reqs),
+            selectinload(OpRule.effects),
             selectinload(OpRule.activity_node).selectinload(ActivityNode.parent),
             selectinload(OpRule.atomic_activity)
             .selectinload(AtomicActivity.package_refs)
@@ -116,6 +129,13 @@ async def load_rag(
         )
     )
     rules_map: dict[int, OpRule] = {r.id: r for r in rules_result.scalars().all()}
+    machine_type_id = next(iter(rules_map.values())).machine_type_id if rules_map else 0
+    feature_result = await session.execute(
+        select(StateFeatureDef).where(StateFeatureDef.machine_type_id == machine_type_id)
+    )
+    feature_defs = list(feature_result.scalars().all())
+    feature_by_key = {item.feature_key: item for item in feature_defs}
+    feature_by_id = {item.id: item for item in feature_defs}
 
     # Build steps and edges
     steps: list[StepData] = []
@@ -157,8 +177,26 @@ async def load_rag(
             activity_node_code = activity_node.code if activity_node else None
             activity_node_level = activity_node.level if activity_node else None
 
+        dimension_keys: set[str] = set()
+        for effect in rule.effects:
+            feature = feature_by_key.get(effect.feature_key)
+            if feature is None:
+                continue
+            template = feature if feature.is_dimension_template else feature_by_id.get(feature.dimension_template_id)
+            if template is not None:
+                dimension_keys.add(template.feature_key)
+        atomic_metadata = (
+            atomic_activity.metadata_json
+            if atomic_activity is not None and isinstance(atomic_activity.metadata_json, dict)
+            else {}
+        )
+        responsible_subsystem = atomic_metadata.get("responsible_subsystem")
+        if responsible_subsystem is not None:
+            responsible_subsystem = str(responsible_subsystem).strip() or None
+
         steps.append(StepData(
             step_order=step.step_order,
+            step_id=step.id,
             op_rule_id=rule.id,
             op_rule_code=rule.code,
             op_rule_name=rule.name,
@@ -173,6 +211,9 @@ async def load_rag(
             activity_group_id=activity_group.id if activity_group else None,
             activity_group_code=activity_group.code if activity_group else None,
             activity_group_name=activity_group.name if activity_group else None,
+            atomic_activity_id=atomic_activity.id if atomic_activity else None,
+            responsible_subsystem=responsible_subsystem,
+            effect_dimension_keys=sorted(dimension_keys),
         ))
 
         # Build edges from predecessor_ids
@@ -183,6 +224,13 @@ async def load_rag(
     return RagData(
         candidate_plan_id=candidate_plan_id,
         machine_id=plan.solve_request.machine_id,
+        solve_request_id=plan.solve_request.id,
+        parent_plan_id=plan.solve_request.parent_plan_id,
+        calendar_enabled=plan.solve_request.calendar_enabled,
+        schedule_start_at=plan.solve_request.schedule_start_at,
+        schedule_timezone=plan.solve_request.schedule_timezone,
+        calendar_snapshot=plan.solve_request.calendar_snapshot,
+        constraints=plan.solve_request.constraints,
         steps=steps,
         edges=edges,
     )

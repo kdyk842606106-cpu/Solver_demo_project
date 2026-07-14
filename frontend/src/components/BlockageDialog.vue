@@ -117,7 +117,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['update:modelValue', 'replanned'])
+const emit = defineEmits(['update:modelValue', 'replanned', 'adjustment-requested'])
 
 const submitting = ref(false)
 const form = ref({
@@ -154,6 +154,15 @@ async function submit() {
 
   if (strategyHasB.value && !actualReason) {
     return ElMessage.warning('策略 B/AB 必须选择阻塞原因')
+  }
+
+  if (form.value.strategy === 'A') {
+    emit('update:modelValue', false)
+    emit('adjustment-requested', {
+      stepId: props.task.step_id,
+      notBeforeMin: form.value.not_before_offset,
+    })
+    return
   }
 
   const blockageConstraints = {

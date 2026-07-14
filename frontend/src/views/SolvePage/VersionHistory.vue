@@ -53,6 +53,7 @@ const REPLAN_LABELS = {
   blockage_strategy_a: '策略A重排',
   blockage_strategy_b: '策略B重排',
   blockage_strategy_ab: '策略AB重排',
+  scheduling_rule_exception: '规则例外重排',
 }
 
 function replanLabel(reason) {

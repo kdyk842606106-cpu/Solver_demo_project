@@ -16,3 +16,16 @@ export const getPlanDiff = (basePlanId, newPlanId) =>
 
 // GET /solve-requests/{id} — query a specific solve request
 export const getSolveRequest = (id) => http.get(`/solve-requests/${id}`)
+
+export const createPlanAdjustment = (planId, payload = {}) =>
+  http.post(`/plans/${planId}/adjustments`, payload)
+export const updatePlanAdjustment = (adjustmentId, payload) =>
+  http.patch(`/plan-adjustments/${adjustmentId}`, payload)
+export const previewPlanAdjustment = (adjustmentId) =>
+  http.post(`/plan-adjustments/${adjustmentId}/preview`)
+export const confirmPlanAdjustment = (adjustmentId) =>
+  http.post(`/plan-adjustments/${adjustmentId}/confirm`)
+export const cancelPlanAdjustment = (adjustmentId) =>
+  http.post(`/plan-adjustments/${adjustmentId}/cancel`)
+export const getPlanAdjustments = (planId) =>
+  http.get(`/plans/${planId}/adjustments`)

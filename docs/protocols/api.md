@@ -1,5 +1,19 @@
 # API 模块协议
 
+## 工作日历上下文
+
+`POST /solve`、`POST /solve/layered`、`POST /solve/maintenance` 接受可选：
+
+```json
+{"calendar_context":{"enabled":true,"schedule_start_at":"2026-07-13T08:00:00+08:00","display_timezone":"Asia/Shanghai","revision_policy":"latest"}}
+```
+
+缺省或 `enabled=false` 保持连续分钟轴。启用时响应任务新增 `start_at/end_at/elapsed_min/calendar_pause_min/segments/calendar_resolution`，顶层新增 `schedule_start_at/schedule_end_at/calendar_summary/critical_path_segments`。
+
+日历主数据接口为 `/work-calendars`、`/work-calendars/{id}/revisions`、`/work-calendars/{id}/preview`、`/work-calendars/{id}/set-default` 与 `/machines/{machine_id}/calendar-policy`。窗口可选返回 `shift_code/shift_name`；系统只允许一个 `is_system_default=true` 的启用日历。
+
+机器策略的 `default_work_calendar_id` 可为 `null`，表示继承系统默认。响应同时返回 `effective_default_work_calendar_id` 和 `inherits_system_default`。日历模式下任务 `segments` 可携带 `shift_code/shift_name`，多日历交集时可携带 `shifts`。
+
 路径：`app/api/v1/`
 
 当前 API 层负责：
@@ -458,3 +472,40 @@ TICKET-036 后，状态目标递归展开到活跃无子节点状态；原子活
 ### `GET /api/v1/imports/scenario-template`
 
 返回带中文 `instructions` sheet 的 `.xlsx` 模板。
+
+## 排期规则配置与例外重排（TICKET-089）
+
+- `machine_type.scheduling_config` 是可空 JSONB；不新增规则、策略、例外或审批实体。
+- `GET /api/v1/scheduling-rule-types` 返回可编辑器消费的只读注册描述，包括 `supported_modes` 和可选的 `builtin_rule`；`STATE_PACKAGE_CONTINUITY` 只在分层/维护求解可选。
+- 既有 `POST /api/v1/machine-types/{machine_type_id}/network-editor/validate` 统一返回排期规则校验问题：失效责任子系统、资源类型、状态维度模板和 shift code 引用作为 solver-ready error；非法规则类型/参数与必选规则关闭作为配置 error；启用规则未匹配活动作为 modeling warning。不新增单独验证页面或实体。
+- 初始求解只需提交 `constraints.scheduling_rules.active_rule_codes`；服务端自动加入 `activation_mode=required` 的规则，并把实际规则写入 `snapshot`。
+- 初始求解携带 `new_override` 返回 `SCHEDULING_RULE_OVERRIDE_INITIAL_SOLVE_FORBIDDEN`。
+- 求解后例外必须提交 `parent_plan_id`、`rule_code`、具体 `source_step_id` 和非空 `reason`；只允许命中 `overridable=true` 的规则。
+- 例外重排生成子计划，`replan_reason=scheduling_rule_exception`，父计划不变。
+- 普通重排继承父计划规则快照，但父计划既有例外不会自动继承；只有列入 `carry_parent_override_keys` 的例外才会再次生效。
+- Scheduler 失败响应保留 `candidate_plan_id`，并通过 `exception_candidates` 返回可显式申请例外的具体任务。
+- 求解页使用一个多选下拉提交 `active_rule_codes`；必选规则保持选中且不可移除，模式不适用的规则置灰且不会进入请求。状态包连续性由注册 Compiler 生成软成本，前端不再额外提交三个状态包连续性 Objective。
+
+### 甘特展示配置（TICKET-093）
+
+- `machine_type.scheduling_config.rules[]` 可选携带 `presentation.gantt_marker`；`text` 为 1～4 个字符，`color` 为 `#RRGGBB`，省略颜色时归一化为 `#f59e0b`。
+- 展示配置随实际启用规则写入 `constraints.scheduling_rules.snapshot`，并从 `diagnostics.schedule.scheduling_rules.active_rules` 原样返回。历史计划只读取该快照，不读取实时机器类型配置。
+- 任务继续通过 `matched_scheduling_rules` 关联标识，通过既有 `segments[].shift_code/shift_name/shifts` 提供班次显示信息；接口不增加 `is_crane` 或新的班次响应字段。
+- `presentation` 只影响甘特图展示，不参与 Scheduler 的可行性、排序或目标函数。
+
+## 计划调整、候选与基线确认（TICKET-095）
+
+计划调整不表达项目进度或执行状态。调用方必须显式提交活动集合 `scope_step_ids`；不得提交或持久化 `cutoff_min`、框选坐标或框选时间范围。最早开始约束统一使用 `not_before`。
+
+| 方法 | 路径 | 语义 |
+|---|---|---|
+| `POST` | `/api/v1/plans/{baseline_plan_id}/adjustments` | 创建调整草稿；阻塞 B/AB、规则例外也可登记既有完整重排候选 |
+| `GET/PATCH` | `/api/v1/plan-adjustments/{id}` | 读取或更新范围、约束及继承删除项 |
+| `POST` | `/api/v1/plan-adjustments/{id}/preview` | 普通约束调整试算，返回候选差异或无解诊断 |
+| `POST` | `/api/v1/plan-adjustments/{id}/confirm` | 原子切换计划族 baseline，并使同一旧基线草稿 stale |
+| `POST` | `/api/v1/plan-adjustments/{id}/cancel` | 取消调整并丢弃其未确认候选 |
+| `GET` | `/api/v1/plans/{plan_id}/adjustments` | 按计划族读取调整历史 |
+
+普通调整约束类型为 `not_before`、`finish_not_after`、`fixed_start`、`freeze`、`priority` 和零间隔 `precedence`。时间坐标字段为 `value_min`；启用日历的计划也可提交带时区的 `value_at`，服务端归一为计划分钟坐标。约束只能引用范围内活动，人工先后关系两端都必须在范围内。
+
+普通调整保持活动集合、规则工期、资源需求和系统推导依赖不变，不重新运行 Planner。Strategy A 复用普通调整的 `not_before`；Strategy B/AB 与规则例外继续运行原完整重排路径，再用 `candidate_plan_id` 登记为待确认候选。候选只有在 `confirm` 后才成为 baseline。

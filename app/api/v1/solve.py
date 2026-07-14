@@ -30,6 +30,12 @@ from app.core.scheduler.solver import (
 from app.core.solver.step_role import compute_step_role_diff
 from app.services.layered_solve import solve_layered
 from app.services.maintenance_solve import solve_maintenance
+from app.services.scheduling_rule_config import SchedulingRuleError
+from app.services.scheduling_rule_requests import (
+    materialize_scheduling_rule_overrides,
+    prepare_scheduling_rule_constraints,
+    scheduling_rule_exception_candidates,
+)
 
 router = APIRouter(tags=["solve"])
 
@@ -174,9 +180,41 @@ async def solve(
         "B": "blockage_strategy_b",
         "AB": "blockage_strategy_ab",
     }
-    replan_reason = replan_reason_map.get(strategy) if strategy else "initial"
+    has_rule_exception = bool(
+        ((request.constraints or {}).get("scheduling_rules") or {}).get("new_override")
+    )
+    replan_reason = (
+        "scheduling_rule_exception"
+        if has_rule_exception
+        else replan_reason_map.get(strategy) if strategy else "initial"
+    )
+
+    try:
+        prepared_constraints = await prepare_scheduling_rule_constraints(
+            machine_id=request.machine_id,
+            parent_plan_id=request.parent_plan_id,
+            constraints=request.constraints,
+            session=db,
+            solve_mode="snapshot",
+        )
+    except SchedulingRuleError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"error_code": exc.code, "error_message": str(exc)},
+        ) from exc
 
     objectives = request.objectives or [{"type": "minimize_makespan", "weight": 1.0}]
+    calendar_context = request.calendar_context
+    calendar_enabled = bool(calendar_context and calendar_context.enabled)
+    inherited_calendar_request = None
+    if request.parent_plan_id and (calendar_context is None or calendar_context.revision_policy != "latest"):
+        inherited_calendar_request = await db.scalar(
+            select(SolveRequest)
+            .join(CandidatePlan, CandidatePlan.solve_request_id == SolveRequest.id)
+            .where(CandidatePlan.id == request.parent_plan_id)
+        )
+        if inherited_calendar_request and inherited_calendar_request.calendar_enabled:
+            calendar_enabled = True
 
     solve_req = SolveRequest(
         machine_id=request.machine_id,
@@ -184,11 +222,24 @@ async def solve(
         target_state_id=request.target_state_id,
         objective=request.objective,
         objectives=objectives,
-        constraints=request.constraints,
+        constraints=prepared_constraints,
         parent_plan_id=request.parent_plan_id,
         blockage_constraints=blockage_constraints,
         overrides=request.overrides,
         status="running",
+        calendar_enabled=calendar_enabled,
+        schedule_start_at=(
+            calendar_context.schedule_start_at if calendar_context and calendar_context.schedule_start_at
+            else inherited_calendar_request.schedule_start_at if inherited_calendar_request else None
+        ),
+        schedule_timezone=(
+            calendar_context.display_timezone if calendar_context and calendar_context.display_timezone
+            else inherited_calendar_request.schedule_timezone if inherited_calendar_request else None
+        ),
+        calendar_snapshot=(
+            {"revision_policy": (calendar_context.revision_policy if calendar_context else "inherit")}
+            if calendar_enabled else None
+        ),
     )
 
     # All solve logic is inside try/except so every failure path returns HTTP 200
@@ -291,6 +342,24 @@ async def solve(
 
         await db.flush()
 
+        try:
+            solve_req.constraints = await materialize_scheduling_rule_overrides(
+                solve_req.constraints,
+                candidate_plan_id=plan_id,
+                session=db,
+            )
+        except SchedulingRuleError as exc:
+            solve_req.status = "failed"
+            solve_req.solved_at = datetime.now(timezone.utc)
+            await db.commit()
+            return {
+                "solve_request_id": solve_req.id,
+                "status": "failed",
+                "candidate_plan_id": plan_id,
+                "error_code": exc.code,
+                "error_message": str(exc),
+            }
+
         sched_result = await solve_schedule(
             plan_id,
             db,
@@ -298,11 +367,19 @@ async def solve(
         )
 
         if sched_result.status not in ("optimal", "feasible"):
-            error_code = "INFEASIBLE" if sched_result.status == "infeasible" else "SOLVER_TIMEOUT"
+            error_code = sched_result.error_code or (
+                "INFEASIBLE" if sched_result.status == "infeasible" else "SOLVER_TIMEOUT"
+            )
             diagnostics = {
                 "planner": plan_result.diagnostics,
                 "schedule": sched_result.diagnostics,
             }
+            exception_candidates = await scheduling_rule_exception_candidates(
+                solve_req.constraints,
+                candidate_plan_id=plan_id,
+                diagnostics=sched_result.diagnostics,
+                session=db,
+            )
 
             req_id = solve_req.id
             solve_req.status = "failed"
@@ -315,6 +392,7 @@ async def solve(
                 "error_code": error_code,
                 "error_message": sched_result.error_message,
                 "diagnostics": diagnostics,
+                "exception_candidates": exception_candidates,
             }
 
         result_id = await save_schedule_result(sched_result, solve_req.id, plan_id, db)
@@ -372,6 +450,16 @@ async def solve(
                 "predecessors": t.predecessors,
                 "not_before": step_meta["not_before"] if step_meta else None,
                 "step_role": step_meta["step_role"] if step_meta else "normal",
+                "start_at": t.start_at,
+                "end_at": t.end_at,
+                "elapsed_min": t.elapsed_min,
+                "calendar_pause_min": t.calendar_pause_min,
+                "segments": t.segments,
+                "calendar_resolution": t.calendar_resolution,
+                "responsible_subsystem": t.responsible_subsystem,
+                "effect_dimension_keys": t.effect_dimension_keys,
+                "matched_scheduling_rules": t.matched_scheduling_rules,
+                "scheduling_rule_violations": t.scheduling_rule_violations,
             })
 
         # Capture plain-int IDs before commit (ORM objects expire on commit).
@@ -391,6 +479,16 @@ async def solve(
             },
             "state_delta": state_delta,
             "critical_path": critical_path,
+            "critical_path_segments": sched_result.critical_path_segments or [],
+            "schedule_start_at": (
+                sched_result.calendar_summary.get("schedule_start_at")
+                if sched_result.calendar_summary else None
+            ),
+            "schedule_end_at": (
+                sched_result.calendar_summary.get("schedule_end_at")
+                if sched_result.calendar_summary else None
+            ),
+            "calendar_summary": sched_result.calendar_summary,
             "schedule": {
                 "makespan": sched_result.makespan,
                 "tasks": tasks_response,

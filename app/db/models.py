@@ -7,6 +7,7 @@ Total: 16 tables (V0.2).
 
 from datetime import datetime
 from typing import Optional
+from uuid import uuid4
 
 from sqlalchemy import (
     ARRAY,
@@ -14,12 +15,14 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -45,6 +48,7 @@ class MachineType(Base):
     code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    scheduling_config: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -95,6 +99,9 @@ class Machine(Base):
     code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     location: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    default_work_calendar_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("work_calendar.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -111,6 +118,12 @@ class Machine(Base):
     )
     resources: Mapped[list["Resource"]] = relationship(
         "Resource", back_populates="machine", cascade="all, delete-orphan"
+    )
+    default_work_calendar: Mapped[Optional["WorkCalendar"]] = relationship(
+        "WorkCalendar", foreign_keys=[default_work_calendar_id]
+    )
+    dimension_calendar_bindings: Mapped[list["MachineStateDimensionCalendar"]] = relationship(
+        "MachineStateDimensionCalendar", back_populates="machine", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:
@@ -135,10 +148,17 @@ class StateFeatureDef(Base):
     feature_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     value_type: Mapped[str] = mapped_column(String(32), nullable=False)  # string | number | boolean | enum
     allowed_values: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    is_dimension_template: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    dimension_template_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("state_feature_def.id", ondelete="SET NULL"), nullable=True
+    )
 
     # Relationships
     machine_type: Mapped["MachineType"] = relationship(
         "MachineType", back_populates="state_feature_defs"
+    )
+    dimension_template: Mapped[Optional["StateFeatureDef"]] = relationship(
+        "StateFeatureDef", remote_side=[id], foreign_keys=[dimension_template_id]
     )
 
     def __repr__(self) -> str:
@@ -368,6 +388,99 @@ class Resource(Base):
 
     def __repr__(self) -> str:
         return f"<Resource(id={self.id}, code='{self.code}', name='{self.name}', resource_type='{self.resource_type}')>"
+
+
+class WorkCalendar(Base):
+    """Reusable work-calendar identity whose definitions are immutable revisions."""
+
+    __tablename__ = "work_calendar"
+    __table_args__ = (
+        Index(
+            "uq_work_calendar_single_system_default",
+            "is_system_default",
+            unique=True,
+            postgresql_where=text("is_system_default"),
+            sqlite_where=text("is_system_default = 1"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_system_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    current_revision_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("work_calendar_revision.id", ondelete="SET NULL", use_alter=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    revisions: Mapped[list["WorkCalendarRevision"]] = relationship(
+        "WorkCalendarRevision",
+        back_populates="calendar",
+        cascade="all, delete-orphan",
+        foreign_keys="WorkCalendarRevision.work_calendar_id",
+    )
+    current_revision: Mapped[Optional["WorkCalendarRevision"]] = relationship(
+        "WorkCalendarRevision", foreign_keys=[current_revision_id], post_update=True
+    )
+
+
+class WorkCalendarRevision(Base):
+    """Immutable work-calendar definition."""
+
+    __tablename__ = "work_calendar_revision"
+    __table_args__ = (
+        UniqueConstraint("work_calendar_id", "revision_no", name="uq_work_calendar_revision_no"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    work_calendar_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("work_calendar.id", ondelete="CASCADE"), nullable=False
+    )
+    revision_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False)
+    weekly_windows: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    date_exceptions: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    calendar: Mapped["WorkCalendar"] = relationship(
+        "WorkCalendar", back_populates="revisions", foreign_keys=[work_calendar_id]
+    )
+
+
+class MachineStateDimensionCalendar(Base):
+    """Per-machine mapping from a state dimension template to a work calendar."""
+
+    __tablename__ = "machine_state_dimension_calendar"
+    __table_args__ = (
+        UniqueConstraint(
+            "machine_id", "state_dimension_template_id", name="uq_machine_state_dimension_calendar"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    machine_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("machine.id", ondelete="CASCADE"), nullable=False
+    )
+    state_dimension_template_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("state_feature_def.id", ondelete="CASCADE"), nullable=False
+    )
+    work_calendar_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("work_calendar.id", ondelete="RESTRICT"), nullable=False
+    )
+
+    machine: Mapped["Machine"] = relationship("Machine", back_populates="dimension_calendar_bindings")
+    state_dimension_template: Mapped["StateFeatureDef"] = relationship("StateFeatureDef")
+    work_calendar: Mapped["WorkCalendar"] = relationship("WorkCalendar")
 
 
 class FeatureDefinition(Base):
@@ -856,6 +969,10 @@ class SolveRequest(Base):
     )
     overrides: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     blockage_constraints: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    calendar_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    schedule_start_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    schedule_timezone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    calendar_snapshot: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -886,8 +1003,33 @@ class SolveRequest(Base):
 
 
 # ============================================================
-# 结果相关（2 张表）
+# 计划版本与结果相关
 # ============================================================
+
+
+class PlanFamily(Base):
+    """Immutable plan-version chain with one selected planning baseline.
+
+    ``baseline_plan_id`` is deliberately a scalar reference instead of an ORM
+    relationship.  This avoids adding another SQLAlchemy dependency cycle to
+    the historical SolveRequest/CandidatePlan cycle while still allowing the
+    service layer to switch the baseline atomically under a row lock.
+    """
+
+    __tablename__ = "plan_family"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    machine_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("machine.id", ondelete="CASCADE"), nullable=False
+    )
+    baseline_plan_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    next_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
 
 
 class CandidatePlan(Base):
@@ -900,6 +1042,9 @@ class CandidatePlan(Base):
     __tablename__ = "candidate_plan"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_family_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("plan_family.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     solve_request_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("solve_request.id", ondelete="CASCADE"), nullable=False
     )
@@ -913,6 +1058,7 @@ class CandidatePlan(Base):
     )
     replan_reason: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    adjustment_snapshot: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -963,6 +1109,9 @@ class CandidatePlanStep(Base):
     )
     not_before: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     step_role: Mapped[str] = mapped_column(String(32), nullable=False, default="normal")
+    lineage_key: Mapped[str] = mapped_column(
+        String(36), nullable=False, default=lambda: str(uuid4()), index=True
+    )
 
     # Relationships
     candidate_plan: Mapped["CandidatePlan"] = relationship(
@@ -1041,3 +1190,53 @@ class BlockageEvent(Base):
 
     def __repr__(self) -> str:
         return f"<BlockageEvent(id={self.id}, strategy='{self.strategy}', blockage_reason='{self.blockage_reason}')>"
+
+
+class PlanAdjustment(Base):
+    """Persisted constraint-editing draft for one immutable baseline plan."""
+
+    __tablename__ = "plan_adjustment"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_family_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("plan_family.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    baseline_plan_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("candidate_plan.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    candidate_plan_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("candidate_plan.id", ondelete="SET NULL"), nullable=True
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False, default="schedule")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft", index=True)
+    scope_step_ids: Mapped[list[int]] = mapped_column(
+        ARRAY(Integer), nullable=False, default=list
+    )
+    constraints: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    remove_inherited_constraint_ids: Mapped[list] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    effective_constraints: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    preview_summary: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    diagnostics: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+    previewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('schedule', 'blockage', 'rule_exception')",
+            name="ck_plan_adjustment_kind",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'previewing', 'preview_ready', 'infeasible', "
+            "'confirmed', 'cancelled', 'stale')",
+            name="ck_plan_adjustment_status",
+        ),
+    )

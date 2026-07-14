@@ -6,9 +6,9 @@ and deserialization, following the contracts defined in docs/protocols/.
 """
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 # ============================================================
@@ -33,6 +33,7 @@ class MachineTypeCreate(BaseModel):
     code: str = Field(..., min_length=1, max_length=64, description="Machine type code")
     name: str = Field(..., min_length=1, max_length=128, description="Machine type name")
     description: Optional[str] = Field(None, description="Machine type description")
+    scheduling_config: Optional[dict[str, Any]] = Field(None, description="Scheduling rule configuration")
 
 
 class MachineTypeUpdate(BaseModel):
@@ -41,6 +42,7 @@ class MachineTypeUpdate(BaseModel):
     code: str = Field(..., min_length=1, max_length=64, description="Machine type code")
     name: str = Field(..., min_length=1, max_length=128, description="Machine type name")
     description: Optional[str] = Field(None, description="Machine type description")
+    scheduling_config: Optional[dict[str, Any]] = Field(None, description="Scheduling rule configuration")
 
 
 class MachineTypeResponse(BaseSchema):
@@ -50,6 +52,7 @@ class MachineTypeResponse(BaseSchema):
     code: str
     name: str
     description: Optional[str] = None
+    scheduling_config: Optional[dict[str, Any]] = None
     created_at: datetime
 
 
@@ -79,6 +82,7 @@ class MachineResponse(BaseSchema):
     code: str
     name: str
     location: Optional[str] = None
+    default_work_calendar_id: Optional[int] = None
     created_at: datetime
 
 
@@ -90,6 +94,8 @@ class StateFeatureDefCreate(BaseModel):
     feature_name: Optional[str] = Field(None, max_length=128, description="Feature name")
     value_type: str = Field(..., description="Value type: string, number, boolean, or enum")
     allowed_values: Optional[list[Any]] = Field(None, description="Allowed values for enum type")
+    is_dimension_template: bool = False
+    dimension_template_id: Optional[int] = None
 
 
 class StateFeatureDefUpdate(BaseModel):
@@ -99,6 +105,8 @@ class StateFeatureDefUpdate(BaseModel):
     feature_name: Optional[str] = Field(None, max_length=128, description="Feature name")
     value_type: str = Field(..., description="Value type: string, number, boolean, or enum")
     allowed_values: Optional[list[Any]] = Field(None, description="Allowed values for enum type")
+    is_dimension_template: bool = False
+    dimension_template_id: Optional[int] = None
 
 
 class StateFeatureDefResponse(BaseSchema):
@@ -110,6 +118,8 @@ class StateFeatureDefResponse(BaseSchema):
     feature_name: Optional[str] = None
     value_type: str
     allowed_values: Optional[list[Any]] = None
+    is_dimension_template: bool = False
+    dimension_template_id: Optional[int] = None
 
 
 class MachineStateFeatureCreate(BaseModel):
@@ -314,6 +324,94 @@ class ResourceResponse(BaseSchema):
     capacity: int
     is_available: bool
     meta: Optional[dict[str, Any]] = None
+
+
+class CalendarWindow(BaseModel):
+    weekday: Optional[int] = Field(None, ge=1, le=7)
+    start_time: str
+    end_time: str
+    spans_next_day: bool = False
+    shift_code: Optional[str] = Field(None, max_length=64)
+    shift_name: Optional[str] = Field(None, max_length=128)
+
+
+class CalendarDateException(BaseModel):
+    date: str
+    mode: str
+    windows: list[CalendarWindow] = Field(default_factory=list)
+
+
+class WorkCalendarCreate(BaseModel):
+    code: str = Field(..., min_length=1, max_length=64)
+    name: str = Field(..., min_length=1, max_length=128)
+    description: Optional[str] = None
+    is_active: bool = True
+    timezone: str
+    weekly_windows: list[CalendarWindow] = Field(default_factory=list)
+    date_exceptions: list[CalendarDateException] = Field(default_factory=list)
+
+
+class WorkCalendarUpdate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    description: Optional[str] = None
+    is_active: bool = True
+    timezone: str
+    weekly_windows: list[CalendarWindow] = Field(default_factory=list)
+    date_exceptions: list[CalendarDateException] = Field(default_factory=list)
+
+
+class WorkCalendarRevisionResponse(BaseSchema):
+    id: int
+    work_calendar_id: int
+    revision_no: int
+    timezone: str
+    weekly_windows: list[dict[str, Any]] = Field(default_factory=list)
+    date_exceptions: list[dict[str, Any]] = Field(default_factory=list)
+    checksum: str
+    created_at: datetime
+
+
+class WorkCalendarResponse(BaseSchema):
+    id: int
+    code: str
+    name: str
+    description: Optional[str] = None
+    is_active: bool
+    is_system_default: bool = False
+    current_revision_id: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+    current_revision: Optional[WorkCalendarRevisionResponse] = None
+
+
+class DimensionCalendarBindingItem(BaseModel):
+    state_dimension_template_id: int = Field(..., gt=0)
+    work_calendar_id: int = Field(..., gt=0)
+
+
+class MachineCalendarPolicyUpdate(BaseModel):
+    default_work_calendar_id: Optional[int] = Field(None, gt=0)
+    dimension_bindings: list[DimensionCalendarBindingItem] = Field(default_factory=list)
+
+
+class MachineCalendarPolicyResponse(BaseModel):
+    machine_id: int
+    default_work_calendar_id: Optional[int] = None
+    effective_default_work_calendar_id: Optional[int] = None
+    inherits_system_default: bool = False
+    dimension_bindings: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class WorkCalendarPreviewRequest(BaseModel):
+    start_at: datetime
+    end_at: datetime
+
+
+class CalendarContextRequest(BaseModel):
+    enabled: bool = False
+    schedule_start_at: Optional[datetime] = None
+    display_timezone: Optional[str] = None
+    revision_policy: Optional[str] = None
 
 
 # ============================================================
@@ -1074,6 +1172,7 @@ class MaintenanceSolveRequest(BaseModel):
         None,
         description="Blockage constraints for maintenance replanning",
     )
+    calendar_context: Optional[CalendarContextRequest] = None
 
 
 # ============================================================
@@ -1096,6 +1195,7 @@ class SolveRequestCreate(BaseModel):
         None,
         description="Blockage constraints: {strategy: A|B|AB, blocked_step_id, strategy_a: {not_before_offset}, strategy_b: {blockage_reason}, ...}",
     )
+    calendar_context: Optional[CalendarContextRequest] = None
 
 
 class LayeredSolveRequest(BaseModel):
@@ -1129,6 +1229,7 @@ class LayeredSolveRequest(BaseModel):
         None,
         description="Opaque caller context to persist and echo in layered explanations",
     )
+    calendar_context: Optional[CalendarContextRequest] = None
 
 
 class SolveRequestResponse(BaseSchema):
@@ -1146,6 +1247,10 @@ class SolveRequestResponse(BaseSchema):
     overrides: Optional[dict[str, Any]] = None
     created_at: datetime
     solved_at: Optional[datetime] = None
+    calendar_enabled: bool = False
+    schedule_start_at: Optional[datetime] = None
+    schedule_timezone: Optional[str] = None
+    calendar_snapshot: Optional[dict[str, Any]] = None
 
 
 # ============================================================
@@ -1179,6 +1284,12 @@ class ScheduleTaskItem(BaseSchema):
     )
     not_before: Optional[int] = Field(None, description="Not before constraint in minutes")
     step_role: str = Field(default="normal", description="Step role: normal/repair/pulled_forward/delayed")
+    start_at: Optional[datetime] = None
+    end_at: Optional[datetime] = None
+    elapsed_min: Optional[int] = None
+    calendar_pause_min: int = 0
+    segments: list[dict[str, Any]] = Field(default_factory=list)
+    calendar_resolution: Optional[dict[str, Any]] = None
 
 
 class CandidatePlanStepResponse(BaseSchema):
@@ -1235,6 +1346,9 @@ class SolveResponse(BaseSchema):
     error_code: Optional[str] = None
     error_message: Optional[str] = None
     diagnostics: Optional[dict[str, Any]] = None
+    schedule_start_at: Optional[datetime] = None
+    schedule_end_at: Optional[datetime] = None
+    calendar_summary: Optional[dict[str, Any]] = None
 
 
 class PlanVersionItem(BaseSchema):
@@ -1273,6 +1387,119 @@ class PlanDiffResponse(BaseModel):
     steps: list[PlanDiffStep] = Field(default_factory=list)
 
 
+# ============================================================
+# 计划调整 Schemas
+# ============================================================
+
+
+PlanAdjustmentKind = Literal["schedule", "blockage", "rule_exception"]
+PlanAdjustmentStatus = Literal[
+    "draft",
+    "previewing",
+    "preview_ready",
+    "infeasible",
+    "confirmed",
+    "cancelled",
+    "stale",
+]
+PlanConstraintType = Literal[
+    "not_before",
+    "finish_not_after",
+    "fixed_start",
+    "freeze",
+    "priority",
+    "precedence",
+]
+
+
+class PlanAdjustmentConstraint(BaseModel):
+    """One canonical user-authored plan-adjustment constraint."""
+
+    id: Optional[str] = Field(None, max_length=64)
+    type: PlanConstraintType
+    step_ids: list[int] = Field(default_factory=list)
+    value_min: Optional[int] = Field(None, ge=0)
+    value_at: Optional[datetime] = None
+    timezone: Optional[str] = Field(None, max_length=64)
+    value: Optional[Literal["high", "normal", "low"]] = None
+    predecessor_step_id: Optional[int] = Field(None, gt=0)
+    successor_step_id: Optional[int] = Field(None, gt=0)
+
+    @model_validator(mode="after")
+    def validate_shape(self):
+        time_types = {"not_before", "finish_not_after", "fixed_start"}
+        if self.type in time_types:
+            if not self.step_ids:
+                raise ValueError(f"{self.type} requires step_ids")
+            if (self.value_min is None) == (self.value_at is None):
+                raise ValueError(f"{self.type} requires exactly one of value_min or value_at")
+        elif self.type == "freeze":
+            if not self.step_ids:
+                raise ValueError("freeze requires step_ids")
+        elif self.type == "priority":
+            if not self.step_ids or self.value is None:
+                raise ValueError("priority requires step_ids and high/normal/low value")
+        elif self.type == "precedence":
+            if self.predecessor_step_id is None or self.successor_step_id is None:
+                raise ValueError("precedence requires predecessor_step_id and successor_step_id")
+            if self.predecessor_step_id == self.successor_step_id:
+                raise ValueError("precedence cannot reference the same step twice")
+        return self
+
+
+class PlanAdjustmentCreate(BaseModel):
+    kind: PlanAdjustmentKind = "schedule"
+    scope_step_ids: list[int] = Field(default_factory=list)
+    constraints: list[PlanAdjustmentConstraint] = Field(default_factory=list)
+    remove_inherited_constraint_ids: list[str] = Field(default_factory=list)
+    candidate_plan_id: Optional[int] = Field(
+        None,
+        gt=0,
+        description="Existing full-replan candidate for blockage/rule_exception confirmation",
+    )
+
+    @model_validator(mode="after")
+    def validate_candidate_registration(self):
+        if self.candidate_plan_id is not None and self.kind == "schedule":
+            raise ValueError("schedule adjustments must create candidates through preview")
+        return self
+
+
+class PlanAdjustmentUpdate(BaseModel):
+    scope_step_ids: list[int]
+    constraints: list[PlanAdjustmentConstraint] = Field(default_factory=list)
+    remove_inherited_constraint_ids: list[str] = Field(default_factory=list)
+
+
+class PlanAdjustmentResponse(BaseSchema):
+    id: int
+    plan_family_id: int
+    baseline_plan_id: int
+    candidate_plan_id: Optional[int] = None
+    kind: PlanAdjustmentKind
+    status: PlanAdjustmentStatus
+    scope_step_ids: list[int] = Field(default_factory=list)
+    constraints: list[dict[str, Any]] = Field(default_factory=list)
+    remove_inherited_constraint_ids: list[str] = Field(default_factory=list)
+    effective_constraints: Optional[list[dict[str, Any]]] = None
+    preview_summary: Optional[dict[str, Any]] = None
+    diagnostics: Optional[dict[str, Any]] = None
+    created_at: datetime
+    updated_at: datetime
+    previewed_at: Optional[datetime] = None
+    confirmed_at: Optional[datetime] = None
+    cancelled_at: Optional[datetime] = None
+
+
+class PlanAdjustmentPreviewResponse(BaseModel):
+    adjustment: PlanAdjustmentResponse
+    candidate_plan_id: Optional[int] = None
+    status: Literal["preview_ready", "infeasible"]
+    summary: Optional[dict[str, Any]] = None
+    task_diffs: list[dict[str, Any]] = Field(default_factory=list)
+    diagnostics: Optional[dict[str, Any]] = None
+
+
 class ErrorResponse(BaseModel):
     """Schema for error responses."""
 
@@ -1288,6 +1515,7 @@ class MachineTypeDetailResponse(BaseSchema):
     code: str
     name: str
     description: Optional[str] = None
+    scheduling_config: Optional[dict[str, Any]] = None
     created_at: datetime
     feature_defs: list[StateFeatureDefResponse] = Field(default_factory=list)
 

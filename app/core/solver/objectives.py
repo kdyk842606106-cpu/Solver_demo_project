@@ -60,6 +60,7 @@ class ObjectiveRegistry:
         cls,
         objectives: list[dict],
         model: ScheduleModel,
+        additional_terms: list[dict[str, Any]] | None = None,
     ) -> None:
         """
         Apply all objectives from the objectives array to the model.
@@ -67,7 +68,8 @@ class ObjectiveRegistry:
         Build one weighted objective expression. CP-SAT only keeps the last
         minimize() call, so all objective terms must be combined here.
         """
-        if not objectives:
+        additional_terms = additional_terms or []
+        if not objectives and not additional_terms:
             cls.get("minimize_makespan").apply_to_model(model)
             model.objective_cache["metadata"] = [
                 {"type": "minimize_makespan", "weight": 1.0, "weight_int": 1000}
@@ -89,6 +91,18 @@ class ObjectiveRegistry:
                 "type": obj_type,
                 "weight": obj_dict.get("weight", 1.0),
                 "weight_int": weight_int,
+            })
+
+        for item in additional_terms:
+            weight_int = max(0, int(item.get("weight_int") or 0))
+            expression = item.get("expression")
+            if weight_int <= 0 or expression is None:
+                continue
+            terms.append(weight_int * expression)
+            metadata.append({
+                key: value
+                for key, value in item.items()
+                if key != "expression"
             })
 
         if not terms:

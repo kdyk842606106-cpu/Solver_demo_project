@@ -20,6 +20,7 @@
             :value="item.id"
           />
         </el-select>
+        <el-button :disabled="!machineTypeId" @click="openSchedulingSettings">排期设置</el-button>
         <el-button :icon="Refresh" :disabled="!machineTypeId" @click="loadAll">刷新</el-button>
       </div>
     </div>
@@ -98,7 +99,7 @@
           <el-table :data="selectedRefs" size="small" border>
             <el-table-column prop="atomic_activity_code" label="原子活动" width="150" />
             <el-table-column prop="atomic_activity_name" label="名称" />
-            <el-table-column prop="activity_category" label="分类" width="90" />
+            <el-table-column prop="activity_category" label="活动角色" width="90" />
             <el-table-column prop="sort_order" label="排序" width="80" />
             <el-table-column label="操作" width="110">
               <template #default="{ row }">
@@ -157,7 +158,7 @@
         <el-form-item label="名称" required>
           <el-input v-model="packageForm.name" />
         </el-form-item>
-        <el-form-item label="分类">
+        <el-form-item label="活动角色">
           <el-select v-model="packageForm.activity_category" style="width: 100%">
             <el-option value="normal" label="普通" />
             <el-option value="repair" label="维修" />
@@ -204,11 +205,27 @@
             <el-form-item label="名称" required>
               <el-input v-model="atomicForm.name" />
             </el-form-item>
-            <el-form-item label="分类">
+            <el-form-item label="活动角色">
               <el-select v-model="atomicForm.activity_category" style="width: 100%">
                 <el-option value="normal" label="普通" />
                 <el-option value="repair" label="维修" />
                 <el-option value="maintenance" label="维护" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="责任子系统">
+              <el-select
+                v-model="atomicForm.responsible_subsystem"
+                clearable
+                filterable
+                placeholder="可选；由原子活动统一定义"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="item in responsibleSubsystemOptions"
+                  :key="item.code"
+                  :label="`${item.name} (${item.code})`"
+                  :value="item.code"
+                />
               </el-select>
             </el-form-item>
             <el-form-item label="排序">
@@ -342,6 +359,111 @@
         <el-button type="primary" :loading="savingAtomic" @click="saveAtomic">保存</el-button>
       </template>
     </el-drawer>
+    <el-drawer v-model="settingsDrawerVisible" title="机器类型排期设置" size="720px">
+      <div class="drawer-stack">
+        <el-alert
+          title="责任子系统归属保存在原子活动上；活动包和引用实例不会覆盖它。"
+          type="info"
+          :closable="false"
+        />
+        <div class="form-section">
+          <div class="section-title settings-title">
+            <span>责任子系统选项</span>
+            <el-button size="small" @click="addSubsystem">新增</el-button>
+          </div>
+          <div v-for="(item, index) in settingsForm.responsible_subsystems" :key="index" class="settings-row">
+            <el-input v-model="item.code" placeholder="编码，如 PROPULSION" />
+            <el-input v-model="item.name" placeholder="名称" />
+            <el-button type="danger" link @click="settingsForm.responsible_subsystems.splice(index, 1)">删除</el-button>
+          </div>
+          <el-empty v-if="!settingsForm.responsible_subsystems.length" description="尚未配置责任子系统" :image-size="48" />
+        </div>
+        <div class="form-section">
+          <div class="section-title settings-title">
+            <span>排期规则</span>
+            <div>
+              <el-button size="small" @click="initializeRulePresets">初始化经验规则</el-button>
+              <el-button size="small" @click="addRule">新增规则</el-button>
+            </div>
+          </div>
+          <el-card v-for="(rule, index) in settingsForm.rules" :key="index" shadow="never" class="rule-card">
+            <template #header>
+              <div class="settings-title">
+                <span>{{ rule.name || rule.code || `规则 ${index + 1}` }}</span>
+                <el-button type="danger" link @click="settingsForm.rules.splice(index, 1)">删除</el-button>
+              </div>
+            </template>
+            <el-form :model="rule" label-width="110px">
+              <div class="settings-grid">
+                <el-form-item label="规则编码"><el-input v-model="rule.code" /></el-form-item>
+                <el-form-item label="规则名称"><el-input v-model="rule.name" /></el-form-item>
+                <el-form-item label="规则类型">
+                  <el-select v-model="rule.type" style="width: 100%">
+                    <el-option v-for="item in ruleTypes" :key="item.type" :label="item.name" :value="item.type" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="启用方式">
+                  <el-select v-model="rule.activation_mode" style="width: 100%">
+                    <el-option label="必选" value="required" />
+                    <el-option label="默认启用" value="default_on" />
+                    <el-option label="可选" value="optional" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="约束模式">
+                  <el-select v-model="rule.enforcement.mode" :disabled="rule.type === 'state_package_continuity'" style="width: 100%">
+                    <el-option label="硬约束" value="hard" />
+                    <el-option label="软规则" value="soft" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="允许例外"><el-switch v-model="rule.enforcement.overridable" :disabled="rule.type === 'state_package_continuity'" /></el-form-item>
+              </div>
+              <template v-if="rule.type !== 'state_package_continuity'">
+                <el-form-item label="责任子系统">
+                  <el-select v-model="rule.selector.responsible_subsystem" clearable style="width: 100%">
+                    <el-option v-for="item in settingsForm.responsible_subsystems" :key="item.code" :label="item.name" :value="item.code" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="资源类型">
+                  <el-input v-model="rule.selector.required_resource_type" placeholder="如 OVERHEAD_CRANE" clearable />
+                </el-form-item>
+                <el-form-item label="效果状态维度">
+                  <el-select v-model="rule.selector.effect_dimension_keys" multiple filterable allow-create default-first-option style="width: 100%">
+                    <el-option v-for="item in dimensionTemplateOptions" :key="item.feature_key" :label="item.feature_name || item.feature_key" :value="item.feature_key" />
+                  </el-select>
+                </el-form-item>
+              </template>
+              <el-form-item v-else label="分组来源">
+                <el-tag type="info">按求解目标的状态包归属自动分组</el-tag>
+              </el-form-item>
+              <el-form-item v-if="rule.type === 'shift_restriction'" label="允许 shift">
+                <el-select v-model="rule.parameters.allowed_shift_codes" multiple filterable allow-create default-first-option style="width: 100%" />
+              </el-form-item>
+              <el-form-item label="甘特标识">
+                <div class="gantt-marker-editor">
+                  <el-switch v-model="rule.gantt_marker_enabled" />
+                  <el-input
+                    v-model="rule.gantt_marker_text"
+                    :disabled="!rule.gantt_marker_enabled"
+                    maxlength="4"
+                    show-word-limit
+                    placeholder="如：吊"
+                  />
+                  <el-color-picker
+                    v-model="rule.gantt_marker_color"
+                    :disabled="!rule.gantt_marker_enabled"
+                  />
+                </div>
+              </el-form-item>
+            </el-form>
+          </el-card>
+          <el-empty v-if="!settingsForm.rules.length" description="尚未配置排期规则" :image-size="48" />
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="settingsDrawerVisible = false">取消</el-button>
+        <el-button type="primary" :loading="savingSettings" @click="saveSchedulingSettings">保存</el-button>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -362,9 +484,11 @@ import {
   getAtomicActivities,
   getMachineTypes,
   getOpRules,
+  getSchedulingRuleTypes,
   getStateNodes,
   updateActivityNode,
   updateAtomicActivity,
+  updateMachineType,
   updateOpRule,
 } from '../../api/masterData'
 import { buildHierarchyTree } from '../../utils/hierarchyTree'
@@ -381,10 +505,14 @@ const atomicToAttach = ref(null)
 const loading = ref(false)
 const packageDrawerVisible = ref(false)
 const atomicDrawerVisible = ref(false)
+const settingsDrawerVisible = ref(false)
 const packageEditId = ref(null)
 const atomicEditId = ref(null)
 const savingPackage = ref(false)
 const savingAtomic = ref(false)
+const savingSettings = ref(false)
+const ruleTypes = ref([])
+const settingsForm = ref({ responsible_subsystems: [], rules: [] })
 const packageForm = ref(defaultPackageForm())
 const atomicForm = ref(defaultAtomicForm())
 
@@ -429,6 +557,11 @@ const hasLegacyFacts = computed(() =>
   !!atomicForm.value.legacy_preconditions.length || !!atomicForm.value.legacy_effects.length,
 )
 const atomicReferences = computed(() => (atomicEditId.value ? refsForAtomic(atomicEditId.value) : []))
+const currentMachineType = computed(() => machineTypes.value.find((item) => item.id === machineTypeId.value) || null)
+const responsibleSubsystemOptions = computed(() => currentMachineType.value?.scheduling_config?.responsible_subsystems || [])
+const dimensionTemplateOptions = computed(() =>
+  (currentMachineType.value?.feature_defs || []).filter((item) => item.is_dimension_template),
+)
 
 function defaultPackageForm(level = 1) {
   return {
@@ -441,6 +574,7 @@ function defaultPackageForm(level = 1) {
     sort_order: 0,
     is_active: true,
     metadata_json: null,
+    responsible_subsystem: null,
   }
 }
 
@@ -631,6 +765,7 @@ function openEditAtomic(item) {
   atomicForm.value = {
     ...defaultAtomicForm(),
     ...item,
+    responsible_subsystem: item.metadata_json?.responsible_subsystem || null,
     duration_min: primaryRule?.duration_min || 30,
     description: primaryRule?.description || '',
     is_repair: !!primaryRule?.is_repair,
@@ -759,7 +894,10 @@ async function saveAtomic() {
       activity_category: atomicForm.value.activity_category,
       sort_order: atomicForm.value.sort_order,
       is_active: atomicForm.value.is_active,
-      metadata_json: null,
+      metadata_json: {
+        ...(atomicForm.value.metadata_json || {}),
+        responsible_subsystem: atomicForm.value.responsible_subsystem || undefined,
+      },
     }
     let atomicId = atomicEditId.value
     if (atomicEditId.value) {
@@ -792,8 +930,166 @@ async function removeAtomic() {
   await loadAll()
 }
 
+function normalizeRuleForEditor(rule = {}) {
+  const marker = rule.presentation?.gantt_marker
+  return {
+    code: rule.code || '',
+    name: rule.name || '',
+    type: rule.type || ruleTypes.value[0]?.type || 'group_continuity',
+    enabled: rule.enabled !== false,
+    activation_mode: rule.activation_mode || 'default_on',
+    selector: {
+      responsible_subsystem: rule.selector?.responsible_subsystem || null,
+      required_resource_type: rule.selector?.required_resource_type || '',
+      effect_dimension_keys: [...(rule.selector?.effect_dimension_keys || [])],
+      state_package_membership: !!rule.selector?.state_package_membership,
+    },
+    enforcement: {
+      mode: rule.enforcement?.mode || 'soft',
+      overridable: !!rule.enforcement?.overridable,
+      priority: rule.enforcement?.priority || 2,
+    },
+    parameters: {
+      ...(rule.parameters || {}),
+      allowed_shift_codes: [...(rule.parameters?.allowed_shift_codes || [])],
+    },
+    gantt_marker_enabled: !!marker,
+    gantt_marker_text: marker?.text || '',
+    gantt_marker_color: marker?.color || '#f59e0b',
+  }
+}
+
+function openSchedulingSettings() {
+  const config = currentMachineType.value?.scheduling_config || {}
+  settingsForm.value = {
+    responsible_subsystems: (config.responsible_subsystems || []).map((item) => ({ ...item })),
+    rules: (config.rules || []).map(normalizeRuleForEditor),
+  }
+  settingsDrawerVisible.value = true
+}
+
+function addSubsystem() {
+  settingsForm.value.responsible_subsystems.push({ code: '', name: '' })
+}
+
+function addRule() {
+  settingsForm.value.rules.push(normalizeRuleForEditor())
+}
+
+function initializeRulePresets() {
+  const functionDimension = dimensionTemplateOptions.value.find((item) =>
+    /FUNCTION|TEST|调测|测试/i.test(`${item.feature_key} ${item.feature_name || ''}`),
+  )?.feature_key
+  settingsForm.value.rules = [
+    normalizeRuleForEditor({
+      code: 'STATE_PACKAGE_CONTINUITY', name: '状态包连续性', type: 'state_package_continuity',
+      activation_mode: 'optional', selector: { state_package_membership: true },
+      enforcement: { mode: 'soft', priority: 2 }, parameters: { group_by: 'state_package' },
+    }),
+    normalizeRuleForEditor({
+      code: 'SUBSYSTEM_CONTINUITY', name: '责任子系统连续性', type: 'group_continuity',
+      activation_mode: 'default_on', selector: { match: 'all' }, enforcement: { mode: 'soft', priority: 2 },
+      parameters: { group_by: 'responsible_subsystem' },
+    }),
+    normalizeRuleForEditor({
+      code: 'CRANE_EXCLUSIVE', name: '行吊作业独占', type: 'scope_exclusivity',
+      activation_mode: 'required', selector: { required_resource_type: 'OVERHEAD_CRANE' },
+      enforcement: { mode: 'hard', overridable: false }, parameters: { against: 'all_other_tasks' },
+      presentation: { gantt_marker: { text: '吊', color: '#f59e0b' } },
+    }),
+    normalizeRuleForEditor({
+      code: 'CRANE_DAY_SHIFT_ONLY', name: '行吊作业仅允许指定班次', type: 'shift_restriction',
+      activation_mode: 'required', selector: { required_resource_type: 'OVERHEAD_CRANE' },
+      enforcement: { mode: 'hard', overridable: true }, parameters: { allowed_shift_codes: [] },
+    }),
+    normalizeRuleForEditor({
+      code: 'FUNCTION_TEST_EXCLUSIVE', name: '功能调测优先独占', type: 'scope_exclusivity',
+      activation_mode: 'default_on', selector: { effect_dimension_keys: functionDimension ? [functionDimension] : [] },
+      enforcement: { mode: 'soft', priority: 2 }, parameters: { against: 'all_other_tasks' },
+    }),
+  ]
+}
+
+function rulePayload(rule) {
+  const presentation = rule.gantt_marker_enabled
+    ? {
+        presentation: {
+          gantt_marker: {
+            text: rule.gantt_marker_text.trim(),
+            color: rule.gantt_marker_color || '#f59e0b',
+          },
+        },
+      }
+    : {}
+  if (rule.type === 'state_package_continuity') {
+    return {
+      code: rule.code.trim(),
+      name: rule.name.trim() || rule.code.trim(),
+      type: rule.type,
+      enabled: rule.activation_mode === 'required' ? true : rule.enabled !== false,
+      activation_mode: rule.activation_mode,
+      selector: { state_package_membership: true },
+      enforcement: { ...rule.enforcement, mode: 'soft', overridable: false },
+      parameters: { group_by: 'state_package' },
+      ...presentation,
+    }
+  }
+  const selector = {}
+  if (rule.selector.responsible_subsystem) selector.responsible_subsystem = rule.selector.responsible_subsystem
+  if (rule.selector.required_resource_type?.trim()) selector.required_resource_type = rule.selector.required_resource_type.trim()
+  if (rule.selector.effect_dimension_keys?.length) selector.effect_dimension_keys = rule.selector.effect_dimension_keys
+  if (!Object.keys(selector).length) selector.match = 'all'
+  const parameters = { ...(rule.parameters || {}) }
+  if (rule.type !== 'shift_restriction') delete parameters.allowed_shift_codes
+  return {
+    code: rule.code.trim(),
+    name: rule.name.trim() || rule.code.trim(),
+    type: rule.type,
+    enabled: rule.activation_mode === 'required' ? true : rule.enabled !== false,
+    activation_mode: rule.activation_mode,
+    selector,
+    enforcement: { ...rule.enforcement },
+    parameters,
+    ...presentation,
+  }
+}
+
+async function saveSchedulingSettings() {
+  const machineType = currentMachineType.value
+  if (!machineType) return
+  const invalidMarker = settingsForm.value.rules.find((rule) =>
+    rule.gantt_marker_enabled && !rule.gantt_marker_text.trim(),
+  )
+  if (invalidMarker) {
+    ElMessage.error(`规则 ${invalidMarker.name || invalidMarker.code || '-'} 的甘特标识不能为空`)
+    return
+  }
+  savingSettings.value = true
+  try {
+    await updateMachineType(machineType.id, {
+      code: machineType.code,
+      name: machineType.name,
+      description: machineType.description || null,
+      scheduling_config: {
+        responsible_subsystems: settingsForm.value.responsible_subsystems.map((item) => ({
+          code: item.code.trim(), name: item.name.trim(),
+        })),
+        rules: settingsForm.value.rules.map(rulePayload),
+      },
+    })
+    machineTypes.value = await getMachineTypes({ force: true })
+    settingsDrawerVisible.value = false
+    ElMessage.success('机器类型排期设置已保存')
+  } finally {
+    savingSettings.value = false
+  }
+}
+
 onMounted(async () => {
-  machineTypes.value = await getMachineTypes()
+  ;[machineTypes.value, ruleTypes.value] = await Promise.all([
+    getMachineTypes(),
+    getSchedulingRuleTypes(),
+  ])
 })
 </script>
 
@@ -902,6 +1198,31 @@ onMounted(async () => {
 .reference-tag {
   margin: 0 8px 8px 0;
 }
+.settings-title,
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.settings-row {
+  margin-bottom: 10px;
+}
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 12px;
+}
+.rule-card {
+  margin-bottom: 12px;
+}
+.gantt-marker-editor {
+  display: grid;
+  grid-template-columns: auto minmax(140px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
 @media (max-width: 1200px) {
   .workspace-grid {
     grid-template-columns: 1fr;
@@ -909,6 +1230,9 @@ onMounted(async () => {
 }
 @media (max-width: 640px) {
   .resource-row {
+    grid-template-columns: 1fr;
+  }
+  .settings-grid {
     grid-template-columns: 1fr;
   }
 }

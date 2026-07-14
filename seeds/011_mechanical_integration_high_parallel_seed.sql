@@ -171,7 +171,8 @@ DELETE FROM machine_type
 WHERE code = 'MECH_INTEGRATION_HIGH_PARALLEL';
 
 DELETE FROM feature_definition
-WHERE feature_key LIKE 'mi_hp_mi_a%_done';
+WHERE feature_key LIKE 'mi_hp_mi_a%_done'
+   OR feature_key = 'mi_hp_function_test_dim';
 
 -- ============================================================
 -- 1) Scenario tables
@@ -214,6 +215,9 @@ INSERT INTO mi_hp_resource_plan (resource_type, code, name, capacity) VALUES
 ('PIPE_TEAM', 'MI-HP-PIPE-01', '管路组', 2),
 ('ELECTRICAL', 'MI-HP-ELEC-01', '电气组', 1),
 ('PRECISION_RIG', 'MI-HP-RIG-01', '精密校准工装', 1);
+
+INSERT INTO mi_hp_resource_plan (resource_type, code, name, capacity) VALUES
+('OVERHEAD_CRANE', 'MI-HP-CRANE-01', 'Overhead Crane', 1);
 
 DROP TABLE IF EXISTS mi_hp_activity_plan;
 CREATE TEMP TABLE mi_hp_activity_plan (
@@ -336,6 +340,10 @@ INSERT INTO mi_hp_extra_resource_req_plan (activity_code, resource_type) VALUES
 ('MI_A016', 'PRECISION_RIG'),
 ('MI_A026', 'PRECISION_RIG');
 
+INSERT INTO mi_hp_extra_resource_req_plan (activity_code, resource_type) VALUES
+('MI_A010', 'OVERHEAD_CRANE'),
+('MI_A015', 'OVERHEAD_CRANE');
+
 -- ============================================================
 -- 2) Machine type, state dimensions, machine, resources
 -- ============================================================
@@ -348,21 +356,92 @@ SELECT 'mi_hp_' || lower(code) || '_done',
        effect_name
 FROM mi_hp_activity_plan;
 
-INSERT INTO machine_type (code, name, description) VALUES
+INSERT INTO feature_definition (feature_key, value_type, allowed_values, unit, description) VALUES
+('mi_hp_function_test_dim', 'enum', '["false","true"]'::jsonb, NULL, 'Functional commissioning state dimension');
+
+INSERT INTO machine_type (code, name, description, scheduling_config) VALUES
 (
     'MECH_INTEGRATION_HIGH_PARALLEL',
     'Mechanical Integration High-Parallel Cell',
-    '36-activity high-parallel mechanical integration validation dataset'
+    '36-activity high-parallel mechanical integration validation dataset',
+    '{
+      "responsible_subsystems": [
+        {"code":"PREPARATION","name":"Integration preparation"},
+        {"code":"STRUCTURE","name":"Structure subsystem"},
+        {"code":"TRANSFER","name":"Transfer subsystem"},
+        {"code":"UTILITY","name":"Utility subsystem"},
+        {"code":"COMMISSIONING","name":"Commissioning subsystem"},
+        {"code":"ACCEPTANCE","name":"Acceptance subsystem"}
+      ],
+      "rules": [
+        {
+          "code":"SUBSYSTEM_CONTINUITY",
+          "name":"Responsible subsystem continuity",
+          "type":"group_continuity",
+          "enabled":true,
+          "activation_mode":"optional",
+          "selector":{"match":"all"},
+          "enforcement":{"mode":"soft","priority":2,"overridable":false},
+          "parameters":{"group_by":"responsible_subsystem"}
+        },
+        {
+          "code":"CRANE_EXCLUSIVE",
+          "name":"Crane work exclusive within machine plan",
+          "type":"scope_exclusivity",
+          "enabled":true,
+          "activation_mode":"required",
+          "selector":{"required_resource_type":"OVERHEAD_CRANE"},
+          "enforcement":{"mode":"hard","overridable":false},
+          "parameters":{"against":"all_other_tasks"},
+          "presentation":{"gantt_marker":{"text":"吊","color":"#f59e0b"}}
+        },
+        {
+          "code":"CRANE_DAY_SHIFT_ONLY",
+          "name":"Crane work allowed only on day shift",
+          "type":"shift_restriction",
+          "enabled":true,
+          "activation_mode":"required",
+          "selector":{"required_resource_type":"OVERHEAD_CRANE"},
+          "enforcement":{"mode":"hard","overridable":true},
+          "parameters":{"allowed_shift_codes":["DAY_SHIFT"]}
+        },
+        {
+          "code":"FUNCTION_TEST_EXCLUSIVE",
+          "name":"Functional commissioning preferred exclusive",
+          "type":"scope_exclusivity",
+          "enabled":true,
+          "activation_mode":"optional",
+          "selector":{"effect_dimension_keys":["mi_hp_function_test_dim"]},
+          "enforcement":{"mode":"soft","priority":1,"weight":1000,"overridable":false},
+          "parameters":{"against":"all_other_tasks"}
+        }
+      ]
+    }'::jsonb
 );
 
-INSERT INTO state_feature_def (machine_type_id, feature_key, feature_name, value_type, allowed_values)
+INSERT INTO state_feature_def (
+    machine_type_id, feature_key, feature_name, value_type, allowed_values, is_dimension_template
+)
+SELECT mt.id, 'mi_hp_function_test_dim', 'Functional Commissioning', 'enum', '["false","true"]'::jsonb, true
+FROM machine_type mt
+WHERE mt.code = 'MECH_INTEGRATION_HIGH_PARALLEL';
+
+INSERT INTO state_feature_def (
+    machine_type_id, feature_key, feature_name, value_type, allowed_values,
+    is_dimension_template, dimension_template_id
+)
 SELECT mt.id,
        'mi_hp_' || lower(item.code) || '_done',
        item.effect_name,
        'enum',
-       '["false","true"]'::jsonb
+       '["false","true"]'::jsonb,
+       false,
+       CASE WHEN item.code IN ('MI_A032', 'MI_A033', 'MI_A034', 'MI_A035') THEN template.id ELSE NULL END
 FROM machine_type mt
 CROSS JOIN mi_hp_activity_plan item
+LEFT JOIN state_feature_def template
+  ON template.machine_type_id = mt.id
+ AND template.feature_key = 'mi_hp_function_test_dim'
 WHERE mt.code = 'MECH_INTEGRATION_HIGH_PARALLEL';
 
 INSERT INTO machine (machine_type_id, code, name, location)
@@ -473,7 +552,18 @@ SELECT mt.id, item.code, item.name, item.effect_name,
        'normal',
        item.seq,
        true,
-       jsonb_build_object('seed', '011_high_parallel')
+       jsonb_build_object(
+           'seed', '011_high_parallel',
+           'responsible_subsystem',
+           CASE item.package_code
+               WHEN 'MI_HP_PREP_ACT' THEN 'PREPARATION'
+               WHEN 'MI_HP_STRUCTURE_ACT' THEN 'STRUCTURE'
+               WHEN 'MI_HP_TRANSFER_ACT' THEN 'TRANSFER'
+               WHEN 'MI_HP_UTILITY_ACT' THEN 'UTILITY'
+               WHEN 'MI_HP_DEBUG_ACT' THEN 'COMMISSIONING'
+               WHEN 'MI_HP_ACCEPTANCE_ACT' THEN 'ACCEPTANCE'
+           END
+       )
 FROM machine_type mt
 JOIN mi_hp_activity_plan item ON true
 WHERE mt.code = 'MECH_INTEGRATION_HIGH_PARALLEL';

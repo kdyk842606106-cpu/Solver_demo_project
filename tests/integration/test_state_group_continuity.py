@@ -74,6 +74,75 @@ HIGH_PARALLEL_PACKAGES = {
 }
 
 
+HIGH_PARALLEL_SUBSYSTEMS = {
+    "MI_HP_PREP_ACT": "PREPARATION",
+    "MI_HP_STRUCTURE_ACT": "STRUCTURE",
+    "MI_HP_TRANSFER_ACT": "TRANSFER",
+    "MI_HP_UTILITY_ACT": "UTILITY",
+    "MI_HP_DEBUG_ACT": "COMMISSIONING",
+    "MI_HP_ACCEPTANCE_ACT": "ACCEPTANCE",
+}
+
+
+def _high_parallel_scheduling_config() -> dict:
+    return {
+        "responsible_subsystems": [
+            {"code": code, "name": code.replace("_", " ").title()}
+            for code in HIGH_PARALLEL_SUBSYSTEMS.values()
+        ],
+        "rules": [
+            {
+                "code": "SUBSYSTEM_CONTINUITY",
+                "name": "Responsible subsystem continuity",
+                "type": "group_continuity",
+                "enabled": True,
+                "activation_mode": "optional",
+                "selector": {"match": "all"},
+                "enforcement": {"mode": "soft", "priority": 2, "overridable": False},
+                "parameters": {"group_by": "responsible_subsystem"},
+            },
+            {
+                "code": "CRANE_EXCLUSIVE",
+                "name": "Crane work exclusive within machine plan",
+                "type": "scope_exclusivity",
+                "enabled": True,
+                "activation_mode": "required",
+                "selector": {"required_resource_type": "OVERHEAD_CRANE"},
+                "enforcement": {"mode": "hard", "overridable": False},
+                "parameters": {"against": "all_other_tasks"},
+                "presentation": {
+                    "gantt_marker": {"text": "吊", "color": "#f59e0b"}
+                },
+            },
+            {
+                "code": "CRANE_DAY_SHIFT_ONLY",
+                "name": "Crane work allowed only on day shift",
+                "type": "shift_restriction",
+                "enabled": True,
+                "activation_mode": "required",
+                "selector": {"required_resource_type": "OVERHEAD_CRANE"},
+                "enforcement": {"mode": "hard", "overridable": True},
+                "parameters": {"allowed_shift_codes": ["DAY_SHIFT"]},
+            },
+            {
+                "code": "FUNCTION_TEST_EXCLUSIVE",
+                "name": "Functional commissioning preferred exclusive",
+                "type": "scope_exclusivity",
+                "enabled": True,
+                "activation_mode": "optional",
+                "selector": {"effect_dimension_keys": ["mi_hp_function_test_dim"]},
+                "enforcement": {
+                    "mode": "soft",
+                    "priority": 1,
+                    "weight": 1000,
+                    "overridable": False,
+                },
+                "parameters": {"against": "all_other_tasks"},
+            },
+        ],
+    }
+
+
 HIGH_PARALLEL_RESOURCES = {
     "PROCESS_ENGINEER": ("MI-HP-PE-01", "Process Engineer", 1),
     "SAFETY_OFFICER": ("MI-HP-SAFE-01", "Safety Officer", 1),
@@ -86,6 +155,7 @@ HIGH_PARALLEL_RESOURCES = {
     "PIPE_TEAM": ("MI-HP-PIPE-01", "Piping Team", 2),
     "ELECTRICAL": ("MI-HP-ELEC-01", "Electrical Team", 1),
     "PRECISION_RIG": ("MI-HP-RIG-01", "Precision Alignment Rig", 1),
+    "OVERHEAD_CRANE": ("MI-HP-CRANE-01", "Overhead Crane", 1),
 }
 
 
@@ -94,6 +164,8 @@ HIGH_PARALLEL_EXTRA_RESOURCE_REQS = {
     "MI_A014": ["PRECISION_RIG"],
     "MI_A016": ["PRECISION_RIG"],
     "MI_A026": ["PRECISION_RIG"],
+    "MI_A010": ["OVERHEAD_CRANE"],
+    "MI_A015": ["OVERHEAD_CRANE"],
 }
 
 
@@ -440,9 +512,25 @@ async def _seed_mechanical_integration_continuity_case(session):
 
 
 async def _seed_high_parallel_mechanical_integration_case(session):
-    machine_type = MachineType(id=7001, code="MECH_INTEGRATION_HIGH_PARALLEL", name="Mechanical integration high parallel")
+    machine_type = MachineType(
+        id=7001,
+        code="MECH_INTEGRATION_HIGH_PARALLEL",
+        name="Mechanical integration high parallel",
+        scheduling_config=_high_parallel_scheduling_config(),
+    )
     machine = Machine(id=7001, machine_type_id=7001, code="MI-HP-001", name="Mechanical Integration High Parallel Cell")
     session.add_all([machine_type, machine])
+
+    function_test_template = StateFeatureDef(
+        machine_type_id=7001,
+        feature_key="mi_hp_function_test_dim",
+        feature_name="Functional Commissioning",
+        value_type="enum",
+        allowed_values=["false", "true"],
+        is_dimension_template=True,
+    )
+    session.add(function_test_template)
+    await session.flush()
 
     for code, _, _, _, effect_name, _, _ in HIGH_PARALLEL_ACTIVITIES:
         session.add(
@@ -452,6 +540,11 @@ async def _seed_high_parallel_mechanical_integration_case(session):
                 feature_name=effect_name,
                 value_type="enum",
                 allowed_values=["false", "true"],
+                dimension_template_id=(
+                    function_test_template.id
+                    if code in {"MI_A032", "MI_A033", "MI_A034", "MI_A035"}
+                    else None
+                ),
             )
         )
 
@@ -563,7 +656,18 @@ async def _seed_high_parallel_mechanical_integration_case(session):
         package = HIGH_PARALLEL_PACKAGES[package_name]
         atomic_ids[code] = atomic_id
         rule_ids[code] = rule_id
-        session.add(AtomicActivity(id=atomic_id, machine_type_id=7001, code=code, name=name, sort_order=index))
+        session.add(
+            AtomicActivity(
+                id=atomic_id,
+                machine_type_id=7001,
+                code=code,
+                name=name,
+                sort_order=index,
+                metadata_json={
+                    "responsible_subsystem": HIGH_PARALLEL_SUBSYSTEMS[package["activity_code"]]
+                },
+            )
+        )
         session.add(
             ActivityPackageAtomicRef(
                 activity_node_id=activity_package_ids[package["activity_code"]],
@@ -644,6 +748,47 @@ async def test_layered_state_group_continuity_returns_parent_and_child_groups(db
     assert {"ROOT_STATE", "CHILD_STATE"} <= group_codes
     assert continuity["objective_weights"]["minimize_state_group_span"] == 1.0
     assert all(task["state_continuity_groups"] for task in result["schedule"]["tasks"])
+
+
+async def test_registered_state_package_continuity_rule_compiles_existing_groups(db_session):
+    await _seed_state_group_continuity_case(db_session)
+
+    result = await solve_layered(
+        LayeredSolveRequest(
+            machine_id=5001,
+            current_state_id=5001,
+            target_state_node_ids=[5101],
+            activity_scope_node_ids=[5201],
+            constraints={
+                "scheduling_rules": {
+                    "active_rule_codes": ["STATE_PACKAGE_CONTINUITY"],
+                }
+            },
+            objectives=[{"type": "minimize_makespan", "weight": 1.0}],
+        ),
+        db_session,
+    )
+
+    assert result["status"] == "done"
+    diagnostics = result["diagnostics"]["schedule"]
+    scheduling_rules = diagnostics["scheduling_rules"]
+    assert scheduling_rules["active_rule_codes"] == ["STATE_PACKAGE_CONTINUITY"]
+    assert scheduling_rules["violations"] == []
+    assert scheduling_rules["continuity_groups"]
+    assert all(
+        group["group_key"].startswith("STATE_PACKAGE_CONTINUITY:state_package:")
+        for group in scheduling_rules["continuity_groups"]
+    )
+    assert any(
+        item.get("rule_code") == "STATE_PACKAGE_CONTINUITY"
+        for item in diagnostics["objective_terms"]
+    )
+    state_groups = diagnostics["state_group_continuity"]["groups"]
+    assert {
+        "ROOT_STATE",
+        "CHILD_STATE",
+    } <= {group["state_group_code"] for group in state_groups}
+    assert all(task["calendar_pause_min"] == 0 for task in result["schedule"]["tasks"])
 
 
 async def test_layered_strategy_a_replan_preserves_state_group_membership(db_session):
@@ -870,6 +1015,41 @@ async def test_high_parallel_mechanical_integration_solves_full_atomic_sequence(
     assert overlaps("MI_A027", "MI_A020")
     assert result["schedule"]["parallel_groups"]
 
+    scheduling_rules = result["diagnostics"]["schedule"]["scheduling_rules"]
+    assert {"CRANE_EXCLUSIVE", "CRANE_DAY_SHIFT_ONLY"} <= set(
+        scheduling_rules["active_rule_codes"]
+    )
+    active_rules = {rule["code"]: rule for rule in scheduling_rules["active_rules"]}
+    assert active_rules["CRANE_EXCLUSIVE"]["presentation"] == {
+        "gantt_marker": {"text": "吊", "color": "#f59e0b"}
+    }
+    crane_tasks = [
+        task
+        for task in tasks
+        if any(
+            req["resource_type"] == "OVERHEAD_CRANE"
+            for req in task["resource_reqs"]
+        )
+    ]
+    assert {task["op_rule_code"] for task in crane_tasks} == {
+        "RULE_MI_A010",
+        "RULE_MI_A015",
+    }
+    assert all(
+        not (
+            crane["start_min"] < other["end_min"]
+            and other["start_min"] < crane["end_min"]
+        )
+        for crane in crane_tasks
+        for other in tasks
+        if other["step_order"] != crane["step_order"]
+    )
+    assert all(task["responsible_subsystem"] for task in tasks)
+    assert sum(
+        "mi_hp_function_test_dim" in task["effect_dimension_keys"]
+        for task in tasks
+    ) == 4
+
     continuity = result["diagnostics"]["schedule"]["state_group_continuity"]
     group_codes = {group["state_group_code"] for group in continuity["groups"]}
     assert {
@@ -884,6 +1064,67 @@ async def test_high_parallel_mechanical_integration_solves_full_atomic_sequence(
 
     health = result["layered"]["preflight_health"]
     assert health["blocking_count"] == 0
+
+
+async def test_high_parallel_combined_integration_rules_meet_quality_expectations(db_session):
+    await _seed_high_parallel_mechanical_integration_case(db_session)
+
+    result = await solve_layered(
+        LayeredSolveRequest(
+            machine_id=7001,
+            current_state_id=7001,
+            target_state_node_ids=[7100],
+            activity_scope_node_ids=[7300],
+            constraints={
+                "scheduling_rules": {
+                    "active_rule_codes": [
+                        "SUBSYSTEM_CONTINUITY",
+                        "FUNCTION_TEST_EXCLUSIVE",
+                    ]
+                }
+            },
+            objectives=[{"type": "minimize_makespan", "weight": 1.0}],
+        ),
+        db_session,
+    )
+
+    assert result["status"] == "done"
+    tasks = result["schedule"]["tasks"]
+    diagnostics = result["diagnostics"]["schedule"]["scheduling_rules"]
+    assert {
+        "SUBSYSTEM_CONTINUITY",
+        "CRANE_EXCLUSIVE",
+        "CRANE_DAY_SHIFT_ONLY",
+        "FUNCTION_TEST_EXCLUSIVE",
+    } <= set(diagnostics["active_rule_codes"])
+    assert diagnostics["violations"] == []
+
+    function_tasks = [
+        task
+        for task in tasks
+        if "mi_hp_function_test_dim" in task["effect_dimension_keys"]
+    ]
+    assert len(function_tasks) == 4
+    assert all(
+        not (
+            function_task["start_min"] < other["end_min"]
+            and other["start_min"] < function_task["end_min"]
+        )
+        for function_task in function_tasks
+        for other in tasks
+        if other["step_order"] != function_task["step_order"]
+    )
+
+    subsystem_tasks: dict[str, list[dict]] = {}
+    for task in tasks:
+        subsystem_tasks.setdefault(task["responsible_subsystem"], []).append(task)
+    assert set(subsystem_tasks) == set(HIGH_PARALLEL_SUBSYSTEMS.values())
+    assert all(
+        max(task["end_min"] for task in group)
+        - min(task["start_min"] for task in group)
+        <= sum(task["duration_min"] for task in group)
+        for group in subsystem_tasks.values()
+    )
 
 
 async def test_layered_solve_empty_activity_scope_uses_all_atomic_activities(db_session):

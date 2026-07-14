@@ -174,11 +174,29 @@ INSERT INTO feature_definition (feature_key, value_type, allowed_values, unit, d
 ('mechint_atmospheric_arm_status', 'enum', '["pending", "installed"]'::jsonb, NULL, 'Atmospheric arm installation status'),
 ('mechint_vacuum_arm_status', 'enum', '["pending", "installed"]'::jsonb, NULL, 'Vacuum arm installation status');
 
-INSERT INTO machine_type (code, name, description) VALUES
+INSERT INTO machine_type (code, name, description, scheduling_config) VALUES
 (
     'MECH_INTEGRATION_CONTINUITY',
     'Mechanical Integration Continuity Cell',
-    'Validation dataset for state-package continuity scheduling'
+    'Validation dataset for state-package continuity scheduling',
+    '{
+      "responsible_subsystems": [
+        {"code": "STRUCTURE", "name": "Structure subsystem"},
+        {"code": "TRANSFER", "name": "Transfer subsystem"}
+      ],
+      "rules": [
+        {
+          "code": "SUBSYSTEM_CONTINUITY",
+          "name": "Responsible subsystem continuity",
+          "type": "group_continuity",
+          "enabled": true,
+          "activation_mode": "optional",
+          "selector": {"match": "all"},
+          "enforcement": {"mode": "soft", "priority": 1, "overridable": false},
+          "parameters": {"group_by": "responsible_subsystem"}
+        }
+      ]
+    }'::jsonb
 );
 
 INSERT INTO state_feature_def (machine_type_id, feature_key, feature_name, value_type, allowed_values)
@@ -314,10 +332,10 @@ SELECT mt.id, v.code, v.name, v.description, 'normal', v.sort_order, true, v.met
 FROM machine_type mt
 CROSS JOIN (
     VALUES
-      ('INSTALL_BASE_FRAME', 'Install Base Frame', 'Install the mechanical base frame', 10, '{"continuity_seed":true}'),
-      ('ALIGN_COLUMN', 'Align Column', 'Align and lock the vertical column', 20, '{"continuity_seed":true}'),
-      ('INSTALL_ATM_ARM', 'Install Atmospheric Arm', 'Install the atmospheric transfer arm', 30, '{"continuity_seed":true}'),
-      ('INSTALL_VAC_ARM', 'Install Vacuum Arm', 'Install the vacuum transfer arm', 40, '{"continuity_seed":true}')
+      ('INSTALL_BASE_FRAME', 'Install Base Frame', 'Install the mechanical base frame', 10, '{"continuity_seed":true,"responsible_subsystem":"STRUCTURE"}'),
+      ('ALIGN_COLUMN', 'Align Column', 'Align and lock the vertical column', 20, '{"continuity_seed":true,"responsible_subsystem":"STRUCTURE"}'),
+      ('INSTALL_ATM_ARM', 'Install Atmospheric Arm', 'Install the atmospheric transfer arm', 30, '{"continuity_seed":true,"responsible_subsystem":"TRANSFER"}'),
+      ('INSTALL_VAC_ARM', 'Install Vacuum Arm', 'Install the vacuum transfer arm', 40, '{"continuity_seed":true,"responsible_subsystem":"TRANSFER"}')
 ) AS v(code, name, description, sort_order, metadata_json)
 WHERE mt.code = 'MECH_INTEGRATION_CONTINUITY';
 

@@ -4,6 +4,7 @@ import {
   MOCK_MACHINES,
   MOCK_RESOURCES,
   MOCK_STATES,
+  createMockRouteHandler,
 } from '../fixtures/mock-api'
 
 const PARALLEL_SCHEDULE = {
@@ -12,6 +13,7 @@ const PARALLEL_SCHEDULE = {
   tasks: [
     {
       task_id: 1,
+      step_id: 601,
       step_order: 1,
       op_rule_id: 1,
       op_rule_code: 'OP_WARMUP',
@@ -25,6 +27,7 @@ const PARALLEL_SCHEDULE = {
     },
     {
       task_id: 2,
+      step_id: 602,
       step_order: 2,
       op_rule_id: 2,
       op_rule_code: 'OP_CLEANING',
@@ -38,6 +41,7 @@ const PARALLEL_SCHEDULE = {
     },
     {
       task_id: 3,
+      step_id: 603,
       step_order: 3,
       op_rule_id: 3,
       op_rule_code: 'OP_CALIBRATE',
@@ -73,6 +77,7 @@ const DELAYED_FILL_GAP_SCHEDULE = {
 }
 
 function createFillGapMockHandler() {
+  const fallback = createMockRouteHandler(DELAYED_FILL_GAP_SCHEDULE)
   return async (route: any, request: any) => {
     const url = request.url()
     const method = request.method()
@@ -150,7 +155,7 @@ function createFillGapMockHandler() {
       return
     }
 
-    await route.continue()
+    await fallback(route, request)
   }
 }
 
@@ -227,6 +232,10 @@ test.describe('Blockage — Strategy A fill gaps with parallel activities', () =
     await page.screenshot({ path: 'test-results/gif-frames/04-strategy-a-selected.png' })
 
     await page.click('.el-dialog__footer button:has-text("提交重排")')
+
+    await expect(page.getByText('计划调整 / 重排').first()).toBeVisible()
+    await page.getByRole('button', { name: '保存并试算' }).click()
+    await page.getByRole('button', { name: '确认候选为新基线' }).click()
 
     // Wait for success
     await page.waitForSelector('.el-message--success', { timeout: 30000 })
