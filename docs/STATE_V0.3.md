@@ -1,5 +1,7 @@
 # CURRENT STATE: V0.3
 
+> Update 2026-07-16 Beta.2 release preparation: promoted the verified post-Beta cleanup in commit `6eacb52` to the next prerelease baseline `v0.3.0-beta.2`. README and the current STATE baseline now target Beta.2, while the published `v0.3.0-beta.1` tag, Release, and artifacts remain immutable historical evidence. The allowlist packager now writes `VERSION.json` as UTF-8 without BOM so packaged Windows deployments expose the release commit correctly through system status. The release continues to use the existing Beta prerelease channel; no schema, API, Planner/Scheduler behavior, seed, ANCHOR principle, archive, plan, or TICKET changed.
+
 > Update 2026-07-16 post-Beta cleanup: removed unreferenced one-off database/PPT/report tooling, its root `pptxgenjs` package manifests, obsolete MS010/OPS visualization and solve scripts, the retired Aircraft Demo screenshots, and the tracked `outputs/` presentation/scenario artifacts. `/outputs/` is now ignored so generated review material does not return to the active source tree. Local cleanup removed stale WSL/broken virtual environments, temporary DBOS worktrees, root dependency/cache/log/test-database artifacts, and pre-Beta release ZIPs; the active `.venv`, `frontend/node_modules`, `.env`, `.postgres-data`, `.opencode/skills`, and the `v0.3.0-beta.1` ZIP/SHA256/release-notes triad were preserved. No schema, API, Planner/Scheduler behavior, seed, TICKET, archive, or plan document changed. Verification: active-tree reference scan passed; backend `366 passed`; Vite production build passed with the existing chunk-size warning; Chromium full regression `86 passed`; terminology and release-packaging tests passed; `git diff --check` passed with the existing line-ending warning. Strict deployment-readiness data validation could not connect because the configured local PostgreSQL service on port 55550 was offline; no readiness defect was observed or claimed. The published `v0.3.0-beta.1` tag remains fixed at `2a34d1483dc72ab0d174c69323f938937c5267b1`. ANCHOR check: no violations.
 
 > Update 2026-07-16 Beta release preparation: superseded the untagged RC.2 preparation with `v0.3.0-beta.1`. README, ANCHOR, current user/requirements documents, and the release packager now use the Beta channel; the packager emits `beta release` metadata instead of labeling every prerelease as a release candidate. Existing RC releases/tags are to be removed after the Beta release is published successfully. No schema, API, planner, scheduler, frontend behavior, archive, or TICKET changed.
@@ -487,7 +489,7 @@
 - Scheduler 已从单主资源建模，升级为 `resource_reqs` 驱动的多资源约束与分配。
 - 分层状态/活动、工作日历、调度规则和统一计划调整中心已接入主求解链路。
 
-当前发布基线为 V0.3 Beta（`v0.3.0-beta.1`）；历史 TICKET 和时间线用于追溯，当前实现契约以本 STATE 与 `docs/protocols/` 为准。
+当前发布基线为 V0.3 Beta（`v0.3.0-beta.2`）；历史 TICKET 和时间线用于追溯，当前实现契约以本 STATE 与 `docs/protocols/` 为准。
 
 ---
 

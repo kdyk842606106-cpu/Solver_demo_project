@@ -4,7 +4,7 @@
 
 > **AI 开发上下文**：请先阅读 [`docs/ANCHOR.md`](./docs/ANCHOR.md)、当前 [`docs/STATE_V0.3.md`](./docs/STATE_V0.3.md)，再阅读最新 `docs/TICKET_*.md`。旧 `CONTEXT` 入口已归档到 `docs/archive/cleanup_20260529/outdated_notes/`。
 >
-> **当前发布基线**：V0.3 Beta（`v0.3.0-beta.1`）。当前实现契约以 STATE 与 [`docs/protocols/`](./docs/protocols/README.md) 为准；V0.2 规格和 gap report 仅用于历史追溯。
+> **当前发布基线**：V0.3 Beta（`v0.3.0-beta.2`）。当前实现契约以 STATE 与 [`docs/protocols/`](./docs/protocols/README.md) 为准；V0.2 规格和 gap report 仅用于历史追溯。
 
 ## 环境准备
 
@@ -314,7 +314,7 @@ pytest tests/e2e -v
 发布包由白名单脚本生成，不包含 `.env`、数据库、日志、虚拟环境、依赖缓存或历史 ZIP。发布前必须先提交前端生产构建产物，并保持 Git 工作区干净：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy\scripts\package_release.ps1 -Version 0.3.0-beta.1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy\scripts\package_release.ps1 -Version 0.3.0-beta.2
 ```
 
 脚本默认执行后端全量测试、部署就绪检查、Chromium 回归和 Vite 生产构建，然后在 `release/` 生成 ZIP、SHA-256 和发布说明。验证机升级时先用 `pg_dump -Fc` 备份数据库，将现有 `.env` 复制到解压后的新版本目录，再运行：

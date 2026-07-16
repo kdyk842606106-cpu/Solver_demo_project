@@ -24,6 +24,8 @@ def test_release_packaging_uses_allowlist_and_generated_metadata():
     assert "@('.env.example', 'alembic.ini', 'requirements.txt', 'README.md')" in script
     assert "app_version = $Version" in script
     assert "app_commit = $commit" in script
+    assert "function Write-Utf8NoBom" in script
+    assert "Write-Utf8NoBom -Path (Join-Path $stagingRoot 'VERSION.json')" in script
     assert "MANIFEST.sha256" in script
     assert "Get-FileHash -Algorithm SHA256" in script
 

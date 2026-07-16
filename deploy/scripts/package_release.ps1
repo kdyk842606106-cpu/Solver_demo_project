@@ -16,6 +16,11 @@ function Write-Section([string]$Title) {
     Write-Host ("[RELEASE] {0}" -f $Title)
 }
 
+function Write-Utf8NoBom([string]$Path, [string]$Content) {
+    $encoding = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $Content, $encoding)
+}
+
 function Invoke-Native([string]$FilePath, [string[]]$Arguments, [string]$WorkingDirectory) {
     Push-Location -LiteralPath $WorkingDirectory
     $previousErrorActionPreference = $ErrorActionPreference
@@ -173,7 +178,8 @@ $versionPayload = [ordered]@{
     app_commit = $commit
     release_id = $releaseId
 }
-$versionPayload | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stagingRoot 'VERSION.json') -Encoding UTF8
+$versionJson = $versionPayload | ConvertTo-Json
+Write-Utf8NoBom -Path (Join-Path $stagingRoot 'VERSION.json') -Content $versionJson
 
 $releaseNotes = @"
 # Solver Demo Project $tagName
