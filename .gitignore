@@ -73,6 +73,7 @@ logs/
 /ppt_design_log.md
 /frontend/e2e/tests/*.bak
 /output/
+/outputs/
 /release/
 /tmp_dbos_argus_repo/
 /tmp_dbos_argus_src/
