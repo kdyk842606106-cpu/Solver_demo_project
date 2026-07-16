@@ -159,6 +159,15 @@ New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
 
 $releaseTimestamp = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
 $releaseId = "$tagName+$releaseTimestamp"
+$releaseLevel = if ($Version -match '(?i)(^|[.-])beta([.-]|$)') {
+    'beta release'
+} elseif ($Version -match '(?i)(^|[.-])rc([.-]|$)') {
+    'release candidate'
+} elseif ($Version.Contains('-')) {
+    'pre-release'
+} else {
+    'stable release'
+}
 $versionPayload = [ordered]@{
     app_version = $Version
     app_commit = $commit
@@ -169,7 +178,7 @@ $versionPayload | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stagingR
 $releaseNotes = @"
 # Solver Demo Project $tagName
 
-- Release level: release candidate
+- Release level: $releaseLevel
 - Target: Windows verifier machine, existing PostgreSQL upgrade
 - Source commit: $commit
 - Release ID: $releaseId

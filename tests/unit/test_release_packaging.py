@@ -36,3 +36,11 @@ def test_release_notes_document_upgrade_safety_and_exclusions():
     assert "Copy the verifier machine's existing .env" in script
     assert "intentionally excludes .env, databases" in script
     assert "install_verify.ps1 -ExpectedCommit" in script
+
+
+def test_release_notes_classify_beta_separately_from_rc():
+    script = _release_script()
+
+    assert "'beta release'" in script
+    assert "'release candidate'" in script
+    assert "Release level: $releaseLevel" in script

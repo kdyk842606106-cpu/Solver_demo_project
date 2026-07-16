@@ -1,6 +1,6 @@
 # CURRENT STATE: V0.3
 
-> Update 2026-07-16 RC.2 release preparation: promoted the current verified V0.3 branch baseline from `v0.3.0-rc.1` to `v0.3.0-rc.2` after the obsolete UI/code cleanup and current-documentation/ANCHOR refresh. README now uses RC.2 for the published baseline and packaging command. No schema, API, planner, scheduler, frontend behavior, archive, or TICKET changed; RC.2 must be tagged only after the repository release packager completes its backend, strict readiness, Chromium, and production-build gates.
+> Update 2026-07-16 Beta release preparation: superseded the untagged RC.2 preparation with `v0.3.0-beta.1`. README, ANCHOR, current user/requirements documents, and the release packager now use the Beta channel; the packager emits `beta release` metadata instead of labeling every prerelease as a release candidate. Existing RC releases/tags are to be removed after the Beta release is published successfully. No schema, API, planner, scheduler, frontend behavior, archive, or TICKET changed.
 
 > Update 2026-07-16 follow-up: synchronized the remaining current documentation with the V0.3 RC implementation. The Network Editor acceptance matrix now marks the X6 single-canvas, nested containers, container-aware ELK layout, relay/proxy projection, and unified commit as implemented; its evidence index uses current stable symbols and `test_master_data_api.py`, and records 67 Network Editor browser cases within the 86-passed Chromium baseline. The business manual now covers work calendars, registered scheduling rules, explicit-scope plan adjustments, candidate preview/confirmation, and current activity/state modeling boundaries. The protocol index documents calendar snapshots and the plan-family adjustment flow; layered requirements, solver requirements, multi-blockage design, Network Editor guide, intranet seed guidance, and Excel calendar sheets now carry accurate current/historical status. ANCHOR was also reviewed against the implementation: AntV X6 and `app/core/` are explicit, RAGBuilder is defined by instance-level POP causal-link/threat/re-provider behavior, Strategy A is separated from Strategy B/AB and ordinary adjustment constraints, and plan-family/baseline/candidate terminology is locked without expanding product scope. No code, schema, API, archive, or TICKET was changed. Verification: 67 Network Editor browser tests collected from the two current specs; terminology check and `git diff --check` passed. ANCHOR check: updated with a dated rationale and no scope expansion.
 
@@ -485,7 +485,7 @@
 - Scheduler 已从单主资源建模，升级为 `resource_reqs` 驱动的多资源约束与分配。
 - 分层状态/活动、工作日历、调度规则和统一计划调整中心已接入主求解链路。
 
-当前发布基线为 V0.3 RC；历史 TICKET 和时间线用于追溯，当前实现契约以本 STATE 与 `docs/protocols/` 为准。
+当前发布基线为 V0.3 Beta（`v0.3.0-beta.1`）；历史 TICKET 和时间线用于追溯，当前实现契约以本 STATE 与 `docs/protocols/` 为准。
 
 ---
 
