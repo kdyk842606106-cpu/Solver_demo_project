@@ -1,5 +1,7 @@
 # 多阻塞场景下维修序列与活动恢复设计文档
 
+> **历史候选设计**：本文记录 V0.2/V0.3 早期多阻塞建模分析。当前阻塞 A/B/AB 已接入计划族候选确认流程，普通调整由统一计划调整中心处理；当前契约以 `docs/STATE_V0.3.md`、`docs/protocols/api.md` 和 `docs/protocols/scheduler.md` 为准。
+
 > 文档类型：正式设计文档
 > 适用版本：V0.2 现状分析 / V0.3 候选设计
 > 相关文档：`docs/ANCHOR.md`、`docs/STATE_V0.3.md`、`docs/v0.2-spec.md`

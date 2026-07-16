@@ -3,6 +3,8 @@
 > **本文档定义系统的永久性约定，不随版本迭代更新。**
 > 开发时所有决策必须符合本文档定义的原则。
 > 修改本文档需标注原因和日期。
+>
+> 修改记录（2026-07-16）：按 V0.3 RC 已落地架构校准技术栈、领域目录、实例级 POP、阻塞/计划调整边界、测试约束和计划族术语；未扩大产品范围或改变数据驱动、分层解耦、零侵入扩展原则。
 
 ---
 
@@ -13,7 +15,7 @@
 
 给定机台的起点状态、目标状态、工序规则库和资源约束，
 自动推导合法工序路径（RAG）并生成最优排程（CP-SAT），
-支持计划师对阻塞情况进行动态重排。
+支持计划师对阻塞和显式计划约束进行候选试算、对比与确认重排。
 
 核心创新：依赖关系从 precondition/effect 链自动推导，并行分支自然涌现。
 
@@ -26,7 +28,7 @@
 | 后端 | Python 3.11+ / FastAPI / SQLAlchemy 2.0 (async) |
 | 求解 | Google OR-Tools CP-SAT |
 | 数据库 | PostgreSQL 15 / Alembic 迁移 |
-| 前端 | Vue 3 + Element Plus + ECharts |
+| 前端 | Vue 3 + Element Plus + ECharts + AntV X6 |
 | 容器 | Docker + Docker Compose |
 
 ---
@@ -34,7 +36,7 @@
 ## 分层架构（锁定）
 
 ```
-UI (Vue 3) → API (FastAPI) → Service → Domain (solver/) → Persistence (SQLAlchemy)
+UI (Vue 3) → API (FastAPI) → Service → Domain (app/core/) → Persistence (SQLAlchemy)
 ```
 
 跨层调用规则：只能调用相邻下层，不可跨层。
@@ -47,7 +49,7 @@ UI (Vue 3) → API (FastAPI) → Service → Domain (solver/) → Persistence (S
 ├─────────────────────────────────────────┤
 │  服务层 — 业务编排                       │
 ├─────────────────────────────────────────┤
-│  领域层 — 求解核心 (solver/)             │
+│  领域层 — 求解核心 (app/core/)            │
 │  RuleEvaluator / StateDelta /           │
 │  RAGBuilder / Scheduler                 │
 ├─────────────────────────────────────────┤
@@ -63,8 +65,8 @@ UI (Vue 3) → API (FastAPI) → Service → Domain (solver/) → Persistence (S
 |------|------|
 | **RuleEvaluator** | 所有 precond 匹配和 effect 应用的唯一入口，策略模式 |
 | **StateDelta** | 计算起点与目标的状态差 |
-| **RAGBuilder** | 状态差 → 工序 DAG（正向搜索 + 依赖补齐） |
-| **Scheduler** | 工序 DAG → 排程（CP-SAT，precedence + 资源约束） |
+| **RAGBuilder** | 目标事实 → 工序实例 DAG（POP 因果链、威胁消解与 re-provider 闭包） |
+| **Scheduler** | 工序 DAG → 排程（CP-SAT，依赖、多资源、日历和显式调整约束） |
 
 四个模块只通过数据结构通信，任一模块可独立替换。
 
@@ -88,8 +90,9 @@ UI (Vue 3) → API (FastAPI) → Service → Domain (solver/) → Persistence (S
   新参数必须有默认值，不传时行为与上版本完全一致。
 
 原则 5：阻塞语义不侵入 RAGBuilder
-  阻塞 = 往 current_state 注入 blockage_reason 特征。
-  RAGBuilder 只做通用规则匹配，维修序列是推导的自然结果。
+  策略 B/AB 通过 current_state 注入 blockage_reason，维修序列由规则自然推导。
+  策略 A 和普通计划调整由服务层向 Scheduler 提供显式约束。
+  RAGBuilder 只处理状态事实、规则、因果链与活动实例，不感知阻塞业务名。
 ```
 
 ---
@@ -117,14 +120,14 @@ UI (Vue 3) → API (FastAPI) → Service → Domain (solver/) → Persistence (S
   所有 precond 匹配和 effect 应用通过 RuleEvaluator 统一调用。
 
 约束 2：零侵入扩展
-  blockage_constraints=None 时，求解流程与上一版本完全相同。
+  不传 blockage、calendar 或 adjustment 可选上下文时，保持基础求解兼容行为。
 
 约束 3：状态不可变
   apply_effect() 返回新状态副本，不修改传入的 state 对象。
-  RAGBuilder 每次展开操作状态副本。
+  Planner 的状态回放和候选展开不得修改调用方输入状态。
 
 约束 4：阻塞语义不侵入 RAGBuilder
-  RAGBuilder 不感知"阻塞"概念，只做通用规则匹配。
+  RAGBuilder 不感知"阻塞"或"计划调整"概念，只处理通用规划事实与规则。
 ```
 
 ### 数据约束
@@ -181,8 +184,9 @@ UI (Vue 3) → API (FastAPI) → Service → Domain (solver/) → Persistence (S
 ```
 约束 14：领域层必须有单元测试
   每个 Operator / Effect 独立测试。
-  RAGBuilder 循环检测 + 深度限制测试。
+  POP 因果链、威胁消解、循环/搜索限制和 re-provider 必须有测试。
   策略A / 策略B / AB 三个场景集成测试。
+  计划调整约束编译、无解诊断和候选确认必须有集成测试。
   测试数据使用 pytest fixture。
 
 约束 15：验收测试
@@ -222,10 +226,14 @@ UI (Vue 3) → API (FastAPI) → Service → Domain (solver/) → Persistence (S
 | 关键路径 | RAG 中决定总工期的最长路径 |
 | 排程(schedule) | 为 RAG 中每个工序分配开始时间和资源 |
 | 阻塞(blockage) | 计划步骤因外部原因无法在预定时间执行 |
-| 策略A(活动提拉) | 阻塞步骤延后，无关步骤提前 |
-| 策略B(维修序列) | 匹配 is_repair=TRUE 规则插入 RAG |
+| 策略A(活动提拉) | 将阻塞步骤的 `not_before` 编译为显式排程约束，由 Scheduler 在保持其余活动尽量稳定的前提下重排 |
+| 策略B(维修序列) | 注入 `blockage_reason` 后匹配 `is_repair=TRUE` 规则，由 Planner 重新推导活动集合 |
 | 维修工序(repair op) | is_repair=TRUE，通过 blockage_reason 匹配触发 |
-| 版本链 | candidate_plan 通过 parent_plan_id 的父子关系 |
+| 计划族(plan family) | `plan_family` 归集同一计划的基线、候选和调整历史，并维护唯一当前基线 |
+| 基线计划(baseline) | 当前已确认、供后续调整继承的 `candidate_plan` |
+| 候选计划(candidate) | 试算产生但尚未确认的计划；确认后才能替换计划族基线 |
+| 版本链 | `candidate_plan.parent_plan_id` 表达父子来源，`plan_family` 表达同一业务计划的基线/候选集合 |
+| 计划调整(plan adjustment) | 对显式 `scope_step_ids` 应用时间、冻结、优先级或人工先后约束，先预览候选再确认基线 |
 | step_role | 版本对比中步骤的变化标注 (normal/repair/pulled_forward/delayed) |
 
 ### V0.3 术语分层补充（锁定）
@@ -238,7 +246,7 @@ V0.3 引入 Network Editor 后，“状态”需要区分求解器状态快照�
 | 状态维度 | `feature_key`；`StateFeatureDef` / `FeatureDefinition` | 描述状态事实的维度键。用户侧统一称“状态维度”；`StateFeatureDef` 表示机台类型内定义，`FeatureDefinition` 表示全局特征定义。 |
 | 状态本体 | `StateNode` / `state_node` | 全局唯一的业务状态定义，不直接携带层级所有权。 |
 | 原子状态 | `StateNode` 且非 `aggregate`，并具备可转换为事实的 `feature_key/operator/target_value` | 可判定的叶子状态事实；后续实现应统一原子状态判定口径，避免按 `feature_key`、`is_leaf`、`state_kind` 分散判断。 |
-| 状态包 | 聚合型 `StateNode` | 命名状态集合，按当前成员 AND 达成，可作为前置、上下文、声明输出或目标状态。 |
+| 状态包 | 聚合型 `StateNode` | 命名状态集合，按当前成员 AND 达成，可作为活动输入/输出绑定或目标状态。 |
 | 状态包成员引用 | `StateNodeReference` / `state_node_reference` | 表示同一状态本体出现在某个状态包中；删除引用不删除状态本体。 |
 | 引用实例 | `state_node_reference` 的图投影 / `reference_id` 图节点 | 状态包容器或画布中的一次显示实例，布局信息归实例所有，不污染状态本体。 |
 
@@ -246,7 +254,7 @@ V0.3 引入 Network Editor 后，“状态”需要区分求解器状态快照�
 
 | 规范业务名 | 技术名 / 表 | 含义与边界 |
 |------|------|------|
-| 虚拟活动 | `ActivityNode(level 1/2)` / `activity_node` | 组织、分解和声明上下文/输出的活动包，不直接参与求解器执行。 |
+| 虚拟活动 | `ActivityNode(level 1/2)` / `activity_node` | 只用于组织、分解和展示的活动包，不直接绑定状态或参与求解器执行。 |
 | 原子活动 | `AtomicActivity` / `atomic_activity` | 当前推荐的可复用可执行能力定义，通过规则和绑定进入求解。 |
 | 旧执行活动 | `ActivityNode(level 3)` | 历史兼容的可执行活动节点，仅用于旧数据兼容，不作为新增建模首选。 |
 | 工序规则 / 执行定义 | `OpRule` / `op_rule` | 求解器实际读取的可执行规则，包含 precondition、effect、duration 和资源需求。 |
@@ -283,6 +291,6 @@ TICKET_xxx.md   = 系统"工作令"   — 每次对话只做一件事
 ```
 
 深入参考文档（按需查阅，不作为每次会话必读）：
-- `docs/v0.2-spec.md` — V0.2 完整规格书（业务语义 + 数据模型 + 前端设计）
+- `docs/v0.2-spec.md` — V0.2 历史规格书（仅用于追溯，不作为当前实现契约）
 - `docs/protocols/` — 各模块实现协议（api.md / db.md / planner.md / scheduler.md）
 - `docs/archive/` — 已完成版本的历史归档

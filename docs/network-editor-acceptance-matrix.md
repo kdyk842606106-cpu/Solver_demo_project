@@ -1,10 +1,10 @@
 # 网络编辑器需求验收矩阵
 
-> 适用版本：V0.3 网络编辑器 MVP
+> 适用版本：V0.3 RC 网络编辑器
 > 来源：`docs/状态活动网络图编辑器_需求设计文档.md` 第 17 节 MVP 范围及第 12/13/14/16/19 节关键规则
-> 更新日期：2026-06-30
+> 更新日期：2026-07-16
 
-> 2026-06-25 决策更新：网络编辑器画板目标已切换为 X6 单白板画布。当前手写 DOM/SVG 状态-活动二部图壳子和“普通节点 + 容器外框”的展示方式仅作为历史过渡实现保留，后续需按主需求和主设计 spec 重构为 X6 单画布后重新验收前端画板项。
+> 2026-07-16 状态更新：X6 单白板画布、容器投影、嵌套自动布局、状态转移 relay/proxy 投影和统一提交均已落地。2026-06-25 关于“后续重构”的描述已完成，不再作为待办。
 
 > 2026-06-30 决策更新：TICKET-057 将普通业务入口从“活动层级 + 全量状态活动边”调整为默认 `状态转移` 视图。该视图是前端投影层 MVP，仍复用后端 `view_mode: "implementation"`、现有绑定语义和统一提交协议；旧全图通过测试/调试开关保留。
 
@@ -14,9 +14,9 @@
 | --- | --- | --- |
 | 状态树 | 已实现 | `NetworkEditorWorkspace.vue` 左侧状态树；`getStateNodes`；`buildHierarchyTree`。 |
 | 活动树 | 已实现 | `NetworkEditorWorkspace.vue` 左侧活动树；`getActivityNodes` / `getAtomicActivities` / `getActivityPackageAtomicRefs`；`buildActivityResourceTree` 会把二级包下原子活动引用显示为原子条目。 |
-| X6 单白板画布 | 待重构 | 目标画布为一个 X6 graph 实例，状态、状态引用、状态包容器、虚拟活动容器、原子活动和语义线共用同一坐标系；不再拆成左右两个图，也不再使用“高层普通节点 + 装饰容器外框”的旧展示。主需求文档和主设计 spec 已记录 X6 单画布目标；当前前端旧实现仍待替换。 |
-| 自由白板节点位置、容器尺寸与容器内部自由布局 | 部分实现，待 X6 重构 | 现有手写画板已通过布局手柄、容器移动、容器尺寸和 `network-editor/commit` 草稿提交验证了核心数据路径；最终验收需在 X6 单画布上重新证明：高层对象折叠时是节点、展开时同一对象切换为容器，状态包容器只收状态/引用实例，虚拟活动容器只收虚拟/原子活动，容器内部节点可自由拖动，拖动容器带动内部节点，拖动内部节点不拖动容器根对象。 |
-| 自动布局与节点防重叠 | 待迁移 | 旧自动整理按状态/活动分组排布；X6 重构后需改为单画布自动整理，按容器层级、已有坐标和关联关系给出建议布局，整理结果仍只进入布局草稿并通过统一提交持久化。 |
+| X6 单白板画布 | 已实现 | `NetworkEditorX6Canvas.vue` 使用单个 X6 graph 实例承载状态、引用实例、状态包/活动包容器、原子活动、relay 和语义边；普通业务入口默认显示状态转移投影，全图保留为调试入口。 |
+| 自由白板节点位置、容器尺寸与容器内部自由布局 | 已实现 | 节点、引用实例和容器布局统一进入草稿；状态包/活动包可展开为嵌套容器，容器整体移动会带动内部节点，内部节点可独立移动，取消编辑恢复已提交布局。 |
+| 自动布局与节点防重叠 | 已实现 | `networkEditorAutoLayout.js` 提供容器感知的自底向上 ELK 布局、深层边代理、宽容器压缩、relay 布局和失败回退；结果只进入布局草稿并通过统一提交持久化。 |
 | 预览模式 / 编辑模式切换 | 已实现 | 前端默认显示 `预览模式`；没有点击 `进入编辑` 时，页面只读取和预览已提交数据，不是半编辑态或自动保存态；只有点击 `进入编辑` 后才打开临时编辑会话，并启用新增、编辑、删除、连线、刷新覆盖、布局调整、容器尺寸调整和状态包成员维护；预览模式下这些入口禁用或隐藏并由函数入口二次拦截，状态包节点保留 `展开/折叠` 但不显示 `添加状态` 写入口，`queueDraftChange` 中心草稿入口也会拒绝非编辑态写入；提交成功、取消编辑、刷新或切换设备后结束编辑会话并回到预览模式；`frontend/e2e/tests/network-editor.spec.ts` 覆盖预览态只读、预览态展开/折叠、预览态隐藏状态包写入口、进入编辑后写入口启用、无草稿时统一提交禁用、取消编辑恢复预览和抽屉保存仅入草稿。 |
 | 编辑草稿、取消编辑、统一提交 | 已实现 | 前端 `draftChanges` 记录草稿并在左侧 `编辑草稿` 列表显示；用户进入编辑模式后才能编辑画板，单步保存、拖动、连线、刷新覆盖、自动整理和同步/分叉只进入草稿，不直接写库；`统一提交` 是编辑会话唯一写库动作，会先以 `allow_warnings=false` 调用 `network-editor/commit` 做提交预检，状态/活动层级环、引用环等结构性建模 error 会回滚并保留草稿；求解准备 error 和 warning 会弹出 `提交前复核`，列出最多 5 条中文问题摘要和建议，用户确认后再以 `allow_warnings=true` 正式保存；成功后清空草稿并回到预览模式；取消编辑和编辑态刷新都会用 `丢弃草稿 / 返回编辑` 确认，清空布局草稿并重新加载已提交图；`network-editor.spec.ts` 已收集取消编辑路径和“状态抽屉保存不触发 commit、点击统一提交才调用 `network-editor/commit`”用例。 |
 | 编辑会话基线与并发冲突 | 已实现 | `network-editor/graph` 返回内容 revision；前端进入编辑时记录 `base_revision`，统一提交时随草稿传给后端；后端提交前重新计算当前 revision，不一致则返回 409，草稿不应用，前端保留草稿并提示用户刷新或取消后重来。 |
@@ -39,7 +39,7 @@
 | 被复用状态包同步 / 分叉 | 已实现 | 修改已被其他状态包复用的状态包成员时弹出 `共享状态包修改确认`，并在确认前展示本次新增/移除成员、受影响状态包、保持不变的状态包、相关绑定数量和当前覆盖缺口；选择同步则直接修改共享状态包成员；选择分叉则提交 `state_package_fork`，分叉必须带分支名称和说明，后端统一提交会拒绝缺少名称或说明的请求；后端复制原状态包直接成员、创建分支，新增成员时加入新增/复用状态，移除成员时跳过被移除成员，并可替换当前使用方。 |
 | 折叠状态包节点摘要 | 已实现 | 画布状态包节点显示 `成员`、`深度`、`活动`、`覆盖 已覆盖/当前原子状态` 和绑定数量，覆盖成员数、深度、覆盖和关联活动摘要。 |
 | 虚拟活动与原子活动区分 | 已实现 | level 1/2 `activity_node` 为虚拟活动管理包，不允许直接绑定状态；`atomic_activity` 为原子活动，仅允许 `input` / `output` 绑定；前端绑定表单和后端 API 均按该角色矩阵拦截；solver-ready 视图隐藏虚拟活动。 |
-| 虚拟活动展开为容器 | 待 X6 重构 | 目标交互为虚拟活动折叠时显示为节点，展开时同一对象切换为 X6 容器；容器内部只显示子虚拟活动和原子活动，不接纳上下文或输出状态。当前 `virtualActivityContainers` 属于历史过渡实现。 |
+| 虚拟活动展开为容器 | 已实现 | 虚拟活动折叠为 X6 节点，展开后投影为活动容器；容器内部仅显示子虚拟活动和原子活动，不接纳状态。历史 `context_input/declared_output` 仅兼容展示。 |
 | 虚拟活动专注画布入口 | 已实现 | 虚拟活动节点显示 `专注` 入口并支持双击进入；预览模式下也可进入专注画布查看层级上下文，但不打开编辑会话、不产生草稿；进入后设置 `activity_scope_node_ids` 和完整活动展开深度，顶部专注条显示活动面包屑；虚拟活动容器在专注画布中仍只显示活动节点，不接纳输入或输出状态；一级/二级虚拟活动在编辑模式下分别提供内部 `子活动` / `原子` 创建入口。 |
 | 状态包绑定 | 已实现 | `activity_state_binding.binding_type = state_package`；聚合状态绑定投影为状态包。 |
 | 状态包覆盖快照 | 已实现 | `covered_leaf_state_ids`、`coverage_policy=snapshot`、`coverage_status`。 |
@@ -129,20 +129,11 @@
 
 ## 6. 当前验证
 
-- `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium --grep "state-transition"` — 1 passed，覆盖默认 `状态转移` 视图隐藏活动节点、状态卡显示达成活动、选中目标状态后展开达成活动、右侧移除已有前置状态、追加状态包前置状态和选择备用达成活动，并验证统一提交 payload 中分别生成 `delete`、`input` 与 `output` 绑定草稿。
-- `npm.cmd run test:e2e -- network-editor.spec.ts --project=chromium` — 20 passed，覆盖默认状态转移视图以及既有网络编辑器回归。
-- `npm.cmd run test:e2e -- network-editor-full-flow.spec.ts --project=chromium` — 3 passed，覆盖测试/调试全图开关下的完整节点创建、右键创建、平移、连线和容器投影回归。
-- `npm.cmd run build` — passed，仅有既有 Vite chunk-size warning。
-- `.venv\Scripts\python.exe -m pytest tests/integration/test_master_data_api.py -k network_editor -q` — 5 passed，覆盖新建活动节点/活动包后用 draft ref 添加已有原子活动引用，并在 graph reload 中投影到新活动包下。
-- `python -m pytest tests\integration\test_layered_activity_state_api.py::test_network_editor_unified_commit_batches_changes_and_rolls_back -q` — 1 passed，覆盖统一提交 rollback、布局 metadata 持久化、重复状态复用引用、引用实例独立布局、聚焦状态包时语义边重定向到引用实例端点、状态包分叉新增/移除成员、分叉名称/说明必填、新建虚拟活动自动连线、新建原子活动同批规则/连线和编辑基线冲突 409 不落库。
-- `python -m pytest tests\integration\test_layered_activity_state_api.py -q` — 20 passed。
-- `python -m pytest tests\integration\test_scenario_import_api.py -q` — 9 passed。
-- `python -m py_compile app\services\network_editor.py app\api\v1\master_data.py app\db\schemas.py` — passed。
-- `python -m py_compile app\main.py scripts\serve_frontend_dist_proxy.py` — passed。
-- TestClient smoke — `/`、`/frontend/network-editor` 返回 `frontend/dist` 入口，`/assets/index-*.js` 返回 200。
-- `npm run build` — passed，仅有既有 Vite chunk-size warning；一次性提交状态机复核、端口拖放确认、语义线中文标签、汇总线点击展开和 details-only 问题定位兜底补强后重新通过。
-- `npm run test:e2e -- network-editor.spec.ts --project=chromium` — 8 passed，覆盖历史手写 DOM/SVG 画板的预览只读、预览态展开/折叠、虚拟活动专注预览、取消编辑、统一提交、容器移动、容器隔离、汇总线和中文语义线；该结果证明既有业务流和草稿/提交路径可用，但不等同于 X6 单画布最终验收。
-- 本轮未重新执行全量 `python -m pytest -q`。
+- 2026-07-16 后端全量：`.venv\Scripts\python.exe -m pytest -q` — 365 passed。
+- 2026-07-16 Chromium 全量：86 passed；其中网络编辑器两个 spec 共收集并通过 67 条用例。
+- 网络编辑器覆盖状态转移 relay/proxy、状态包 coverage、嵌套容器、ELK 自动布局与回退、预览/编辑状态机、统一提交、引用复用、状态创建和完整全图建模流。
+- `npm.cmd run build` — passed，仅保留既有 Vite chunk-size warning。
+- `python scripts/check_terminology.py` 与 `git diff --check` — passed。
 
 ## 7. 证据索引
 
@@ -150,32 +141,16 @@
 
 | 证据主题 | 文件锚点 |
 | --- | --- |
-| 状态包成员 / 活动包校验 | `app/api/v1/master_data.py:515` `_validate_state_parent`; `app/api/v1/master_data.py:790` `_validate_state_reference`; `app/api/v1/master_data.py:836` `_resolve_binding_payload`。 |
-| 状态包成员引用 API 与布局更新 | `app/db/schemas.py:520` `StateNodeReferenceUpdate`; `app/api/v1/master_data.py:2323` list; `app/api/v1/master_data.py:2346` create; `app/api/v1/master_data.py:2369` update; `app/api/v1/master_data.py:2977` draft apply。 |
-| 活动-状态绑定 API | `app/api/v1/master_data.py:2394` list; `app/api/v1/master_data.py:2418` create; `app/api/v1/master_data.py:2449` update。 |
-| 统一提交 API 与草稿模型 | `app/db/schemas.py:862` `NetworkEditorDraftChange`; `app/db/schemas.py:873` `NetworkEditorCommitRequest`; `app/api/v1/master_data.py:3151` `commit_network_editor_draft`。 |
-| 状态包分叉统一提交 | `app/api/v1/master_data.py:2833` `_create_state_package_fork`; `app/api/v1/master_data.py:3090` draft dispatch。 |
-| 图投影 / 深度过滤 / 引用实例端点投影 | `app/services/network_editor.py:212` `_state_node_id_from_graph_id`; `app/services/network_editor.py:896` `_filter_graph`; `app/services/network_editor.py:1149` 引用实例统计；`app/services/network_editor.py:1193` `_build_graph_from_context`。 |
-| 图预检与 canonical 端点校验 | `app/services/network_editor.py:1561` `_validate_projected_graph`; `app/services/network_editor.py:1604` / `1610` 使用 `canonical_source_id` / `canonical_target_id` 回到真实状态语义。 |
-| 影响分析 | `app/services/network_editor.py:2318` `analyze_network_editor_impact`; `frontend/src/views/DataManagement/NetworkEditorWorkspace.vue` 的 `selectedImpact` / `impactHighlights` / `isImpactEdge`; `frontend/src/api/masterData.js` `analyzeNetworkEditorImpact`。 |
-| 求解预检、聚合规则、虚拟 group 元数据 | `app/services/network_editor.py:2876` `precheck_network_editor_solver`; `app/db/schemas.py:966` `NetworkEditorSolverPrecheckResponse`。 |
-| 前端预览 / 编辑模式与草稿队列 | `frontend/src/views/DataManagement/NetworkEditorWorkspace.vue` 的 `data-testid="network-editor-enter-edit"` / `network-editor-submit-draft`; `queueDraftChange`; `startEditSession`; `submitDraftChanges`; `commitNetworkEditorDraft`。 |
-| 主设计冻结文档一次性提交口径 | `docs/superpowers/specs/2026-06-23-state-activity-network-editor-design.md` 的 `Unified Edit Commit`、`Page state machine` 和设计冻结验收标准，明确默认预览、进入编辑后草稿化、取消丢弃、统一提交写库。 |
-| X6 单画布重构目标 | `docs/状态活动网络图编辑器_需求设计文档.md` 的 `X6 单画布原则`；`docs/superpowers/specs/2026-06-23-state-activity-network-editor-design.md` 的 `X6 Canvas Refactor`。 |
-| 历史前端状态包 / 虚拟活动容器实现 | `frontend/src/views/DataManagement/NetworkEditorWorkspace.vue` 的 `statePackageContainers`; `virtualActivityContainers`; `startContainerMove`; `queueNodeLayoutChange`; 容器尺寸 `containerResize` 流程；后续将被 X6 单画布实现替换。 |
-| 历史前端自由白板布局与自动整理 | `frontend/src/views/DataManagement/NetworkEditorWorkspace.vue` 的画布空白双击入口、状态包容器空白双击入口、`queueNodeLayoutChange`、`autoArrangeCanvas`、`startContainerMove` 和容器缩放流程；后续需迁移为 X6 graph 事件和 draft bridge。 |
-| 前端虚拟活动专注画布 | `frontend/src/views/DataManagement/NetworkEditorWorkspace.vue` 的 `focusedActivityCanvas`; `enterActivityFocus`; `enterActivityFocusById`; `frontend/e2e/tests/network-editor.spec.ts` 预览态专注画布回归。 |
-| 前端重复状态复用与同步/分叉对话 | `frontend/src/views/DataManagement/NetworkEditorWorkspace.vue` 的 `data-testid="network-editor-duplicate-state-dialog"`; `openDuplicateStateDialog`; `findDuplicateStateCandidates`; `packageChangeDecision`; `state_package_fork` 草稿入队。 |
-| 前端局部展开 / 折叠 | `frontend/src/views/DataManagement/NetworkEditorWorkspace.vue` 的状态包 `展开 / 折叠` 节点入口、虚拟活动 `展开 / 折叠` 节点入口和对应展开深度更新函数；`frontend/e2e/tests/network-editor.spec.ts` 预览态展开/折叠回归。 |
-| 前端问题定位、规则跳转与覆盖刷新 | `frontend/src/views/DataManagement/NetworkEditorWorkspace.vue` 的 `inspectIssue`; `openRuleMaintenance`; `refreshIssueCoverage`; `refreshSelectedCoverage`; 问题表 `定位` / `规则` / `刷新` test id。 |
-| 前端求解预检入口 | `frontend/src/views/DataManagement/NetworkEditorWorkspace.vue` 的 `data-testid="network-editor-solver-precheck"`; `solverPrecheckPayload`; `runSolverPrecheck`; `frontend/src/api/masterData.js` `precheckNetworkEditorSolver`。 |
-| 前端预览/编辑与语义线浏览器回归 | `frontend/e2e/tests/network-editor.spec.ts`；当前完整浏览器执行 8 passed，覆盖预览只读、预览态展开/折叠、虚拟活动专注预览、details-only 问题定位、取消编辑丢弃草稿、抽屉保存仅入草稿且统一提交才调用 commit、容器内部节点自由拖动、容器整体移动、汇总线点击展开和语义线中文标签。 |
-| 网络编辑器统一提交回归 | `tests/integration/test_layered_activity_state_api.py:2073` `test_network_editor_unified_commit_batches_changes_and_rolls_back`。 |
-| 状态包成员引用约束回归 | `tests/integration/test_layered_activity_state_api.py:2905` `test_network_editor_state_references_validate_constraints`。 |
-| 图投影 / 校验 / 求解预检回归 | `tests/integration/test_layered_activity_state_api.py:3613` `test_network_editor_graph_validation_and_solver_precheck`。 |
-| 停用 legacy rule 默认排除回归 | `tests/integration/test_layered_activity_state_api.py:4509`。 |
-| 停用原子状态事实默认求解交接过滤回归 | `tests/integration/test_layered_activity_state_api.py:4616`。 |
-| 停用活动包引用默认 owner 过滤回归 | `tests/integration/test_layered_activity_state_api.py:4765`。 |
+| 状态包成员、引用和绑定校验 | `app/api/v1/master_data.py` 的 `_validate_state_parent`、`_validate_state_reference`、`_resolve_binding_payload`。 |
+| 草稿模型与统一提交 | `app/db/schemas.py` 的 `NetworkEditorDraftChange` / `NetworkEditorCommitRequest`；`app/api/v1/master_data.py` 的 `commit_network_editor_draft` 与 `_create_state_package_fork`。 |
+| 图投影、深度过滤与 canonical 端点 | `app/services/network_editor.py` 的 `_filter_graph`、`_build_graph_from_context`、`_validate_projected_graph`。 |
+| 影响分析与求解预检 | `app/services/network_editor.py` 的 `analyze_network_editor_impact`、`precheck_network_editor_solver`；`app/db/schemas.py` 的 `NetworkEditorSolverPrecheckResponse`。 |
+| 前端预览/编辑与草稿队列 | `frontend/src/views/DataManagement/NetworkEditorWorkspace.vue` 的 `startEditSession`、`queueDraftChange`、`submitDraftChanges` 及稳定 `data-testid`。 |
+| X6 单画布与容器投影 | `frontend/src/views/DataManagement/components/NetworkEditorX6Canvas.vue`；`NetworkEditorWorkspace.vue` 的 cell 投影和布局草稿桥接。 |
+| 容器感知自动布局 | `frontend/src/views/DataManagement/networkEditorAutoLayout.js` 的嵌套布局、深层边代理、容器尺寸、relay 和失败回退。 |
+| 网络编辑器后端集成回归 | `tests/integration/test_master_data_api.py` 中 8 条 `test_network_editor_*` 用例，覆盖加载、深度过滤、统一提交、draft ref、ID 归一化、revision 冲突、复核回滚和模板状态复用。 |
+| 网络编辑器浏览器回归 | `frontend/e2e/tests/network-editor.spec.ts` 与 `network-editor-full-flow.spec.ts`；共 67 条并包含在 86 passed 的 Chromium 全量回归中。 |
+| 当前需求与操作说明 | `docs/状态活动网络图编辑器_需求设计文档.md`、`docs/network-editor-user-guide.md`；历史设计冻结材料仅用于追溯。 |
 
 ## 8. 关键设计结论逐条覆盖审计
 
@@ -200,8 +175,8 @@
 | 15 | 新增状态包成员后，原有状态包绑定不自动覆盖新增成员 | 旧覆盖保持快照，新增成员后状态变为 `stale/partial`，需刷新覆盖。 |
 | 16 | 状态包绑定需要记录覆盖快照 | 模型、API、前端覆盖面板和测试均覆盖 `coverage_status` / `covered_leaf_state_ids`。 |
 | 17 | 默认折叠高层节点，支持任意层级展开/收起 | 默认 `状态深度=1`、`活动深度=2`，支持聚焦、折叠、展开一层、展开全部。 |
-| 18 | 展开状态包时容器只包含状态引用实例 | 最终验收以 X6 容器为准：状态包折叠为节点，展开为同一对象的容器形态，内部只允许状态节点和状态引用实例；当前 `statePackageContainers` 只是历史过渡证据。 |
-| 19 | 展开虚拟活动时容器只包含子虚拟活动和原子活动 | 最终验收以 X6 容器为准：虚拟活动折叠为节点，展开为同一对象的容器形态，内部只允许虚拟活动和原子活动；上下文和声明输出状态不得进入容器。 |
+| 18 | 展开状态包时容器只包含状态引用实例 | X6 状态包折叠为节点、展开为容器，内部只投影状态节点和引用实例；嵌套展开、引用布局和折叠恢复已有浏览器回归。 |
+| 19 | 展开虚拟活动时容器只包含子虚拟活动和原子活动 | X6 活动容器内部只投影子虚拟活动和原子活动；上下文和声明输出状态不进入容器。 |
 | 20 | 支持状态和活动完全同步 | `loadAll` 同步加载状态、活动、原子活动、引用、绑定和规则，提交成功后重新投影。 |
 | 21 | 支持全局自由布局、容器内部自由布局、局部坐标保存和自动整理 | 节点布局、容器尺寸、容器整体移动、引用实例布局和 `自动整理` 均进入草稿后统一提交；浏览器回归验证状态包/虚拟活动容器移动时内部节点跟随，也验证展开状态包内部状态和展开虚拟活动内部原子活动可单独拖动且不拖走容器根节点。 |
 | 22 | 状态包成员关系和活动归属不通过业务连线表达 | 成员关系由 `state_node_reference` / 容器 / 资源树 / 属性区表达；业务线只表达状态-活动依赖。 |
@@ -220,7 +195,7 @@
 | 35 | 修改已被引用状态包成员时必须选择同步或分叉 | `共享状态包修改确认` 和后端 `state_package_fork` 约束覆盖。 |
 | 36 | 同步影响所有引用方；分叉创建分支并保持其他引用方不变 | 分叉复制成员、替换当前使用方引用，其他引用方保持原包；回归覆盖新增/移除。 |
 | 37 | 默认预览只读；进入编辑后所有变更进入草稿 | `canMutate`、`requireEditMode` 和 `queueDraftChange` 中心入口覆盖。 |
-| 38 | 统一提交写库；取消编辑丢弃草稿 | `network-editor/commit` 批量提交；取消/刷新/切换设备回到预览并清草稿；浏览器用例覆盖布局草稿取消后恢复已提交位置，并断言状态抽屉 `保存` 只进入草稿、不触发 commit，点击顶部 `统一提交` 后才发送唯一一次 `network-editor/commit` 请求；这些路径已随当前 8 条 Playwright 用例完整执行通过。 |
+| 38 | 统一提交写库；取消编辑丢弃草稿 | `network-editor/commit` 批量提交；取消/刷新/切换设备回到预览并清草稿；当前网络编辑器 67 条浏览器用例覆盖布局取消恢复、抽屉保存只入草稿及统一提交唯一写库。 |
 | 39 | 不导出独立数据文件，提交后由既有数据库接口读取 | 页面无下载 JSON/模板入口；旧 export-preview 仅兼容别名；求解预检只给摘要。 |
 | 40 | 需要建模校验和求解器准备校验两套机制 | `network-editor/validate` 同时返回 `modeling_issues` 与 `solver_ready_issues`，提交前按结构性问题和求解准备问题分流。 |
 | 41 | 新增用户可见术语必须先进入术语映射表 | 术语规范以 `docs/ANCHOR.md` 的 V0.3 术语分层和主需求文档“术语与技术名映射”为准；新增中文业务名、旧口径兼容名或技术名外显前，必须补充规范业务名、技术名、旧名/别名和适用边界；提交前运行 `python scripts/check_terminology.py`，确认旧口径未回流。 |

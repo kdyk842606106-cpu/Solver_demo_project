@@ -1,5 +1,7 @@
 # 泵体机械集成场景 · 需求与业务场景总结
 
+> **文档状态**：业务需求基线，不是当前代码清单。V0.3 RC 的已实现范围与接口请参阅 `docs/STATE_V0.3.md` 和 `docs/protocols/`。
+
 > 版本：V2.0（最终架构）
 > 生成时间：2026-04-24
 > 关联项目：Solver Demo Project V0.3 Planner + Scheduler 架构
