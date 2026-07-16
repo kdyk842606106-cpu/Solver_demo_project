@@ -304,6 +304,22 @@ pytest tests/integration -v
 pytest tests/e2e -v
 ```
 
+## 发布 Windows 验证机 RC
+
+发布包由白名单脚本生成，不包含 `.env`、数据库、日志、虚拟环境、依赖缓存或历史 ZIP。发布前必须先提交前端生产构建产物，并保持 Git 工作区干净：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy\scripts\package_release.ps1 -Version 0.3.0-rc.1
+```
+
+脚本默认执行后端全量测试、部署就绪检查、Chromium 回归和 Vite 生产构建，然后在 `release/` 生成 ZIP、SHA-256 和发布说明。验证机升级时先用 `pg_dump -Fc` 备份数据库，将现有 `.env` 复制到解压后的新版本目录，再运行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy\scripts\install_verify.ps1 -ExpectedCommit <发布提交的完整 SHA>
+```
+
+只有安装验证通过后才为同一提交创建 annotated Git Tag。RC 发布不触发 STATE/TICKET 归档或版本切换。
+
 ## 相关文档
 
 - [`docs/ANCHOR.md`](./docs/ANCHOR.md) — 系统永久约束与架构原则

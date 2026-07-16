@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="State-Driven Process Planning + Resource Optimization System",
     description="API for process planning and resource optimization",
-    version="0.1.0",
+    version=get_release_info()["app_version"],
     lifespan=lifespan,
 )
 

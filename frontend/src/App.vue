@@ -3,7 +3,7 @@
     <el-header class="header">
       <div class="header-left">
         <span class="title">工艺规划与资源优化系统</span>
-        <span class="subtitle">集成计划求解引擎 V0.3</span>
+        <span class="subtitle">集成计划求解引擎 {{ buildVersion }}</span>
       </div>
       <div class="header-right">
         <el-tag :type="healthOk ? 'success' : 'danger'" effect="light">
@@ -50,6 +50,7 @@ import { getHealth } from './api/system'
 const currentView = ref('data')
 const healthOk = ref(false)
 const version = ref('')
+const buildVersion = `v${import.meta.env.VITE_APP_VERSION || 'dev'}`
 
 async function checkHealth() {
   try {
