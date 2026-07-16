@@ -21,18 +21,26 @@ The DB layer provides:
 - `op_rule_effect`
 - `op_rule_resource_req`
 - `resource`
+- `work_calendar`
+- `work_calendar_revision`
+- `machine_state_dimension_calendar`
+- `feature_definition`
 - `activity_node`
 - `state_node`
+- `state_node_reference`
+- `activity_state_binding`
 - `scope_guard`
 - `scope_guard_precond`
 - `atomic_activity`
 - `activity_package_atomic_ref`
 - `maintenance_intent_template`
 - `solve_request`
+- `plan_family`
 - `candidate_plan`
 - `candidate_plan_step`
 - `schedule_result`
 - `blockage_event`
+- `plan_adjustment`
 
 ## `solve_request`
 
@@ -74,6 +82,9 @@ Important fields:
 - `status`
 
 Current `search_method` is `partial_order`.
+
+Historical rows may retain `forward_bfs`; this is a compatibility value, not a
+runtime strategy selector.
 
 ## `candidate_plan_step`
 
@@ -130,6 +141,27 @@ multi-resource fields:
 - `resource_type`
 - `resource_reqs`
 - `resources`
+
+## Work Calendar Persistence
+
+- `work_calendar` stores calendar identity and the single active system-default
+  marker.
+- `work_calendar_revision` stores immutable weekly windows, exceptions, shift
+  metadata, and revision fingerprints used by solve snapshots.
+- `machine_state_dimension_calendar` maps machine state dimensions to calendars;
+  machine-level default policy is stored on `machine`.
+- Calendar-aware solve results persist resolved revision and segment metadata so
+  replay does not drift when master data changes.
+
+## Plan Families and Adjustments
+
+- `plan_family` owns one current baseline plan and groups its candidates.
+- `candidate_plan.plan_family_id` and lifecycle status distinguish baseline and
+  unconfirmed candidate snapshots.
+- `plan_adjustment` stores scope step ids, normalized constraints, inherited
+  constraint removals, preview diagnostics, candidate linkage, and draft state.
+- Confirming an adjustment atomically promotes its candidate to family baseline;
+  sibling drafts become stale.
 
 ## Constraints
 

@@ -1,9 +1,7 @@
-"""
-State transition execution module.
+"""Deprecated state-transition wrappers retained for compatibility tests.
 
-This module provides functions for:
-- Applying operation effects to states
-- Previewing effects without modifying state
+Production planner evaluation delegates directly to :class:`RuleEvaluator`.
+These helpers remain importable for historical callers and regression coverage.
 """
 
 from typing import Any

@@ -27,5 +27,3 @@ export const confirmPlanAdjustment = (adjustmentId) =>
   http.post(`/plan-adjustments/${adjustmentId}/confirm`)
 export const cancelPlanAdjustment = (adjustmentId) =>
   http.post(`/plan-adjustments/${adjustmentId}/cancel`)
-export const getPlanAdjustments = (planId) =>
-  http.get(`/plans/${planId}/adjustments`)

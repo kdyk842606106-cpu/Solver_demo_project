@@ -1,5 +1,7 @@
 # Solver Requirements Gap Report
 
+> **历史差距报告（非当前实现契约）**：本文保留各阶段评估结论用于追溯，其中关于 `forward_bfs` 主路径、单资源 Scheduler 和旧页面入口的描述均可能已过时。当前状态以 `docs/STATE_V0.3.md` 与 `docs/protocols/` 为准。
+
 > Update 2026-06-02: The previous gap around `sub` / `reset` and effect-driven repeated activity re-provider has been closed for the current POP path. Current status is documented in `docs/STATE_V0.3.md` and `docs/protocols/planner.md`; older paragraphs in this report remain historical gap-analysis context unless explicitly marked otherwise.
 
 > 创建时间：2026-04-25

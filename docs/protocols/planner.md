@@ -49,7 +49,16 @@ Persists the RAG to:
 ## Main Strategy: Partial Order Planner
 
 The planner no longer uses `forward_bfs` as the `build_rag()` main path.
-`bfs.py` is retained as a historical implementation and regression reference.
+The following modules are deprecated compatibility surfaces and are not called
+by the production planner path:
+
+- `bfs.py`: historical forward-BFS implementation.
+- `numeric.py`: historical standalone numeric planner; POP now handles numeric
+  repeated steps and re-provider closure.
+- `executor.py`: historical state-transition wrappers around `RuleEvaluator`.
+
+They remain importable for focused regression tests and old internal callers.
+New planner behavior must use POP and the canonical `RuleEvaluator` path.
 
 Current POP flow:
 

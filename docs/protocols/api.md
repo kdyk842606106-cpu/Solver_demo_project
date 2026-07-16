@@ -32,8 +32,23 @@
 | `POST` | `/api/v1/solve/layered` | 从分层状态目标和活动范围发起一次联合求解 |
 | `POST` | `/api/v1/solve/maintenance` | 从维护意图模板发起一次联合维护求解 |
 | `GET` | `/api/v1/solve-requests/{request_id}` | 查询求解请求及排程结果 |
+| `GET` | `/api/v1/system/status` | 查询迁移版本、数据库准备状态与部署诊断 |
 | `GET` | `/api/v1/machines/{machine_id}/state` | 查询机台最近的当前状态 |
 | `GET` | `/api/v1/machines/{machine_id}/states` | 列出机台全部可选状态 |
+| `GET` | `/api/v1/plans/{plan_id}/versions` | 查询计划版本链 |
+| `GET` | `/api/v1/plans/{plan_id}/diff/{other_plan_id}` | 查询两个计划的步骤级差异 |
+| `POST` | `/api/v1/plans/{plan_id}/adjustments` | 创建计划调整草稿 |
+| `GET` | `/api/v1/plans/{plan_id}/adjustments` | 查询计划族的调整记录 |
+| `GET/PATCH` | `/api/v1/plan-adjustments/{adjustment_id}` | 读取或更新调整草稿 |
+| `POST` | `/api/v1/plan-adjustments/{adjustment_id}/preview` | 生成调整候选并返回差异与诊断 |
+| `POST` | `/api/v1/plan-adjustments/{adjustment_id}/confirm` | 确认候选并切换计划族基线 |
+| `POST` | `/api/v1/plan-adjustments/{adjustment_id}/cancel` | 取消调整草稿 |
+| `GET/POST` | `/api/v1/work-calendars` | 查询或创建工作日历 |
+| `GET/PUT/DELETE` | `/api/v1/work-calendars/{calendar_id}` | 读取、更新或停用工作日历 |
+| `GET` | `/api/v1/work-calendars/{calendar_id}/revisions` | 查询日历修订历史 |
+| `POST` | `/api/v1/work-calendars/{calendar_id}/preview` | 编译并预览日历窗口 |
+| `POST` | `/api/v1/work-calendars/{calendar_id}/set-default` | 设置唯一系统默认日历 |
+| `GET/PUT` | `/api/v1/machines/{machine_id}/calendar-policy` | 查询或更新机器日历策略 |
 | `POST` | `/api/v1/imports/scenario` | 业务场景 Excel dry-run / strict upsert 导入 |
 | `GET` | `/api/v1/imports/scenario-template` | 下载业务场景 Excel 模板 |
 | `GET` | `/health` | 健康检查 |

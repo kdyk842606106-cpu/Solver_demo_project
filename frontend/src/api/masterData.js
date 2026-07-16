@@ -54,11 +54,7 @@ export const updateFeatureDef = (id, data) => http.put(`/feature-defs/${id}`, da
 export const deleteFeatureDef = (id) => http.delete(`/feature-defs/${id}`)
 
 // ── Feature Definitions (global feature_definition table) ────
-export const getFeatureDefinitions = () => http.get('/features')
 export const getBlockageReasons = () => http.get('/features/blockage-reasons')
-export const createFeatureDefinition = (data) => http.post('/features', data)
-export const updateFeatureDefinition = (key, data) => http.put(`/features/${key}`, data)
-export const deleteFeatureDefinition = (key) => http.delete(`/features/${key}`)
 
 // ── Layered Activity Nodes ──────────────────────────────────
 export const getActivityNodes = (machineTypeId) =>
@@ -90,14 +86,6 @@ export const createStateNode = (machineTypeId, data) =>
 export const updateStateNode = (id, data) => http.put(`/state-nodes/${id}`, data)
 export const deleteStateNode = (id) => http.delete(`/state-nodes/${id}`)
 
-// ── Scope Guards ────────────────────────────────────────────
-export const getScopeGuards = (activityNodeId) =>
-  http.get(`/activity-nodes/${activityNodeId}/scope-guards`)
-export const createScopeGuard = (activityNodeId, data) =>
-  http.post(`/activity-nodes/${activityNodeId}/scope-guards`, data)
-export const updateScopeGuard = (id, data) => http.put(`/scope-guards/${id}`, data)
-export const deleteScopeGuard = (id) => http.delete(`/scope-guards/${id}`)
-
 // ── Layered Expansion Preview ───────────────────────────────
 export const previewLayeredExpansion = (machineTypeId, data) =>
   http.post(`/machine-types/${machineTypeId}/layered-expansion`, data)
@@ -107,12 +95,6 @@ export const checkLayeredHealth = (machineTypeId, data) =>
 
 export const getMaintenanceIntentTemplates = (machineTypeId, params = {}) =>
   http.get(`/machine-types/${machineTypeId}/maintenance-intent-templates`, { params })
-export const createMaintenanceIntentTemplate = (machineTypeId, data) =>
-  http.post(`/machine-types/${machineTypeId}/maintenance-intent-templates`, data)
-export const updateMaintenanceIntentTemplate = (id, data) =>
-  http.put(`/maintenance-intent-templates/${id}`, data)
-export const deleteMaintenanceIntentTemplate = (id) =>
-  http.delete(`/maintenance-intent-templates/${id}`)
 
 // ── Machine States ────────────────────────────────────────────
 export const getStates = (machineId) => http.get(`/machines/${machineId}/states`)
@@ -127,7 +109,6 @@ export const getOpRules = (machineTypeId) =>
 export const createOpRule = (machineTypeId, data) =>
   http.post(`/machine-types/${machineTypeId}/op-rules`, data)
 export const updateOpRule = (id, data) => http.put(`/op-rules/${id}`, data)
-export const deleteOpRule = (id) => http.delete(`/op-rules/${id}`)
 
 // ── Resources ─────────────────────────────────────────────────
 export const getResources = (machineId, params = {}) =>
@@ -140,8 +121,6 @@ export const deleteResource = (id) => http.delete(`/resources/${id}`)
 export const getWorkCalendars = () => http.get('/work-calendars')
 export const createWorkCalendar = (data) => http.post('/work-calendars', data)
 export const updateWorkCalendar = (id, data) => http.put(`/work-calendars/${id}`, data)
-export const deactivateWorkCalendar = (id) => http.delete(`/work-calendars/${id}`)
-export const previewWorkCalendar = (id, data) => http.post(`/work-calendars/${id}/preview`, data)
 export const setSystemDefaultWorkCalendar = (id) => http.post(`/work-calendars/${id}/set-default`)
 export const getMachineCalendarPolicy = (machineId) => http.get(`/machines/${machineId}/calendar-policy`)
 export const updateMachineCalendarPolicy = (machineId, data) =>
@@ -165,19 +144,9 @@ export const downloadScenarioTemplate = () =>
 // Network editor references and bindings
 export const getStateNodeReferences = (machineTypeId) =>
   http.get(`/machine-types/${machineTypeId}/state-node-references`)
-export const createStateNodeReference = (stateNodeId, data) =>
-  http.post(`/state-nodes/${stateNodeId}/references`, data)
-export const deleteStateNodeReference = (id) => http.delete(`/state-node-references/${id}`)
 
 export const getActivityStateBindings = (machineTypeId) =>
   http.get(`/machine-types/${machineTypeId}/activity-state-bindings`)
-export const createActivityStateBinding = (data) =>
-  http.post('/activity-state-bindings', data)
-export const updateActivityStateBinding = (id, data) =>
-  http.put(`/activity-state-bindings/${id}`, data)
-export const deleteActivityStateBinding = (id) => http.delete(`/activity-state-bindings/${id}`)
-export const refreshActivityStateBindingCoverage = (id) =>
-  http.post(`/activity-state-bindings/${id}/refresh-coverage`)
 export const previewNetworkEditorGraph = (machineTypeId, data) =>
   http.post(`/machine-types/${machineTypeId}/network-editor/graph`, data)
 export const validateNetworkEditor = (machineTypeId, data) =>

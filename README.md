@@ -3,6 +3,8 @@
 基于 FastAPI + PostgreSQL + OR-Tools 的两阶段求解系统：Planner 构建 RAG（状态推导有向无环图），Scheduler 基于 RAG + 资源约束做 CP-SAT 最优排程。
 
 > **AI 开发上下文**：请先阅读 [`docs/ANCHOR.md`](./docs/ANCHOR.md)、当前 [`docs/STATE_V0.3.md`](./docs/STATE_V0.3.md)，再阅读最新 `docs/TICKET_*.md`。旧 `CONTEXT` 入口已归档到 `docs/archive/cleanup_20260529/outdated_notes/`。
+>
+> **当前发布基线**：V0.3 RC（`v0.3.0-rc.1`）。当前实现契约以 STATE 与 [`docs/protocols/`](./docs/protocols/README.md) 为准；V0.2 规格和 gap report 仅用于历史追溯。
 
 ## 环境准备
 
@@ -51,6 +53,8 @@ alembic upgrade head
 ```bash
 python scripts/load_seed_data.py --file seeds/001_initial_data.sql
 python scripts/load_seed_data.py --file seeds/002_expanded_data.sql
+python scripts/load_seed_data.py --file seeds/003_v0.2_seed_data.sql
+python scripts/load_seed_data.py --file seeds/008_aircraft_final_assembly_10000_seed.sql
 ```
 
 ### 7. 启动后端
@@ -88,7 +92,7 @@ npm run preview:api -- --backend http://127.0.0.1:8012 --port 8013
 - 等待数据库就绪
 - 测试数据库连接
 - 执行迁移
-- 加载两份种子数据
+- 加载 `001/002/003/008` 基础种子数据
 - 启动后端服务
 - 打开 `frontend/index.html`
 
@@ -142,6 +146,7 @@ alembic upgrade head
 python scripts/load_seed_data.py --file seeds/001_initial_data.sql
 python scripts/load_seed_data.py --file seeds/002_expanded_data.sql
 python scripts/load_seed_data.py --file seeds/003_v0.2_seed_data.sql
+python scripts/load_seed_data.py --file seeds/008_aircraft_final_assembly_10000_seed.sql
 ```
 
 ### 4. 启动服务
@@ -326,5 +331,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy\scripts\install_ver
 - [`docs/STATE_V0.3.md`](./docs/STATE_V0.3.md) — 当前版本状态账本
 - `docs/TICKET_*.md` — 当前/历史任务工单
 - `docs/archive/cleanup_20260529/outdated_notes/` — 已归档的旧上下文入口与过期临时说明
-- [`docs/v0.2-spec.md`](./docs/v0.2-spec.md) — v0.2 开发规格书
+- [`docs/v0.2-spec.md`](./docs/v0.2-spec.md) — v0.2 历史开发规格书（非当前实现契约）
 - [`docs/protocols/`](./docs/protocols/README.md) — 模块协议文档（API / DB / Planner / Scheduler）

@@ -1,5 +1,7 @@
 # CURRENT STATE: V0.3
 
+> Update 2026-07-16: completed a conservative obsolete-code and documentation cleanup after the V0.3 RC cut. Removed ten unreachable legacy frontend pages/demo artifacts and their now-orphaned internal API wrappers, while keeping all backend HTTP endpoints intact. Removed the unused forward-path `_path_to_rag()` helper; `bfs.py`, `numeric.py`, and `executor.py` remain importable but are explicitly deprecated compatibility surfaces, with production planning continuing through the instance-level POP and `candidate_plan.search_method=partial_order`. Current documentation now records 30 ORM tables, the V0.3 RC roadmap, current calendar/plan-family/adjustment contracts, complete top-level endpoint groups, the `001/002/003/008` bootstrap seed set, and historical status banners for superseded gap/V0.2 documents. The published `43b8dc6` commit and `v0.3.0-rc.1` tag were not rewritten. Verification: Python compile and terminology checks passed; backend `365 passed`; Vite production build passed with the existing chunk-size warning; Chromium full regression `86 passed`; `git diff --check` passed. No TICKET was created or modified by explicit session scope. ANCHOR check: no violations.
+
 > Update 2026-07-14 follow-up 12: TICKET-095 completed the plan-adjustment and unified replan center. Solve now uses an explicit `scope_step_ids` workflow synchronized across the task tree, business groups, Gantt clicks, and intersecting rectangle selection; brush geometry and time ranges are never persisted, and the system does not infer execution progress. Alembic 013 adds plan families with one baseline pointer, persisted adjustment drafts, candidate/baseline lifecycle, and stable step lineage. Ordinary adjustments clone the existing activity network without rerunning Planner or changing activity membership, rule duration, resource requirements, or system dependencies; Scheduler compiles `not_before`, `finish_not_after`, `fixed_start`, `freeze`, `priority`, and artificial zero-lag `precedence`, reports assumption-core conflicts, and lexicographically minimizes outside-scope movement before overall displacement and existing objectives. Calendar plans can enter either plan-minute or absolute datetime constraints. Candidate preview must be explicitly confirmed before atomically replacing the family baseline; sibling drafts become stale. Strategy A reuses canonical `not_before`; Strategy B/AB and scheduling-rule exceptions retain their full Planner/Scheduler semantics but register the result as a candidate requiring the same baseline confirmation. Canonical spec: `docs/superpowers/specs/2026-07-14-plan-adjustment-replan-center.md`; no separate plan artifact was created; last workflow was plan execution, and the next session should start with `source-command-session-start` before optionally drafting TICKET-096 for adjustment-history/resume UX and PostgreSQL concurrent-confirmation stress coverage. Verification: PostgreSQL Alembic 012→013 applied and head confirmed; backend 361 passed and final adjustment suite 8 passed; Chromium full regression 85 passed plus final focused adjustment tests 2 passed; Vite production build passed with the existing chunk warning; MI-HP-001 passed all eight gates with 12.5% all-rule overhead below 15%; terminology and diff checks passed with the existing line-ending warning. A later 8-worker stress rerun exposed the existing Network Editor geometry flake at exactly the 2px tolerance and one resize timing assertion; the 2px case passed immediately with one worker, and neither failure touches Solve/adjustment code. ANCHOR check: no violations.
 
 > Update 2026-07-14 follow-up 11: TICKET-094 follow-up moved shift text out of Gantt task bars and onto the time coordinate axis. Task bars now retain only the segment shift color strip plus any rule marker such as `吊`; the repeated `白班/夜班` text is removed from the bar body. Axis tick labels append the active shift names derived from actual task segments, including the schedule-end tick. If concurrent task-specific calendars report different shifts at the same tick, labels are deduplicated and joined rather than presenting one task's calendar as a global calendar. Real MI-HP-001 verification showed clean bars with blue top strips and orange `吊` markers, while axis ticks display `7/14 HH:mm` plus `白班`. No Scheduler, API, rule, calendar, entity, or migration change. Verification: Solve Chromium 12 passed with one worker; Vite production build passed with the existing chunk warning; ANCHOR check: no violations.
@@ -473,12 +475,13 @@
 
 在 V0.2 稳定能力基础上，推进 V0.3 主线：求解可解释性深化、多目标优化、工序组能力、搜索策略演进。
 
-当前已完成两项原先阻断后续深化的底座改造：
+当前已完成原先阻断后续深化的核心底座改造：
 
-- Planner 已从旧的 delta-provider / 逆向依赖补齐，切换为正向 BFS 主策略。
+- Planner 已从历史 delta-provider、正向 BFS 演进为实例级 Partial Order Planner 主策略。
 - Scheduler 已从单主资源建模，升级为 `resource_reqs` 驱动的多资源约束与分配。
+- 分层状态/活动、工作日历、调度规则和统一计划调整中心已接入主求解链路。
 
-业务场景 Excel 导入包（TICKET-012）已完成；求解解释性（TICKET-011 / STEP 1）仍是下一阶段最自然的业务增强入口。
+当前发布基线为 V0.3 RC；历史 TICKET 和时间线用于追溯，当前实现契约以本 STATE 与 `docs/protocols/` 为准。
 
 ---
 
@@ -488,7 +491,7 @@
 
 - 完整两阶段求解链路：Planner（状态推导 RAG）+ Scheduler（CP-SAT 排程）
 - 主数据 CRUD、求解接口、健康检查与基础前端
-- 14 张核心表、Alembic 迁移与种子数据
+- 当前 30 张 ORM 表、Alembic 迁移与可重复加载的种子数据
 
 ### V0.2 架构升级与阻塞重排（已完成）
 
@@ -507,7 +510,7 @@
 2. 多目标能力边界：TICKET-029 已完成 Scheduler 首个加权多目标切片；更通用的成本函数、setup reuse、事实生命周期和班次/人员目标仍需后续票据设计。
 3. 历史文档中仍有旧错误码命名残留，需逐步清理并与 API 协议统一。
 4. `solve.py` 仍承担输入校验、阻塞编排、Planner/Scheduler 编排、响应组装等多类职责，后续建议下沉到 Service 层。
-5. 旧需求差距报告和历史计划文档中保留了“Planner 非 BFS / Scheduler 单资源”的旧结论，已在 2026-05-29 复核中标注修正。
+5. 旧需求差距报告和 V0.2 规格保留历史结论，已统一标记为非当前实现契约；引用现状时应使用本 STATE 与 `docs/protocols/`。
 
 ---
 
@@ -841,7 +844,7 @@
 - `docs/TICKET_019.md` — 启动脚本统一收敛与模式分流工单。
 - `docs/intranet-dev-config-guide.md` — 内网开发机配置教程。
 - `docs/TICKET_020.md` — 内网开发机配置教程补充工单。
-- `app/core/planner/bfs.py` — 正向 BFS 主策略实现。
+- `app/core/planner/bfs.py` — deprecated 正向 BFS 历史兼容实现，仅保留回归与旧调用兼容。
 - `docs/TICKET_021.md` — Planner 正向 BFS 搜索主策略改造工单。
 - `tests/unit/test_forward_bfs.py` — BFS 主策略单元测试。
 - `tests/unit/test_scheduler_multi_resource.py` — Scheduler 多资源约束与分配单元测试。
@@ -853,23 +856,17 @@
 - `docs/layered_activity_state_requirements.md` — 分层活动与分层状态需求文档。
 - `docs/TICKET_024.md` — 分层活动/状态 Phase 1 数据底座工单。
 - `migrations/versions/004_layered_activity_state.py` — 活动/状态层级与 Scope Guard 迁移。
-- `frontend/src/views/DataManagement/ActivityHierarchyPage.vue` — legacy 活动层级管理页；TICKET-036 后主入口为活动能力工作台。
-- `frontend/src/views/DataManagement/StateHierarchyPage.vue` — legacy 状态层级管理页；TICKET-036 后主入口为状态目标工作台。
-- `frontend/src/views/DataManagement/ScopeGuardPage.vue` — Scope Guard 管理页。
 - `tests/integration/test_layered_activity_state_api.py` — 分层数据 API 与旧 solve 兼容回归。
 - `docs/TICKET_025.md` — 分层活动/状态 Phase 2 展开预览工单。
 - `app/services/layered_expansion.py` — 分层目标/活动范围/effective rule 展开服务。
-- `frontend/src/views/DataManagement/LayeredExpansionPage.vue` — 展开预览页。
 - `docs/TICKET_026.md` — 分层活动/状态 Phase 3 可达性和健康检查工单。
 - `app/services/layered_health.py` — Provider/Consumer 图与分层规则健康检查服务。
-- `frontend/src/views/DataManagement/LayeredHealthCheckPage.vue` — 健康检查页。
 - `docs/TICKET_027.md` — 分层活动/状态 Phase 4 Planner/Scheduler 接入工单。
 - `app/services/layered_solve.py` — 分层求解服务，连接展开结果、POP、Scheduler 和状态回放。
 - `frontend/src/views/SolvePage/index.vue` — 求解页新增快照 / 分层模式与分层解释结果页签。
 - `docs/TICKET_028.md` — 分层活动/状态 Phase 5A 维护意图模板与联合求解工单。
 - `migrations/versions/005_maintenance_intent_template.py` — 维护意图模板迁移。
 - `app/services/maintenance_solve.py` — 多维护意图归并与联合 layered solve 服务。
-- `frontend/src/views/DataManagement/MaintenanceIntentTemplatePage.vue` — 维护意图模板管理页。
 - `frontend/src/views/SolvePage/index.vue` — 求解页新增维护模式和维护合并结果展示。
 - `docs/TICKET_029.md` — 分层活动/状态 Phase 5B Scheduler 连续性软成本工单。
 - `app/core/solver/objectives.py` — 加权 objective 合并与活动组 span/gap/interruption 目标。

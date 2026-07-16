@@ -182,56 +182,6 @@ def _with_repair_targets(
     return adjusted_target
 
 
-def _path_to_rag(path: list, initial_state: StateDict) -> RAG:
-    """
-    Convert a forward execution path into a compact dependency graph.
-
-    Dependencies are inferred from feature reads/writes:
-    - preconditions not satisfied by the initial state depend on the latest
-      prior writer of that feature;
-    - repeated writes to the same feature stay ordered.
-    """
-    evaluator = RuleEvaluator()
-    latest_writer: dict[str, int] = {}
-    nodes: list[RAGNode] = []
-    edges: list[tuple[int, int]] = []
-
-    for index, transition in enumerate(path, start=1):
-        predecessors: set[int] = set()
-
-        for precond in transition.rule.preconditions:
-            current_initial_value = initial_state.get(precond.feature_key)
-            before_value = transition.before_state.get(precond.feature_key)
-            initial_satisfied = evaluator.evaluate_precondition(initial_state, precond)
-            if (
-                not initial_satisfied
-                or before_value != current_initial_value
-            ) and precond.feature_key in latest_writer:
-                predecessors.add(latest_writer[precond.feature_key])
-
-        for effect in transition.rule.effects:
-            writer = latest_writer.get(effect.feature_key)
-            if writer is not None:
-                predecessors.add(writer)
-
-        node = RAGNode(
-            id=index,
-            op_rule_id=transition.rule.id,
-            op_rule_code=transition.rule.code,
-            predecessors=sorted(predecessors),
-        )
-        nodes.append(node)
-        for predecessor in node.predecessors:
-            edge = (predecessor, node.id)
-            if edge not in edges:
-                edges.append(edge)
-
-        for effect in transition.rule.effects:
-            latest_writer[effect.feature_key] = node.id
-
-    return RAG(nodes=nodes, edges=edges)
-
-
 def has_cycle(nodes: list[RAGNode], edges: list[tuple[int, int]]) -> bool:
     """
     Check if the RAG has a cycle using DFS.

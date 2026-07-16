@@ -1,9 +1,8 @@
-"""
-Forward BFS state-space search for planner rule selection.
+"""Deprecated forward-BFS planner retained for compatibility regression tests.
 
-The search expands executable operation rules from the current state and stops
-when the original state delta has been satisfied.  Rule checks and effects stay
-behind RuleEvaluator so operator/effect registries remain the single entrypoint.
+Production ``build_rag()`` uses the instance-level Partial Order Planner. This
+module remains importable for historical callers and focused regression tests;
+new planner behavior must not depend on it.
 """
 
 from collections import Counter, deque

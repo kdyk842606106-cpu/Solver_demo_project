@@ -1,8 +1,8 @@
 """
 SQLAlchemy ORM Models for the State-Driven Process Planning System.
 
-This module defines all database tables according to the schema in Project_introduction.md.
-Total: 16 tables (V0.2).
+The current persistence contract is documented in ``docs/protocols/db.md``.
+Total: 30 tables (V0.3).
 """
 
 from datetime import datetime

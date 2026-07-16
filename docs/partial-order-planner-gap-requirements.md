@@ -1,5 +1,7 @@
 # Partial Order Planner Gap and Requirements Report
 
+> **历史文档（已被取代）**：本文记录 2026-06-01 从 `forward_bfs` 迁移到 POP 之前的差距分析。实例级 POP 已由 TICKET-023 落地；当前行为与接口以 `docs/STATE_V0.3.md` 和 `docs/protocols/planner.md` 为准。下文中的 “current” 仅指报告创建时的历史基线。
+
 > Created: 2026-06-01
 > Baseline: `docs/STATE_V0.3.md`, `docs/protocols/planner.md`, current `forward_bfs` implementation
 > Scope: Planner domain model, search strategy, RAG generation, Scheduler contract, API diagnostics, test coverage

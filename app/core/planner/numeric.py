@@ -1,8 +1,8 @@
-"""
-Numeric feature planning helpers.
+"""Deprecated standalone numeric planner retained for compatibility tests.
 
-Phase 1 keeps this module in-memory only. It creates step instances for exact
-numeric targets and does not persist or merge them into the main RAG yet.
+Production numeric planning is handled by the instance-level Partial Order
+Planner through ``build_rag()``. This historical in-memory implementation stays
+importable for regression coverage only.
 """
 
 from collections import deque
