@@ -85,7 +85,7 @@
             <el-descriptions-item label="原子活动">{{ result.summary.atomic_activities_total ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="包-原子引用">{{ result.summary.activity_package_atomic_refs_total ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="状态节点">{{ result.summary.state_nodes_total ?? 0 }}</el-descriptions-item>
-            <el-descriptions-item label="Scope Guard">{{ result.summary.scope_guards_total ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="已日落约束输入">{{ result.summary.scope_guards_total ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="错误">{{ result.summary.error_count }}</el-descriptions-item>
           </el-descriptions>
 
@@ -166,7 +166,7 @@ const previewRows = computed(() => {
     atomic_activities: '原子活动',
     activity_package_atomic_refs: '包-原子引用',
     state_nodes: '状态节点',
-    scope_guards: 'Scope Guard',
+    scope_guards: '已日落约束输入',
     maintenance_intents: '维护意图',
     layered_health_checks: '导入诊断',
     rules: '活动规则',

@@ -194,7 +194,7 @@ export async function layoutNestedContainerGraph({
       node,
       isContainerCandidate: !relay &&
         expandedActivityIds.has(id) &&
-        node?.activity_type === 'virtual' &&
+        node?.activity_type === 'activity_package' &&
         !!node?.activity_node_id,
       size: nodeDimensionsForLayout(node, relay ? 'relay' : 'activity'),
     })

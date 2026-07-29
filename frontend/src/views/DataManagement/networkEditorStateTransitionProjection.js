@@ -125,7 +125,7 @@ function bindingCoverageSummary(edge, {
   const coveredLeafCount = coveredLeafIds.length
   const status = String(edge?.coverage_status || binding.coverage_status || 'stale')
   const role = String(edge?.binding_role || binding.binding_role || '')
-  const roleLabel = role === 'output' || role === 'declared_output'
+  const roleLabel = role === 'output'
     ? PACKAGE_OUTPUT_LABEL
     : PACKAGE_PRECONDITION_LABEL
   const statusLabel = status === 'complete'
@@ -164,11 +164,11 @@ function buildEndpointIndexes(edges) {
   const consumersByStateId = new Map()
 
   for (const edge of edges || []) {
-    if (edge.type === 'STATE_TO_ACTIVITY' && ['input', 'context_input'].includes(edge.binding_role)) {
+    if (edge.type === 'STATE_TO_ACTIVITY' && edge.binding_role === 'input') {
       ensureListMapItem(inputsByActivity, edge.target_id).push(edge)
       const stateNodeId = graphStateNodeKey(edge.source_id)
       if (stateNodeId) consumersByStateId.set(stateNodeId, (consumersByStateId.get(stateNodeId) || 0) + 1)
-    } else if (edge.type === 'ACTIVITY_TO_STATE' && ['output', 'declared_output'].includes(edge.binding_role)) {
+    } else if (edge.type === 'ACTIVITY_TO_STATE' && edge.binding_role === 'output') {
       ensureListMapItem(outputsByActivity, edge.source_id).push(edge)
       if (!outputsByActivitySet.has(edge.source_id)) outputsByActivitySet.set(edge.source_id, new Set())
       outputsByActivitySet.get(edge.source_id).add(edge.target_id)

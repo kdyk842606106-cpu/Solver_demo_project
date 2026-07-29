@@ -735,7 +735,7 @@
       :mode="solveMode"
       :objectives="solveObjectives()"
       :target-state-node-ids="layeredTargetStateNodeIds"
-      :activity-scope-node-ids="layeredActivityScopeNodeIds"
+      :atomic-activity-scope-ids="layeredAtomicActivityScopeIds"
       :maintenance-intent-template-ids="selectedMaintenanceIntentTemplateIds"
       :blockage-reason-options="blockageReasonOptions"
       @replanned="onReplanned"
@@ -794,6 +794,7 @@ import VersionHistory from './VersionHistory.vue'
 import { buildHierarchyTree, treeSelectProps } from '../../utils/hierarchyTree'
 import {
   getActivityNodes,
+  getActivityPackageAtomicRefs,
   getBlockageReasons,
   getMachines,
   getMaintenanceIntentTemplates,
@@ -821,6 +822,7 @@ const machines = ref([])
 const machineTypes = ref([])
 const states = ref([])
 const layeredActivityNodes = ref([])
+const layeredAtomicRefs = ref([])
 const layeredStateNodes = ref([])
 const maintenanceIntentTemplates = ref([])
 const schedulingRuleTypes = ref([])
@@ -918,6 +920,25 @@ const layeredStateTreeOptions = computed(() =>
 const layeredActivityTreeOptions = computed(() =>
   buildHierarchyTree(layeredActivityNodes.value, { disabled: (node) => node.level > 2 }),
 )
+const layeredAtomicActivityScopeIds = computed(() => {
+  if (!layeredActivityScopeNodeIds.value.length) return []
+  const selectedPackageIds = new Set(layeredActivityScopeNodeIds.value.map(Number))
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const node of layeredActivityNodes.value) {
+      if (node.parent_id && selectedPackageIds.has(Number(node.parent_id)) && !selectedPackageIds.has(Number(node.id))) {
+        selectedPackageIds.add(Number(node.id))
+        changed = true
+      }
+    }
+  }
+  return [...new Set(
+    layeredAtomicRefs.value
+      .filter((ref) => ref.is_active && selectedPackageIds.has(Number(ref.activity_node_id)))
+      .map((ref) => Number(ref.atomic_activity_id)),
+  )].sort((left, right) => left - right)
+})
 const stateDelta = computed(() => solveResult.value?.state_delta ?? [])
 const criticalPath = computed(() => solveResult.value?.critical_path ?? [])
 const parallelGroups = computed(() => solveResult.value?.schedule?.parallel_groups ?? [])
@@ -1202,7 +1223,7 @@ function formatChangedFeatures(changed) {
 }
 
 function formatLayeredPrecondition(item) {
-  const source = item.source_type === 'self_activity_rule' ? '自有' : item.scope_guard_name || item.source_type
+  const source = item.source_type === 'self_activity_rule' ? '自有' : item.source_type
   const target = item.feature_key || item.state_node_code || '-'
   const value = item.feature_value ? `${item.operator} ${item.feature_value}` : item.operator
   return `${source}:${target} ${value}`
@@ -1599,6 +1620,7 @@ async function loadMachines() {
 async function onMachineChange() {
   states.value = []
   layeredActivityNodes.value = []
+  layeredAtomicRefs.value = []
   layeredStateNodes.value = []
   maintenanceIntentTemplates.value = []
   layeredTargetStateNodeIds.value = []
@@ -1627,6 +1649,10 @@ async function onMachineChange() {
     getMaintenanceIntentTemplates(machine.machine_type_id, { include_inactive: false }),
   ])
   layeredActivityNodes.value = activities
+  const activityPackages = activities.filter((node) => node.level === 2)
+  layeredAtomicRefs.value = (
+    await Promise.all(activityPackages.map((node) => getActivityPackageAtomicRefs(node.id)))
+  ).flat()
   layeredStateNodes.value = stateNodesWithReferenceParents(stateNodes, stateReferences)
   maintenanceIntentTemplates.value = maintenanceTemplates
 }
@@ -1660,7 +1686,7 @@ async function runSolve() {
         machine_id: solveForm.value.machine_id,
         current_state_id: solveForm.value.current_state_id,
         target_state_node_ids: layeredTargetStateNodeIds.value,
-        activity_scope_node_ids: layeredActivityScopeNodeIds.value,
+        atomic_activity_scope_ids: layeredAtomicActivityScopeIds.value,
         objectives: solveObjectives(),
         constraints: schedulingConstraints(),
         calendar_context: calendarContext(),
@@ -1767,7 +1793,7 @@ async function submitRuleException() {
       result = await postLayeredSolve({
         ...common,
         target_state_node_ids: layeredTargetStateNodeIds.value,
-        activity_scope_node_ids: layeredActivityScopeNodeIds.value,
+        atomic_activity_scope_ids: layeredAtomicActivityScopeIds.value,
       })
     } else if (solveMode.value === 'maintenance') {
       result = await postMaintenanceSolve({

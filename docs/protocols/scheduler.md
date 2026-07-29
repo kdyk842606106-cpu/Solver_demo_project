@@ -250,19 +250,20 @@ calendar_pause_min == 0
 
 `STATE_PACKAGE_CONTINUITY` 是注册表提供的内置可选规则，仅支持 `layered/maintenance`。初始求解会将适用的内置规则并入实际规则快照；同类型机器配置规则优先于内置默认值。历史请求仍可直接提交 `minimize_state_group_span/gaps/interruptions` 三个 Objective，二者共用既有状态包归属和成本公式。
 
-## 计划调整上下文（TICKET-095）
+## 计划调整上下文（TICKET-095 / TICKET-096）
 
-`solve_schedule(..., adjustment_context=...)` 只接收服务层已归一为 `step_order` 的范围、基线开始时间和约束，不接收 UI 框选几何。普通调整克隆现有 RAG，因此 Scheduler 不负责增删活动、改工期或替换系统依赖。
+`solve_schedule(..., adjustment_context=...)` 只接收服务层已归一为 `step_order` 的范围、基线时间、基线顺序对和约束，不接收 UI 框选几何。普通调整克隆现有 RAG，因此 Scheduler 不负责增删活动、改工期或替换系统依赖。
 
 硬约束以 CP-SAT assumption literal 编译；无解时 `sufficient_assumptions_for_infeasibility()` 被映射回稳定的约束 ID、类型和活动，用于候选预览冲突定位。人工 `precedence` 在服务层先与系统依赖合并做环检测，成功候选再把该人工边持久化到候选步骤。
 
 可行解按以下词典顺序逐阶段锁定最优值：
 
-1. 范围外移动活动数；
-2. 范围外开始时间总位移；
-3. 全部移动活动数；
-4. 全部开始时间总位移；
-5. `high=4 / normal=2 / low=1` 加权开始时间；
-6. 既有 makespan、连续性和注册排期规则目标。
+1. makespan；
+2. 范围外有意义顺序对的反转数；
+3. 全部有意义顺序对的反转数；
+4. `high=4 / normal=2 / low=1` 加权开始时间；
+5. 在以上最优值锁定后应用既有连续性和注册排期规则软目标。
 
-开始时间相差至少 1 分钟才计为移动。范围外活动不是硬冻结；当硬约束或系统依赖要求时可以移动，但稳定性目标优先减少这种影响。
+基线顺序对只从非重叠且共享具体资源、活动组、状态连续性组，或已匹配 `SUBSYSTEM_CONTINUITY` 的责任子系统活动中生成；基线重叠/并行活动不建立顺序。候选后项开始时间早于基线前项才计为反转，同时开始不计反转。范围外活动不是硬冻结；当最小工期或硬约束要求时允许必要顺序反转。
+
+绝对开始时间变化和 `shift_min` 继续用于候选对比展示，但不参与优化。加权开始时间阶段在 makespan 和顺序反转最优值锁定后执行，用于左移非关键或具有左移空间的活动，消除可避免空档。候选 `adjustment_snapshot.optimization_policy` 记录为 `relative_order_compact_v1`。

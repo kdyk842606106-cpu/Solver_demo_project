@@ -14,6 +14,8 @@ from app.db.models import (
     ActivityStateBinding,
     AtomicActivity,
     FeatureDefinition,
+    ScopeGuard,
+    ScopeGuardPrecond,
     StateFeatureDef,
     StateNode,
     StateNodeReference,
@@ -263,8 +265,8 @@ async def _seed_network_editor_graph(client) -> dict:
         f"/api/v1/machine-types/{machine_type_id}/state-nodes",
         {
             "machine_type_id": machine_type_id,
-            "parent_id": root_state["id"],
-            "level": 2,
+            "parent_id": None,
+            "level": 1,
             "code": "STATE_READY",
             "name": "Ready leaf",
             "feature_key": "ready_flag",
@@ -276,19 +278,39 @@ async def _seed_network_editor_graph(client) -> dict:
             "metadata_json": {"_network_editor_layout": {"x": 130, "y": 170}},
         },
     )
+    await _post_json(
+        client,
+        f"/api/v1/state-nodes/{ready_state['id']}/references",
+        {
+            "parent_state_node_id": root_state["id"],
+            "sort_order": 10,
+            "is_active": True,
+            "metadata_json": {"_network_editor_layout": {"x": 130, "y": 170}},
+        },
+    )
     done_state = await _post_json(
         client,
         f"/api/v1/machine-types/{machine_type_id}/state-nodes",
         {
             "machine_type_id": machine_type_id,
-            "parent_id": root_state["id"],
-            "level": 2,
+            "parent_id": None,
+            "level": 1,
             "code": "STATE_DONE",
             "name": "Done leaf",
             "feature_key": "done_flag",
             "operator": "eq",
             "target_value": "true",
             "state_kind": "atomic",
+            "sort_order": 20,
+            "is_active": True,
+            "metadata_json": {"_network_editor_layout": {"x": 130, "y": 260}},
+        },
+    )
+    await _post_json(
+        client,
+        f"/api/v1/state-nodes/{done_state['id']}/references",
+        {
+            "parent_state_node_id": root_state["id"],
             "sort_order": 20,
             "is_active": True,
             "metadata_json": {"_network_editor_layout": {"x": 130, "y": 260}},
@@ -314,7 +336,7 @@ async def _seed_network_editor_graph(client) -> dict:
     )
     state_ref = await _post_json(
         client,
-        f"/api/v1/state-nodes/{root_state['id']}/references",
+        f"/api/v1/state-nodes/{ready_state['id']}/references",
         {
             "parent_state_node_id": reuse_parent["id"],
             "sort_order": 30,
@@ -459,7 +481,7 @@ async def _seed_network_editor_graph(client) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_activity_state_binding_rejects_virtual_activity_targets(client):
+async def test_activity_state_binding_rejects_activity_package_targets(client):
     ids = await _seed_network_editor_graph(client)
 
     response = await client.post(
@@ -478,8 +500,8 @@ async def test_activity_state_binding_rejects_virtual_activity_targets(client):
         },
     )
 
-    assert response.status_code == 422
-    assert "Virtual activities are management packages" in response.text
+    assert response.status_code == 410
+    assert response.json()["error_message"]["error_code"] == "ACTIVITY_PACKAGE_BINDING_SUNSET"
 
 
 async def _load_network_graph(client, machine_type_id: int, **overrides) -> dict:
@@ -505,14 +527,30 @@ async def test_network_editor_loads_existing_graph_from_database(client):
     ids = await _seed_network_editor_graph(client)
 
     graph = await _load_network_graph(client, ids["machine_type_id"])
+    assert graph["view_mode"] == "state_transition"
+    assert graph["diagnostics"][0]["code"] == "LEGACY_VIEW_MODE_NORMALIZED"
 
-    state_ref_graph_id = f"state_node:{ids['root_state_id']}:ref:{ids['state_ref_id']}"
+    state_ref_graph_id = f"state_node:{ids['ready_state_id']}:ref:{ids['state_ref_id']}"
     state_ref_node = next(node for node in graph["state_nodes"] if node["id"] == state_ref_graph_id)
     assert state_ref_node["reference_id"] == ids["state_ref_id"]
     assert state_ref_node["parent_id"] == ids["reuse_parent_id"]
     assert state_ref_node["metadata_json"]["_network_editor_layout"] == {"x": 160, "y": 500}
+    ready_reference_instances = [
+        node
+        for node in graph["state_nodes"]
+        if node["state_node_id"] == ids["ready_state_id"]
+        and node["reference_id"] is not None
+    ]
+    assert len(ready_reference_instances) == 2
+    assert {node["parent_id"] for node in ready_reference_instances} == {
+        ids["root_state_id"],
+        ids["reuse_parent_id"],
+    }
 
-    atomic_node = next(node for node in graph["activity_nodes"] if node["id"] == f"atomic_activity:{ids['atomic_id']}")
+    atomic_node = next(
+        node for node in graph["activity_nodes"]
+        if node["canonical_id"] == f"atomic_activity:{ids['atomic_id']}"
+    )
     assert atomic_node["reference_id"] == ids["atomic_ref_id"]
     assert atomic_node["reference_ids"] == [ids["atomic_ref_id"]]
     assert atomic_node["parent_graph_id"] == f"activity_node:{ids['activity_package_id']}"
@@ -520,10 +558,240 @@ async def test_network_editor_loads_existing_graph_from_database(client):
     assert atomic_node["metadata_json"]["ref_note"] == "package-instance"
     assert atomic_node["atomic_metadata_json"]["library_note"] == "base"
 
+    precheck_response = await client.post(
+        f"/api/v1/machine-types/{ids['machine_type_id']}/network-editor/solver-precheck",
+        json={
+            "state_root_ids": [],
+            "activity_scope_node_ids": [ids["activity_root_id"]],
+            "view_mode": "solver_ready",
+            "include_inactive": True,
+            "state_depth": 0,
+            "activity_depth": 0,
+        },
+    )
+    assert precheck_response.status_code == 200, precheck_response.text
+    precheck = precheck_response.json()
+    blocking_codes = {issue["code"] for issue in precheck["blocking_issues"]}
+    assert blocking_codes.isdisjoint(
+        {
+            "EXECUTABLE_MISSING_INPUT",
+            "EXECUTABLE_MISSING_OUTPUT",
+            "EXECUTABLE_MISSING_RULE",
+        }
+    )
+    assert blocking_codes == {"BROKEN_CHAIN"}
+    assert precheck["summary"]["executable_activity_count"] == 1
+    assert precheck["summary"]["candidate_activity_count"] == 1
+    assert precheck["effective_model_version"].startswith("sha256:")
+    assert precheck["solve_request_template"]["body"]["atomic_activity_scope_ids"] == [
+        ids["atomic_id"]
+    ]
+    assert "activity_scope_node_ids" not in precheck["solve_request_template"]["body"]
+
+    impact_response = await client.post(
+        f"/api/v1/machine-types/{ids['machine_type_id']}/network-editor/impact",
+        json={
+            "state_root_ids": [],
+            "activity_scope_node_ids": [],
+            "view_mode": "state_transition",
+            "include_inactive": True,
+            "state_depth": 0,
+            "activity_depth": 0,
+            "activity_graph_id": atomic_node["id"],
+        },
+    )
+    assert impact_response.status_code == 200, impact_response.text
+    impact = impact_response.json()
+    assert impact["owner_activity_packages"][0]["id"] == (
+        f"activity_node:{ids['activity_package_id']}"
+    )
+    assert {item["binding_role"] for item in impact["bindings"]} == {"input", "output"}
+
     edge_pairs = {(edge["source_id"], edge["target_id"], edge["binding_role"]) for edge in graph["edges"]}
-    assert (f"state_node:{ids['ready_state_id']}", f"atomic_activity:{ids['atomic_id']}", "input") in edge_pairs
-    assert (f"atomic_activity:{ids['atomic_id']}", f"state_node:{ids['done_state_id']}", "output") in edge_pairs
+    assert (f"state_node:{ids['ready_state_id']}", atomic_node["id"], "input") in edge_pairs
+    assert (atomic_node["id"], f"state_node:{ids['done_state_id']}", "output") in edge_pairs
+    assert graph["view_mode"] == "state_transition"
     assert graph["revision"]
+
+
+@pytest.mark.asyncio
+async def test_network_editor_projects_each_activity_reference_as_an_independent_instance(client):
+    ids = await _seed_network_editor_graph(client)
+    second_package = await _post_json(
+        client,
+        f"/api/v1/machine-types/{ids['machine_type_id']}/activity-nodes",
+        {
+            "machine_type_id": ids["machine_type_id"],
+            "parent_id": ids["activity_root_id"],
+            "level": 2,
+            "code": "ACT_PACKAGE_REUSE",
+            "name": "Activity package reuse",
+            "description": None,
+            "activity_category": "normal",
+            "sort_order": 20,
+            "is_active": True,
+            "metadata_json": {"_network_editor_layout": {"x": 840, "y": 170}},
+        },
+    )
+    second_ref = await _post_json(
+        client,
+        f"/api/v1/activity-nodes/{second_package['id']}/atomic-activity-refs",
+        {
+            "atomic_activity_id": ids["atomic_id"],
+            "sort_order": 20,
+            "is_active": True,
+            "metadata_json": {
+                "ref_note": "second-instance",
+                "_network_editor_layout": {"x": 880, "y": 300},
+            },
+        },
+    )
+
+    graph = await _load_network_graph(
+        client,
+        ids["machine_type_id"],
+        activity_scope_node_ids=[ids["activity_root_id"]],
+        activity_depth=0,
+    )
+    instances = [
+        node
+        for node in graph["activity_nodes"]
+        if node["canonical_id"] == f"atomic_activity:{ids['atomic_id']}"
+    ]
+
+    assert {node["id"] for node in instances} == {
+        f"atomic_activity:{ids['atomic_id']}:ref:{ids['atomic_ref_id']}",
+        f"atomic_activity:{ids['atomic_id']}:ref:{second_ref['id']}",
+    }
+    assert {node["reference_id"] for node in instances} == {
+        ids["atomic_ref_id"],
+        second_ref["id"],
+    }
+    assert {
+        tuple(sorted(node["metadata_json"]["_network_editor_layout"].items()))
+        for node in instances
+    } == {
+        (("x", 620), ("y", 260)),
+        (("x", 880), ("y", 300)),
+    }
+    assert all(node["is_reference_instance"] for node in instances)
+    assert {
+        edge["source_id"]
+        for edge in graph["edges"]
+        if edge["binding_role"] == "output"
+    } >= {node["id"] for node in instances}
+
+
+@pytest.mark.asyncio
+async def test_body_reference_endpoints_protect_identity_and_sunset_scope_guard(client):
+    ids = await _seed_network_editor_graph(client)
+
+    delete_body = await client.delete(f"/api/v1/atomic-activities/{ids['atomic_id']}")
+    assert delete_body.status_code == 409
+    assert delete_body.json()["error_message"]["error_code"] == "BODY_IN_USE"
+    assert delete_body.json()["error_message"]["dependencies"]["package_references"] == 1
+
+    move_ref = await client.put(
+        f"/api/v1/activity-package-atomic-refs/{ids['atomic_ref_id']}",
+        json={
+            "atomic_activity_id": ids["atomic_id"] + 999,
+            "sort_order": 1,
+            "is_active": True,
+            "metadata_json": None,
+        },
+    )
+    assert move_ref.status_code == 409
+    assert move_ref.json()["error_message"]["error_code"] == "RELATION_ENDPOINT_IMMUTABLE"
+
+    create_guard = await client.post(
+        f"/api/v1/activity-nodes/{ids['activity_package_id']}/scope-guards",
+        json={
+            "activity_node_id": ids["activity_package_id"],
+            "name": "retired guard",
+            "description": None,
+            "is_active": True,
+            "metadata_json": None,
+            "preconditions": [
+                {
+                    "state_node_id": ids["ready_state_id"],
+                    "operator": "completed",
+                    "expected_value": None,
+                    "value_list": None,
+                }
+            ],
+        },
+    )
+    assert create_guard.status_code == 410
+    assert create_guard.json()["error_message"]["error_code"] == "SCOPE_GUARD_SUNSET"
+
+    legacy_guard_list = await client.get(
+        f"/api/v1/activity-nodes/{ids['activity_package_id']}/scope-guards"
+    )
+    assert legacy_guard_list.status_code == 410
+    audit_guard_list = await client.get(
+        f"/api/v1/audit/activity-nodes/{ids['activity_package_id']}/scope-guards"
+    )
+    assert audit_guard_list.status_code == 200
+    assert audit_guard_list.json() == []
+
+
+@pytest.mark.asyncio
+async def test_historical_package_bindings_and_scope_guards_are_audit_only(
+    client,
+    db_session,
+):
+    ids = await _seed_network_editor_graph(client)
+    historical_binding = ActivityStateBinding(
+        machine_type_id=ids["machine_type_id"],
+        activity_node_id=ids["activity_package_id"],
+        atomic_activity_id=None,
+        op_rule_id=None,
+        state_node_id=ids["ready_state_id"],
+        binding_role="context_input",
+        binding_type="atomic_state",
+        coverage_policy="snapshot",
+        covered_leaf_state_ids=[ids["ready_state_id"]],
+        coverage_status="complete",
+        is_inherited=True,
+        is_active=True,
+    )
+    guard = ScopeGuard(
+        activity_node_id=ids["activity_package_id"],
+        name="historical-only",
+        is_active=True,
+    )
+    db_session.add_all([historical_binding, guard])
+    await db_session.flush()
+    db_session.add(
+        ScopeGuardPrecond(
+            scope_guard_id=guard.id,
+            state_node_id=ids["ready_state_id"],
+            operator="completed",
+        )
+    )
+    await db_session.commit()
+
+    graph = await _load_network_graph(client, ids["machine_type_id"])
+    assert historical_binding.id not in {item["id"] for item in graph["bindings"]}
+    assert historical_binding.id not in {
+        item.get("binding_id") for item in graph["edges"]
+    }
+
+    expansion_response = await client.post(
+        f"/api/v1/machine-types/{ids['machine_type_id']}/layered-expansion",
+        json={
+            "target_state_node_ids": [],
+            "activity_scope_node_ids": [ids["activity_package_id"]],
+            "include_inactive": True,
+        },
+    )
+    assert expansion_response.status_code == 200, expansion_response.text
+    expansion = expansion_response.json()
+    assert {
+        precondition["source_type"]
+        for rule in expansion["effective_rules"]
+        for precondition in rule["preconditions"]
+    } <= {"self_activity_rule"}
 
 
 @pytest.mark.asyncio
@@ -538,9 +806,7 @@ async def test_network_editor_activity_depth_two_hides_nested_atomic_refs(client
     )
 
     activity_ids = {node["id"] for node in graph["activity_nodes"]}
-    assert f"activity_node:{ids['activity_root_id']}" in activity_ids
-    assert f"activity_node:{ids['activity_package_id']}" in activity_ids
-    assert f"atomic_activity:{ids['atomic_id']}" not in activity_ids
+    assert activity_ids == {f"atomic_activity:{ids['atomic_id']}:ref:{ids['atomic_ref_id']}"}
 
     child_graph = await _load_network_graph(
         client,
@@ -549,8 +815,7 @@ async def test_network_editor_activity_depth_two_hides_nested_atomic_refs(client
         activity_depth=2,
     )
     child_activity_ids = {node["id"] for node in child_graph["activity_nodes"]}
-    assert f"activity_node:{ids['activity_package_id']}" in child_activity_ids
-    assert f"atomic_activity:{ids['atomic_id']}" in child_activity_ids
+    assert child_activity_ids == {f"atomic_activity:{ids['atomic_id']}:ref:{ids['atomic_ref_id']}"}
 
     expanded_graph = await _load_network_graph(
         client,
@@ -560,7 +825,7 @@ async def test_network_editor_activity_depth_two_hides_nested_atomic_refs(client
     )
     expanded_atomic = next(
         node for node in expanded_graph["activity_nodes"]
-        if node["id"] == f"atomic_activity:{ids['atomic_id']}"
+        if node["canonical_id"] == f"atomic_activity:{ids['atomic_id']}"
     )
     assert ids["atomic_ref_id"] in expanded_atomic["reference_ids"]
 
@@ -747,7 +1012,7 @@ async def test_network_editor_commit_writes_back_and_reloads_from_database(clien
     reloaded = await _load_network_graph(client, ids["machine_type_id"])
     reloaded_atomic = next(
         node for node in reloaded["activity_nodes"]
-        if node["id"] == f"atomic_activity:{created_atomic.id}"
+        if node["atomic_activity_id"] == created_atomic.id
     )
     assert reloaded_atomic["metadata_json"]["_network_editor_layout"] == {"x": 760, "y": 390}
     assert reloaded_atomic["atomic_metadata_json"] == {"library_note": "created-from-editor"}
@@ -870,8 +1135,8 @@ async def test_network_editor_commit_normalizes_object_id_payloads(client, db_se
         f"/api/v1/machine-types/{ids['machine_type_id']}/state-nodes",
         {
             "machine_type_id": ids["machine_type_id"],
-            "parent_id": ids["root_state_id"],
-            "level": 2,
+            "parent_id": None,
+            "level": 1,
             "code": "STATE_OBJECT_ID_REVIEW",
             "name": "Object id review",
             "feature_key": "review_flag",
@@ -963,8 +1228,8 @@ async def test_network_editor_commit_rejects_stale_base_revision_before_writing(
         f"/api/v1/machine-types/{ids['machine_type_id']}/state-nodes",
         {
             "machine_type_id": ids["machine_type_id"],
-            "parent_id": ids["root_state_id"],
-            "level": 2,
+            "parent_id": None,
+            "level": 1,
             "code": "STATE_EXTERNAL",
             "name": "External change",
             "feature_key": "review_flag",
@@ -1326,8 +1591,8 @@ async def test_network_editor_commit_reuses_exact_template_state_as_reference(cl
             f"/api/v1/machine-types/{machine_type_id}/state-nodes",
             json={
                 "machine_type_id": machine_type_id,
-                "parent_id": parent_a["id"],
-                "level": 2,
+                "parent_id": None,
+                "level": 1,
                 "code": "STATE_FIXTURE_A_READY",
                 "name": "Fixture A",
                 "feature_key": "fixture_dim_ready__fixture_a",
@@ -1343,6 +1608,16 @@ async def test_network_editor_commit_reuses_exact_template_state_as_reference(cl
             },
         )
     ).json()
+    await _post_json(
+        client,
+        f"/api/v1/state-nodes/{existing['id']}/references",
+        {
+            "parent_state_node_id": parent_a["id"],
+            "sort_order": 10,
+            "is_active": True,
+            "metadata_json": None,
+        },
+    )
 
     graph = await _load_network_graph(client, machine_type_id)
     response = await client.post(

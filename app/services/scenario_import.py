@@ -34,9 +34,9 @@ from app.db.models import (
     OpRuleResourceReq,
     Resource,
     ScopeGuard,
-    ScopeGuardPrecond,
     StateFeatureDef,
     StateNode,
+    StateNodeReference,
     WorkCalendar,
     WorkCalendarRevision,
     MachineStateDimensionCalendar,
@@ -371,45 +371,6 @@ def _parse_state_features(raw: Any, row: ParsedRow, errors: list[ImportErrorItem
             errors.append(ImportErrorItem(row.sheet, row.row_number, "features", f"Invalid item: {token}"))
             continue
         items[parts[0]] = parts[1]
-    return items
-
-
-def _parse_scope_guard_preconditions(
-    raw: Any,
-    row: ParsedRow,
-    errors: list[ImportErrorItem],
-) -> list[dict[str, Any]]:
-    items: list[dict[str, Any]] = []
-    if _blank(raw):
-        return items
-    for token in str(raw).split(";"):
-        token = token.strip()
-        if not token:
-            continue
-        parts = [part.strip() for part in token.split(":", 2)]
-        if len(parts) not in (2, 3):
-            errors.append(ImportErrorItem(row.sheet, row.row_number, "preconditions", f"Invalid item: {token}"))
-            continue
-        state_node_code = parts[0]
-        operator = parts[1] or "completed"
-        expected_value = parts[2] if len(parts) == 3 else None
-        if operator not in VALID_STATE_NODE_OPERATORS:
-            errors.append(ImportErrorItem(row.sheet, row.row_number, "preconditions", f"Invalid operator: {operator}"))
-            continue
-        if operator != "completed" and _blank(expected_value):
-            errors.append(ImportErrorItem(row.sheet, row.row_number, "preconditions", f"Missing expected value: {token}"))
-            continue
-        value_list = None
-        if operator == "in" and expected_value is not None:
-            value_list = [value.strip() for value in expected_value.split(",") if value.strip()]
-        items.append(
-            {
-                "state_node_code": state_node_code,
-                "operator": operator,
-                "expected_value": expected_value,
-                "value_list": value_list,
-            }
-        )
     return items
 
 
@@ -769,8 +730,15 @@ async def validate_scenario_workbook(parsed: ScenarioWorkbook, session: AsyncSes
         level = _parse_int(row.data.get("level"))
         if machine_type_code and machine_type_code not in machine_type_codes:
             errors.append(ImportErrorItem(row.sheet, row.row_number, "machine_type_code", f"Unknown machine_type_code: {machine_type_code}"))
-        if level not in (1, 2, 3):
-            errors.append(ImportErrorItem(row.sheet, row.row_number, "level", "level must be 1, 2, or 3"))
+        if level not in (1, 2):
+            errors.append(
+                ImportErrorItem(
+                    row.sheet,
+                    row.row_number,
+                    "level",
+                    "ActivityNode level 3 is read-only legacy data; import an atomic activity instead",
+                )
+            )
             level = 0
         active = _parse_bool(row.data.get("is_active"), default=True)
         if active is None:
@@ -796,8 +764,8 @@ async def validate_scenario_workbook(parsed: ScenarioWorkbook, session: AsyncSes
         parent_code = _text(row.data.get("parent_code"))
         if level == 1 and parent_code:
             errors.append(ImportErrorItem(row.sheet, row.row_number, "parent_code", "Level-1 activity nodes cannot have a parent"))
-        if level in (2, 3) and not parent_code:
-            errors.append(ImportErrorItem(row.sheet, row.row_number, "parent_code", "Level-2/3 activity nodes require a parent"))
+        if level == 2 and not parent_code:
+            errors.append(ImportErrorItem(row.sheet, row.row_number, "parent_code", "Level-2 activity packages require a parent"))
         if parent_code:
             parent_info = activity_node_info.get((machine_type_code, parent_code))
             if parent_info is None:
@@ -809,10 +777,6 @@ async def validate_scenario_workbook(parsed: ScenarioWorkbook, session: AsyncSes
         key: {"machine_type_code": key[0]}
         for key in existing["atomic_activities"]
     }
-    for (machine_type_code, code), info in activity_node_info.items():
-        if info.get("level") == 3:
-            atomic_activity_info.setdefault((machine_type_code, code), {"machine_type_code": machine_type_code})
-
     for row in atomic_activity_rows:
         machine_type_code = _required(row, "machine_type_code", errors)
         code = _required(row, "code", errors)
@@ -926,37 +890,14 @@ async def validate_scenario_workbook(parsed: ScenarioWorkbook, session: AsyncSes
                 errors.append(ImportErrorItem(row.sheet, row.row_number, "parent_code", "State parent level must be exactly one level above child"))
 
     for row in scope_guard_rows:
-        machine_type_code = _required(row, "machine_type_code", errors)
-        activity_node_code = _required(row, "activity_node_code", errors)
-        _required(row, "name", errors)
-        if machine_type_code and machine_type_code not in machine_type_codes:
-            errors.append(ImportErrorItem(row.sheet, row.row_number, "machine_type_code", f"Unknown machine_type_code: {machine_type_code}"))
-        activity_info = activity_node_info.get((machine_type_code, activity_node_code))
-        if activity_info is None:
-            errors.append(ImportErrorItem(row.sheet, row.row_number, "activity_node_code", f"Unknown activity_node_code: {activity_node_code}"))
-            activity_level = None
-        else:
-            activity_level = activity_info.get("level")
-            if activity_level not in (1, 2):
-                errors.append(ImportErrorItem(row.sheet, row.row_number, "activity_node_code", "Scope Guards can only attach to level-1 or level-2 activity nodes"))
-        active = _parse_bool(row.data.get("is_active"), default=True)
-        if active is None:
-            errors.append(ImportErrorItem(row.sheet, row.row_number, "is_active", "Invalid boolean value"))
-        if not _blank(row.data.get("metadata_json")):
-            try:
-                _parse_json(row.data.get("metadata_json"))
-            except json.JSONDecodeError:
-                errors.append(ImportErrorItem(row.sheet, row.row_number, "metadata_json", "Invalid JSON object"))
-        preconditions = _parse_scope_guard_preconditions(row.data.get("preconditions"), row, errors)
-        if not preconditions:
-            errors.append(ImportErrorItem(row.sheet, row.row_number, "preconditions", "Scope Guard must contain at least one precondition"))
-        for item in preconditions:
-            state_code = item["state_node_code"]
-            state_info = state_node_info.get((machine_type_code, state_code))
-            if state_info is None:
-                errors.append(ImportErrorItem(row.sheet, row.row_number, "preconditions", f"Unknown state_node_code: {state_code}"))
-            elif activity_level == 1 and state_info.get("level") != 1:
-                errors.append(ImportErrorItem(row.sheet, row.row_number, "preconditions", "Level-1 activity Scope Guards can only reference level-1 state nodes"))
+        errors.append(
+            ImportErrorItem(
+                row.sheet,
+                row.row_number,
+                "scope_guards",
+                "SCOPE_GUARD_SUNSET: model admission conditions as atomic-activity input bindings",
+            )
+        )
 
     for row in maintenance_intent_rows:
         machine_type_code = _required(row, "machine_type_code", errors)
@@ -1125,11 +1066,23 @@ async def validate_scenario_workbook(parsed: ScenarioWorkbook, session: AsyncSes
         if activity_node_code and atomic_activity_code:
             errors.append(ImportErrorItem(row.sheet, row.row_number, "atomic_activity_code", "Use either activity_node_code or atomic_activity_code, not both"))
         if activity_node_code:
-            activity_info = activity_node_info.get((machine_type_code, activity_node_code))
-            if activity_info is None:
-                errors.append(ImportErrorItem(row.sheet, row.row_number, "activity_node_code", f"Unknown activity_node_code: {activity_node_code}"))
-            elif activity_info.get("level") != 3:
-                errors.append(ImportErrorItem(row.sheet, row.row_number, "activity_node_code", "Op rules can only bind to level-3 activity nodes"))
+            errors.append(
+                ImportErrorItem(
+                    row.sheet,
+                    row.row_number,
+                    "activity_node_code",
+                    "Legacy ActivityNode rule bindings are read-only; use atomic_activity_code",
+                )
+            )
+        if not atomic_activity_code:
+            errors.append(
+                ImportErrorItem(
+                    row.sheet,
+                    row.row_number,
+                    "atomic_activity_code",
+                    "Canonical rules require atomic_activity_code",
+                )
+            )
         if atomic_activity_code and (machine_type_code, atomic_activity_code) not in atomic_activity_info:
             errors.append(ImportErrorItem(row.sheet, row.row_number, "atomic_activity_code", f"Unknown atomic_activity_code: {atomic_activity_code}"))
         active = _parse_bool(row.data.get("is_active"), default=True)
@@ -1415,6 +1368,21 @@ async def _preview_state_defs(
 
 
 async def import_scenario_workbook(parsed: ScenarioWorkbook, session: AsyncSession) -> dict[str, Any]:
+    if parsed.sheet("scope_guards"):
+        raise RuntimeError(
+            "SCOPE_GUARD_SUNSET: scenario import cannot write Scope Guard rows"
+        )
+    if any(_text(row.data.get("activity_node_code")) for row in parsed.sheet("rules")):
+        raise RuntimeError(
+            "LEGACY_ACTIVITY_RULE_BINDING_SUNSET: use atomic_activity_code"
+        )
+    if any(
+        (_parse_int(row.data.get("level")) or 0) == 3
+        for row in parsed.sheet("activity_nodes")
+    ):
+        raise RuntimeError(
+            "LEGACY_ACTIVITY_NODE_SUNSET: ActivityNode level 3 is read-only"
+        )
     machine_types: dict[str, MachineType] = {}
     machines: dict[str, Machine] = {}
     activity_nodes: dict[tuple[str, str], ActivityNode] = {}
@@ -1661,52 +1629,6 @@ async def import_scenario_workbook(parsed: ScenarioWorkbook, session: AsyncSessi
             await session.flush()
         atomic_activities[(machine_type_code, code)] = obj
 
-    for (machine_type_code, code), node in list(activity_nodes.items()):
-        if node.level != 3:
-            continue
-        machine_type = machine_types.get(machine_type_code) or await _get_one(
-            session, MachineType, MachineType.code == machine_type_code
-        )
-        atomic = atomic_activities.get((machine_type_code, code))
-        if atomic is None:
-            atomic = await _get_one(
-                session,
-                AtomicActivity,
-                (AtomicActivity.machine_type_id == machine_type.id) & (AtomicActivity.code == code),
-            )
-        if atomic is None:
-            atomic = AtomicActivity(
-                machine_type_id=machine_type.id,
-                code=code,
-                name=node.name,
-                activity_category=node.activity_category,
-                sort_order=node.sort_order,
-                is_active=node.is_active,
-                metadata_json=node.metadata_json,
-            )
-            session.add(atomic)
-            await session.flush()
-        atomic_activities[(machine_type_code, code)] = atomic
-        if node.parent_id:
-            ref = await _get_one(
-                session,
-                ActivityPackageAtomicRef,
-                (ActivityPackageAtomicRef.activity_node_id == node.parent_id)
-                & (ActivityPackageAtomicRef.atomic_activity_id == atomic.id),
-            )
-            if ref is None:
-                session.add(
-                    ActivityPackageAtomicRef(
-                        activity_node_id=node.parent_id,
-                        atomic_activity_id=atomic.id,
-                        sort_order=node.sort_order,
-                        is_active=node.is_active,
-                        metadata_json=None,
-                    )
-                )
-
-    await session.flush()
-
     for row in parsed.sheet("activity_package_atomic_refs"):
         machine_type_code = _text(row.data.get("machine_type_code"))
         package_code = _text(row.data.get("package_code"))
@@ -1785,9 +1707,10 @@ async def import_scenario_workbook(parsed: ScenarioWorkbook, session: AsyncSessi
                 feature_name=_text(row.data.get("name")),
                 target_value=target_value,
             )
+        is_atomic_body = state_kind != "aggregate"
         payload = {
             "machine_type_id": machine_type.id,
-            "parent_id": parent.id if parent else None,
+            "parent_id": None if is_atomic_body else (parent.id if parent else None),
             "level": level,
             "name": _text(row.data.get("name")),
             "feature_key": feature_key,
@@ -1805,6 +1728,30 @@ async def import_scenario_workbook(parsed: ScenarioWorkbook, session: AsyncSessi
         else:
             for key, value in payload.items():
                 setattr(obj, key, value)
+            await session.flush()
+        if is_atomic_body and parent is not None:
+            membership = await _get_one(
+                session,
+                StateNodeReference,
+                (StateNodeReference.state_node_id == obj.id)
+                & (StateNodeReference.parent_state_node_id == parent.id),
+            )
+            reference_payload = {
+                "sort_order": _parse_int(row.data.get("sort_order")) or 0,
+                "is_active": bool(_parse_bool(row.data.get("is_active"), default=True)),
+                "metadata_json": metadata,
+            }
+            if membership is None:
+                session.add(
+                    StateNodeReference(
+                        state_node_id=obj.id,
+                        parent_state_node_id=parent.id,
+                        **reference_payload,
+                    )
+                )
+            else:
+                for key, value in reference_payload.items():
+                    setattr(membership, key, value)
             await session.flush()
         state_nodes[(machine_type_code, code)] = obj
 
@@ -1835,64 +1782,6 @@ async def import_scenario_workbook(parsed: ScenarioWorkbook, session: AsyncSessi
             obj.capacity = payload["capacity"]
             obj.is_available = bool(payload["is_available"])
             obj.meta = payload["meta"]
-
-    await session.flush()
-
-    for row in parsed.sheet("scope_guards"):
-        machine_type_code = _text(row.data.get("machine_type_code"))
-        activity_node_code = _text(row.data.get("activity_node_code"))
-        machine_type = machine_types.get(machine_type_code) or await _get_one(
-            session, MachineType, MachineType.code == machine_type_code
-        )
-        activity_node = activity_nodes.get((machine_type_code, activity_node_code))
-        if activity_node is None:
-            activity_node = await _get_one(
-                session,
-                ActivityNode,
-                (ActivityNode.machine_type_id == machine_type.id) & (ActivityNode.code == activity_node_code),
-            )
-        name = _text(row.data.get("name"))
-        guard = await _get_one(
-            session,
-            ScopeGuard,
-            (ScopeGuard.activity_node_id == activity_node.id) & (ScopeGuard.name == name),
-        )
-        metadata = _parse_json(row.data.get("metadata_json")) if not _blank(row.data.get("metadata_json")) else None
-        payload = {
-            "activity_node_id": activity_node.id,
-            "name": name,
-            "description": _text(row.data.get("description")) or None,
-            "is_active": bool(_parse_bool(row.data.get("is_active"), default=True)),
-            "metadata_json": metadata,
-        }
-        if guard is None:
-            guard = ScopeGuard(**payload)
-            session.add(guard)
-            await session.flush()
-        else:
-            for key, value in payload.items():
-                setattr(guard, key, value)
-            await session.flush()
-        await session.execute(delete(ScopeGuardPrecond).where(ScopeGuardPrecond.scope_guard_id == guard.id))
-        preconditions = _parse_scope_guard_preconditions(row.data.get("preconditions"), row, [])
-        for item in preconditions:
-            state_node_code = item["state_node_code"]
-            state_node = state_nodes.get((machine_type_code, state_node_code))
-            if state_node is None:
-                state_node = await _get_one(
-                    session,
-                    StateNode,
-                    (StateNode.machine_type_id == machine_type.id) & (StateNode.code == state_node_code),
-                )
-            session.add(
-                ScopeGuardPrecond(
-                    scope_guard_id=guard.id,
-                    state_node_id=state_node.id,
-                    operator=item["operator"],
-                    expected_value=item["expected_value"],
-                    value_list=item["value_list"],
-                )
-            )
 
     await session.flush()
 
@@ -1996,15 +1885,7 @@ async def import_scenario_workbook(parsed: ScenarioWorkbook, session: AsyncSessi
         machine_type = machine_types.get(machine_type_code) or await _get_one(
             session, MachineType, MachineType.code == machine_type_code
         )
-        activity_node_code = _text(row.data.get("activity_node_code"))
         atomic_activity_code = _text(row.data.get("atomic_activity_code"))
-        activity_node = activity_nodes.get((machine_type_code, activity_node_code))
-        if activity_node is None and activity_node_code:
-            activity_node = await _get_one(
-                session,
-                ActivityNode,
-                (ActivityNode.machine_type_id == machine_type.id) & (ActivityNode.code == activity_node_code),
-            )
         atomic_activity = None
         if atomic_activity_code:
             atomic_activity = atomic_activities.get((machine_type_code, atomic_activity_code))
@@ -2014,18 +1895,10 @@ async def import_scenario_workbook(parsed: ScenarioWorkbook, session: AsyncSessi
                     AtomicActivity,
                     (AtomicActivity.machine_type_id == machine_type.id) & (AtomicActivity.code == atomic_activity_code),
                 )
-        elif activity_node is not None and activity_node.level == 3:
-            atomic_activity = atomic_activities.get((machine_type_code, activity_node.code))
-            if atomic_activity is None:
-                atomic_activity = await _get_one(
-                    session,
-                    AtomicActivity,
-                    (AtomicActivity.machine_type_id == machine_type.id) & (AtomicActivity.code == activity_node.code),
-                )
         rule = await _get_one(session, OpRule, OpRule.code == code)
         payload = {
             "machine_type_id": machine_type.id,
-            "activity_node_id": activity_node.id if activity_node and not atomic_activity_code else None,
+            "activity_node_id": None,
             "atomic_activity_id": atomic_activity.id if atomic_activity else None,
             "name": _text(row.data.get("name")),
             "duration_min": _parse_int(row.data.get("duration_min")) or 1,
@@ -2310,13 +2183,13 @@ def build_scenario_template() -> bytes:
             worksheet.append(["rules.effects", "格式：feature_key:effect_type:value。示例：wing_joined:set:true"])
             worksheet.append(["resources.machine_code", "必填：每个资源必须绑定一台具体机器，资源不再是全局资源。"])
             worksheet.append(["rules.resource_reqs", "格式：resource_type:quantity:is_required。示例：technician:2:true"])
-            worksheet.append(["rules.activity_node_code", "Optional legacy binding to a level-3 activity_node; import will also backfill atomic_activity_id."])
+            worksheet.append(["rules.activity_node_code", "Sunset: historical value is audit-only and rejected on import."])
             worksheet.append(["rules.atomic_activity_code", "Optional preferred binding to atomic_activities.code. Do not use together with activity_node_code."])
-            worksheet.append(["activity_nodes", "Optional package tree: level 1/2 packages; legacy level-3 rows are auto-converted to atomic activities and refs."])
+            worksheet.append(["activity_nodes", "Optional package tree: only level 1/2 activity packages are accepted."])
             worksheet.append(["atomic_activities", "Optional reusable executable activity library."])
             worksheet.append(["activity_package_atomic_refs", "Optional refs from level-2 package_code to atomic_activity_code."])
             worksheet.append(["state_nodes", "Optional arbitrary-depth state tree; aggregate rows leave fact fields empty, leaf rows use feature_key/operator=eq/target_value."])
-            worksheet.append(["scope_guards.preconditions", "可选：格式 state_node_code:operator[:expected]，示例 PREP_DONE:completed。"])
+            worksheet.append(["scope_guards", "已日落：工作簿中出现任何数据行都会被拒绝，不会自动转换。"])
             worksheet.append(["states.features", "格式：feature_key:value，多项用分号分隔。"])
             worksheet.append(["maintenance_intents", "Optional: level-2 scope_activity_node_code; comma/semicolon target_state_node_codes and candidate_activity_scope_codes; facts as feature:eq:value or JSON array."])
             worksheet.append(["layered_health_checks", "Optional post-import diagnostics: target_state_node_codes and activity_scope_node_codes use comma or semicolon separated node codes."])
@@ -2351,7 +2224,6 @@ def build_scenario_template() -> bytes:
     workbook["state_nodes"].append(["BUSINESS_OBJECT", "BUSINESS_READY", "BUSINESS_DONE", 2, "业务就绪", "", "", "", "aggregate", 0, "true", ""])
     workbook["state_nodes"].append(["BUSINESS_OBJECT", "PREP_DONE", "BUSINESS_READY", 3, "准备完成", "prep_done", "eq", "true", "atomic", 10, "true", ""])
     workbook["state_nodes"].append(["BUSINESS_OBJECT", "DELIVERY_READY", "BUSINESS_READY", 3, "交付就绪", "delivery_ready", "eq", "true", "atomic", 20, "true", ""])
-    workbook["scope_guards"].append(["BUSINESS_OBJECT", "DELIVERY_PACK", "交付前准备", "", "true", "PREP_DONE:completed", ""])
     workbook["rules"].append(["OP_PREP", "BUSINESS_OBJECT", "准备", 30, "", "true", "false", "prep_done:eq:false", "prep_done:set:true", "technician:1:true", "", "PREP_STEP"])
     workbook["rules"].append(["OP_DELIVER", "BUSINESS_OBJECT", "交付", 20, "", "true", "false", "prep_done:eq:true", "delivery_ready:set:true", "technician:1:true", "", "DELIVER_STEP"])
     workbook["states"].append(["BO-001", "START", "current", "起点", "prep_done:false;delivery_ready:false"])
@@ -2378,7 +2250,7 @@ def build_scenario_template() -> bytes:
         "DELIVERY_READY",
         "PREP_PACK;DELIVERY_PACK",
         "false",
-        "Run after import to verify target providers and Scope Guard chains.",
+        "Run after import to verify target providers and atomic-activity input chains.",
     ])
 
     output = BytesIO()

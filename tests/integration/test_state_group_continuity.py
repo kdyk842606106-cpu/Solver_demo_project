@@ -16,12 +16,19 @@ from app.db.models import (
     OpRulePrecond,
     OpRuleResourceReq,
     Resource,
+    SolveRequest,
     StateFeatureDef,
     StateNode,
     StateNodeReference,
 )
-from app.db.schemas import LayeredSolveRequest, MaintenanceFactTemplate, MaintenanceSolveRequest
+from app.db.schemas import (
+    LayeredExpansionRequest,
+    LayeredSolveRequest,
+    MaintenanceFactTemplate,
+    MaintenanceSolveRequest,
+)
 from app.services.layered_solve import solve_layered
+from app.services.layered_expansion import expand_layered_context
 from app.services.maintenance_solve import solve_maintenance
 
 
@@ -252,7 +259,7 @@ async def _seed_state_group_continuity_case(session):
     leaf_a = StateNode(
         id=5103,
         machine_type_id=5001,
-        parent_id=5102,
+        parent_id=None,
         level=3,
         code="A_READY",
         name="A Ready",
@@ -264,7 +271,7 @@ async def _seed_state_group_continuity_case(session):
     leaf_b = StateNode(
         id=5104,
         machine_type_id=5001,
-        parent_id=5102,
+        parent_id=None,
         level=3,
         code="B_READY",
         name="B Ready",
@@ -274,6 +281,10 @@ async def _seed_state_group_continuity_case(session):
         state_kind="atomic",
     )
     session.add_all([root_state, child_state, leaf_a, leaf_b])
+    session.add_all([
+        StateNodeReference(state_node_id=5103, parent_state_node_id=5102),
+        StateNodeReference(state_node_id=5104, parent_state_node_id=5102),
+    ])
 
     activity_root = ActivityNode(
         id=5201,
@@ -389,7 +400,7 @@ async def _seed_mechanical_integration_continuity_case(session):
         StateNode(
             id=6111,
             machine_type_id=6001,
-            parent_id=6102,
+            parent_id=None,
             level=3,
             code="BASE_FRAME_INSTALLED",
             name="Base Frame Installed",
@@ -401,7 +412,7 @@ async def _seed_mechanical_integration_continuity_case(session):
         StateNode(
             id=6112,
             machine_type_id=6001,
-            parent_id=6102,
+            parent_id=None,
             level=3,
             code="COLUMN_ALIGNED",
             name="Column Aligned",
@@ -413,7 +424,7 @@ async def _seed_mechanical_integration_continuity_case(session):
         StateNode(
             id=6113,
             machine_type_id=6001,
-            parent_id=6103,
+            parent_id=None,
             level=3,
             code="ATMOSPHERIC_ARM_INSTALLED",
             name="Atmospheric Arm Installed",
@@ -425,7 +436,7 @@ async def _seed_mechanical_integration_continuity_case(session):
         StateNode(
             id=6114,
             machine_type_id=6001,
-            parent_id=6103,
+            parent_id=None,
             level=3,
             code="VACUUM_ARM_INSTALLED",
             name="Vacuum Arm Installed",
@@ -437,7 +448,7 @@ async def _seed_mechanical_integration_continuity_case(session):
         StateNode(
             id=6152,
             machine_type_id=6001,
-            parent_id=6151,
+            parent_id=None,
             level=2,
             code="STANDALONE_READY",
             name="Standalone Ready",
@@ -448,6 +459,13 @@ async def _seed_mechanical_integration_continuity_case(session):
         ),
     ]
     session.add_all([root_state, structure_state, transfer_state, standalone_state, *leaves])
+    session.add_all([
+        StateNodeReference(state_node_id=6111, parent_state_node_id=6102),
+        StateNodeReference(state_node_id=6112, parent_state_node_id=6102),
+        StateNodeReference(state_node_id=6113, parent_state_node_id=6103),
+        StateNodeReference(state_node_id=6114, parent_state_node_id=6103),
+        StateNodeReference(state_node_id=6152, parent_state_node_id=6151),
+    ])
 
     activity_root = ActivityNode(
         id=6201,
@@ -606,11 +624,10 @@ async def _seed_high_parallel_mechanical_integration_case(session):
         package = HIGH_PARALLEL_PACKAGES[package_name]
         leaf_id = 7200 + index
         leaf_ids[code] = leaf_id
-        session.add(
-            StateNode(
+        leaf = StateNode(
                 id=leaf_id,
                 machine_type_id=7001,
-                parent_id=state_package_ids[package["activity_code"]],
+                parent_id=None,
                 level=3,
                 code=f"STATE_{code}_DONE",
                 name=effect_name,
@@ -618,6 +635,13 @@ async def _seed_high_parallel_mechanical_integration_case(session):
                 operator="eq",
                 target_value="true",
                 state_kind="atomic",
+                sort_order=index,
+            )
+        session.add(leaf)
+        session.add(
+            StateNodeReference(
+                state_node_id=leaf_id,
+                parent_state_node_id=state_package_ids[package["activity_code"]],
                 sort_order=index,
             )
         )
@@ -748,6 +772,36 @@ async def test_layered_state_group_continuity_returns_parent_and_child_groups(db
     assert {"ROOT_STATE", "CHILD_STATE"} <= group_codes
     assert continuity["objective_weights"]["minimize_state_group_span"] == 1.0
     assert all(task["state_continuity_groups"] for task in result["schedule"]["tasks"])
+
+
+async def test_layered_expansion_uses_canonical_atomic_scope_and_deprecates_package_scope(db_session):
+    await _seed_state_group_continuity_case(db_session)
+
+    explicit = await expand_layered_context(
+        db_session,
+        5001,
+        LayeredExpansionRequest(atomic_activity_scope_ids=[5301]),
+    )
+    assert [item["atomic_activity_id"] for item in explicit["candidate_activities"]] == [5301]
+    assert all(
+        precondition["source_type"] == "self_activity_rule"
+        for rule in explicit["effective_rules"]
+        for precondition in rule["preconditions"]
+    )
+
+    compatibility = await expand_layered_context(
+        db_session,
+        5001,
+        LayeredExpansionRequest(activity_scope_node_ids=[5201]),
+    )
+    assert {item["atomic_activity_id"] for item in compatibility["candidate_activities"]} == {
+        5301,
+        5302,
+    }
+    assert any(
+        item["code"] == "ACTIVITY_PACKAGE_SCOPE_DEPRECATED"
+        for item in compatibility["diagnostics"]
+    )
 
 
 async def test_registered_state_package_continuity_rule_compiles_existing_groups(db_session):
@@ -1148,6 +1202,14 @@ async def test_layered_solve_empty_activity_scope_uses_all_atomic_activities(db_
     assert result["layered"]["activity_scope_defaulted"] is True
     assert result["layered"]["requested_activity_scope_node_ids"] == []
     assert result["layered"]["activity_scope_node_ids"] == []
+    assert result["layered"]["effective_model_version"].startswith("sha256:")
+    solve_request = await db_session.get(SolveRequest, result["solve_request_id"])
+    assert solve_request is not None
+    assert (
+        solve_request.overrides["effective_model_version"]
+        == result["layered"]["effective_model_version"]
+    )
+    assert solve_request.overrides["effective_model_snapshot"]["schema_version"] == "effective-model/v1"
     assert {task["op_rule_code"] for task in result["schedule"]["tasks"]} == {"RULE_CALIBRATE_STANDALONE"}
     assert "CALIBRATE_STANDALONE" in {
         item["activity_node_code"] for item in result["layered"]["candidate_activities"]

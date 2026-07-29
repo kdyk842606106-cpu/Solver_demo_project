@@ -39,9 +39,19 @@ def _scenario_workbook(*, broken_effect: bool = False) -> bytes:
         "machines": ["code", "machine_type_code", "name", "location"],
         "state_feature_defs": ["machine_type_code", "feature_key", "feature_name", "value_type", "allowed_values"],
         "resources": ["machine_code", "code", "name", "resource_type", "capacity", "is_available", "meta_json"],
+        "atomic_activities": [
+            "machine_type_code",
+            "code",
+            "name",
+            "activity_category",
+            "sort_order",
+            "is_active",
+            "metadata_json",
+        ],
         "rules": [
             "code",
             "machine_type_code",
+            "atomic_activity_code",
             "name",
             "duration_min",
             "description",
@@ -78,9 +88,12 @@ def _scenario_workbook(*, broken_effect: bool = False) -> bytes:
     workbook["state_feature_defs"].append(["IMPORT_MACHINE", "delivery_ready", "Delivery Ready", "enum", "false,true"])
     workbook["resources"].append(["IMPORT-001", "TECH-IMPORT-01", "Import Tech 01", "TECHNICIAN", 1, "true", ""])
     workbook["resources"].append(["IMPORT-001", "QA-IMPORT-01", "Import QA 01", "QA", 1, "true", ""])
+    workbook["atomic_activities"].append(["IMPORT_MACHINE", "ACT_IMPORT_PREP", "Prepare", "normal", 10, "true", ""])
+    workbook["atomic_activities"].append(["IMPORT_MACHINE", "ACT_IMPORT_DELIVER", "Deliver", "normal", 20, "true", ""])
     workbook["rules"].append([
         "OP_IMPORT_PREP",
         "IMPORT_MACHINE",
+        "ACT_IMPORT_PREP",
         "Prepare",
         10,
         "",
@@ -93,6 +106,7 @@ def _scenario_workbook(*, broken_effect: bool = False) -> bytes:
     workbook["rules"].append([
         "OP_IMPORT_DELIVER",
         "IMPORT_MACHINE",
+        "ACT_IMPORT_DELIVER",
         "Deliver",
         15,
         "",
@@ -122,9 +136,19 @@ def _large_scenario_workbook(rule_count: int = 105) -> bytes:
         "machines": ["code", "machine_type_code", "name", "location"],
         "state_feature_defs": ["machine_type_code", "feature_key", "feature_name", "value_type", "allowed_values"],
         "resources": ["machine_code", "code", "name", "resource_type", "capacity", "is_available", "meta_json"],
+        "atomic_activities": [
+            "machine_type_code",
+            "code",
+            "name",
+            "activity_category",
+            "sort_order",
+            "is_active",
+            "metadata_json",
+        ],
         "rules": [
             "code",
             "machine_type_code",
+            "atomic_activity_code",
             "name",
             "duration_min",
             "description",
@@ -164,9 +188,20 @@ def _large_scenario_workbook(rule_count: int = 105) -> bytes:
         workbook["feature_catalog"].append([feature_key, "enum", "false,true", "", ""])
         workbook["state_feature_defs"].append(["LARGE_MACHINE", feature_key, feature_key, "enum", "false,true"])
         precondition = "" if index == 0 else f"step_{index - 1:03d}_done:eq:true"
+        atomic_code = f"ACT_LARGE_{index:03d}"
+        workbook["atomic_activities"].append([
+            "LARGE_MACHINE",
+            atomic_code,
+            f"Large Step {index:03d}",
+            "normal",
+            index * 10,
+            "true",
+            "",
+        ])
         workbook["rules"].append([
             f"OP_LARGE_{index:03d}",
             "LARGE_MACHINE",
+            atomic_code,
             f"Large Step {index:03d}",
             5,
             "",

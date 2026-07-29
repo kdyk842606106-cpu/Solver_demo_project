@@ -246,7 +246,7 @@ V0.3 引入 Network Editor 后，“状态”需要区分求解器状态快照�
 |------|------|------|
 | 状态快照 | `MachineState` / `machine_state` | 机台某一时刻的特征键值集合，用于起点状态、目标状态或历史快照。 |
 | 状态维度 | `feature_key`；`StateFeatureDef` / `FeatureDefinition` | 描述状态事实的维度键。用户侧统一称“状态维度”；`StateFeatureDef` 表示机台类型内定义，`FeatureDefinition` 表示全局特征定义。 |
-| 状态本体 | `StateNode` / `state_node` | 全局唯一的业务状态定义，不直接携带层级所有权。 |
+| 状态本体 | `StateNode` / `state_node` | 设备类型内唯一的业务状态定义；跨数据库稳定身份留给后续版本仓库。 |
 | 原子状态 | `StateNode` 且非 `aggregate`，并具备可转换为事实的 `feature_key/operator/target_value` | 可判定的叶子状态事实；后续实现应统一原子状态判定口径，避免按 `feature_key`、`is_leaf`、`state_kind` 分散判断。 |
 | 状态包 | 聚合型 `StateNode` | 命名状态集合，按当前成员 AND 达成，可作为活动输入/输出绑定或目标状态。 |
 | 状态包成员引用 | `StateNodeReference` / `state_node_reference` | 表示同一状态本体出现在某个状态包中；删除引用不删除状态本体。 |
@@ -256,11 +256,18 @@ V0.3 引入 Network Editor 后，“状态”需要区分求解器状态快照�
 
 | 规范业务名 | 技术名 / 表 | 含义与边界 |
 |------|------|------|
-| 虚拟活动 | `ActivityNode(level 1/2)` / `activity_node` | 只用于组织、分解和展示的活动包，不直接绑定状态或参与求解器执行。 |
+| 活动包 | `ActivityNode(level 1/2)` / `activity_node` | 只用于组织、复用入口、分类和筛选，不直接绑定状态或参与求解器执行。旧产品名已经日落。 |
 | 原子活动 | `AtomicActivity` / `atomic_activity` | 当前推荐的可复用可执行能力定义，通过规则和绑定进入求解。 |
 | 旧执行活动 | `ActivityNode(level 3)` | 历史兼容的可执行活动节点，仅用于旧数据兼容，不作为新增建模首选。 |
 | 工序规则 / 执行定义 | `OpRule` / `op_rule` | 求解器实际读取的可执行规则，包含 precondition、effect、duration 和资源需求。 |
-| 活动包原子活动引用 | `ActivityPackageAtomicRef` / `activity_package_atomic_ref` | 表示某个二级活动包复用一个原子活动；移除引用不删除原子活动定义。 |
+| 活动包原子活动引用 | `ActivityPackageAtomicRef` / `activity_package_atomic_ref` | 表示某个活动包复用一个原子活动；移除引用不删除原子活动定义。 |
+| 有效模型 | `effective-model/v1` | 由目标状态、canonical 原子活动范围、规则和绑定解析出的当次求解输入；预检与正式求解共用。 |
+
+锁定补充：
+
+- Network Editor 唯一业务画布为 `state_transition`；旧视图参数只在兼容层归一化，不再产生不同投影。
+- Scope Guard 和活动包级状态绑定已经日落，只读审计，不进入当前有效模型。
+- 原维护意图产品方向已经废弃，不再作为 V0.3 当前需求继续维护。
 
 ---
 

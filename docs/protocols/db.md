@@ -67,6 +67,15 @@ Runtime status flow is normally:
 running -> done | failed
 ```
 
+For layered solves, `overrides` stores the immutable replay envelope:
+
+- `effective_model_version`
+- `effective_model_summary`
+- `effective_model_snapshot` (`schema = effective-model/v1`)
+
+Historical replay reads this envelope instead of resolving the old request
+against current master data.
+
 ## `candidate_plan`
 
 Written by Planner.
@@ -104,22 +113,44 @@ Important fields:
 
 ## Layered State / Activity Contracts
 
-TICKET-036 keeps old layered tables compatible while changing the preferred
-model:
+TICKET-097 freezes the body-reference model:
 
-- `state_node.level >= 1`; active childless nodes are atomic states.
-- Atomic state nodes carry `feature_key`, `operator`, and `target_value`.
-- Aggregate state nodes have children and must not bind concrete facts.
+- `state_node.state_kind = aggregate` means state package.
+- Non-aggregate state rows are atomic state bodies and must have
+  `parent_id IS NULL`.
+- Atomic state bodies carry `feature_key`, `operator`, and `target_value`.
+- `state_node_reference` is the only package-to-atomic-state membership.
+- Aggregate package-to-package hierarchy continues to use `state_node.parent_id`.
 - Atomic state writes auto-ensure global `feature_definition` and per-machine-type
   `state_feature_def` rows.
-- `activity_node` level 1/2 rows are business packages/scopes used for
-  organization, Scope Guards, maintenance scopes, grouping, and explanation.
+- `activity_node` level 1/2 rows are management packages used only for
+  organization, reuse entry points, filtering, and explanation.
 - `atomic_activity` rows are reusable executable activity definitions.
-- `activity_package_atomic_ref` attaches atomic activities to level-2 activity
-  packages, allowing reuse across packages.
+- `activity_package_atomic_ref` attaches atomic activities to activity packages,
+  allowing reuse across packages and owning package-local layout.
 - `op_rule.atomic_activity_id` is the preferred executable binding. Existing
   `op_rule.activity_node_id` remains nullable and supports legacy level-3
   activity-node data.
+- `activity_state_binding.atomic_activity_id` is the current executable endpoint.
+  Historical package bindings remain read-only and are excluded from the
+  effective model.
+
+Migration 014 changes body-side foreign keys to `RESTRICT`: a state or activity
+body cannot be deleted while referenced, bound, used by a rule, or used by a
+historical plan. Parent-package foreign keys may still cascade the membership
+row when the package itself is deleted; the referenced body is never cascaded.
+
+Reference identity is stable. Package/body endpoints cannot be updated in place;
+moving a member means deleting the old reference and creating a new reference.
+
+`scope_guard` and `scope_guard_precond` are retained only as historical audit
+tables. TICKET-097 performs no DDL or DML against them. Current-model write paths
+return a sunset error, imports reject non-empty sheets, and all solve services
+ignore the tables. Release requires both tables to remain empty.
+
+`maintenance_intent_template` is also historical compatibility data. The
+maintenance-intent product direction is no longer maintained and is not part of
+`effective-model/v1`.
 
 ## `schedule_result`
 

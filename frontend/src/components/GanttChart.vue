@@ -102,7 +102,7 @@ const props = defineProps({
   diffSteps: { type: Array, default: () => [] },
   timeMode: { type: String, default: 'minute' },
   dayMinutes: { type: Number, default: 480 },
-  labelMode: { type: String, default: 'full' },
+  labelMode: { type: String, default: 'name' },
   scheduleStartAt: { type: String, default: '' },
   rulePresentations: { type: Object, default: () => ({}) },
   selectionMode: { type: Boolean, default: false },
@@ -263,7 +263,7 @@ function formatNormalLabel(task, isCritical) {
     return isCritical ? `★ ${stepNo}${name}` : `${stepNo}${name}`
   }
   if (props.labelMode === 'name') {
-    return task.display_name ?? task.displayName ?? task.op_rule_name ?? task.op_name ?? task.op_rule_code ?? task.op_code ?? 'UNKNOWN'
+    return task.op_rule_name ?? task.op_name ?? task.display_name ?? task.displayName ?? task.op_rule_code ?? task.op_code ?? 'UNKNOWN'
   }
   const stepNo = task.step_order != null ? `${task.step_order}. ` : ''
   const code = task.op_rule_code ?? task.op_code ?? 'UNKNOWN'
@@ -279,7 +279,7 @@ function formatDiffLabel(step) {
     return `${stepNo}${name}`
   }
   if (props.labelMode === 'name') {
-    return step.display_name ?? step.displayName ?? step.op_name ?? step.op_rule_name ?? step.op_code ?? step.op_rule_code ?? 'UNKNOWN'
+    return step.op_name ?? step.op_rule_name ?? step.display_name ?? step.displayName ?? step.op_code ?? step.op_rule_code ?? 'UNKNOWN'
   }
   const prefix = step.base_start == null ? '[新增] ' : ''
   const stepNo = step.step_order != null ? `${step.step_order}. ` : ''
@@ -398,6 +398,7 @@ function taskMarkers(task) {
 
 function accessibilityTaskSummary(task) {
   const label = formatNormalLabel(task, isCriticalPath(task))
+  const code = task.op_rule_code ?? task.op_code
   const markers = taskMarkers(task).map((marker) =>
     `${marker.text}${marker.aggregate || marker.count > 1 ? `×${marker.count}` : ''}`,
   )
@@ -405,7 +406,7 @@ function accessibilityTaskSummary(task) {
   const shifts = [...new Map(
     segments.map(shiftDescriptor).filter(Boolean).map((shift) => [shift.key, shift]),
   ).values()].map((shift) => shift.detailLabel)
-  return [label, markers.length ? `甘特标识 ${markers.join(' / ')}` : '', shifts.length ? `班次 ${shifts.join(' / ')}` : '']
+  return [code && code !== label ? code : '', label, markers.length ? `甘特标识 ${markers.join(' / ')}` : '', shifts.length ? `班次 ${shifts.join(' / ')}` : '']
     .filter(Boolean)
     .join('；')
 }

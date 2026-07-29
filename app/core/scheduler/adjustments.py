@@ -79,44 +79,58 @@ def build_stability_stages(
     schedule_model: Any,
     context: dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
-    """Build the locked lexicographic stability expressions."""
+    """Build compact, relative-order lexicographic adjustment expressions."""
     if not context:
         return []
     model = schedule_model.model
-    base_starts = {
-        int(step_order): int(value)
-        for step_order, value in (context.get("base_starts") or {}).items()
-    }
     scope = {int(value) for value in context.get("scope_step_orders") or []}
     priority_by_step = {
         int(step_order): str(value)
         for step_order, value in (context.get("priority_by_step") or {}).items()
     }
-    changed: dict[int, Any] = {}
-    displacement: dict[int, Any] = {}
-    for step_order, task in schedule_model.task_vars.items():
-        if step_order not in base_starts:
-            continue
-        delta = model.new_int_var(0, schedule_model.horizon, f"adjustment_delta_{step_order}")
-        moved = model.new_bool_var(f"adjustment_changed_{step_order}")
-        model.add_abs_equality(delta, task.start - base_starts[step_order])
-        model.add(delta == 0).only_enforce_if(moved.Not())
-        model.add(delta >= 1).only_enforce_if(moved)
-        displacement[step_order] = delta
-        changed[step_order] = moved
 
-    outside = sorted(set(changed) - scope)
-    all_steps = sorted(changed)
+    inversions: dict[tuple[int, int], Any] = {}
+    for item in context.get("base_order_pairs") or []:
+        predecessor = int(item["predecessor_step_order"])
+        successor = int(item["successor_step_order"])
+        pair = (predecessor, successor)
+        if (
+            predecessor == successor
+            or pair in inversions
+            or predecessor not in schedule_model.task_vars
+            or successor not in schedule_model.task_vars
+        ):
+            continue
+        inverted = model.new_bool_var(
+            f"adjustment_order_inverted_{predecessor}_{successor}"
+        )
+        predecessor_start = schedule_model.task_vars[predecessor].start
+        successor_start = schedule_model.task_vars[successor].start
+        model.add(successor_start + 1 <= predecessor_start).only_enforce_if(inverted)
+        model.add(successor_start >= predecessor_start).only_enforce_if(inverted.Not())
+        inversions[pair] = inverted
+
+    outside_pairs = sorted(
+        pair for pair in inversions
+        if pair[0] not in scope and pair[1] not in scope
+    )
+    all_pairs = sorted(inversions)
+    all_steps = sorted(schedule_model.task_vars)
     priority_expression = sum(
         PRIORITY_WEIGHTS.get(priority_by_step.get(step_order, "normal"), 2)
         * schedule_model.task_vars[step_order].start
         for step_order in all_steps
     )
     return [
-        {"type": "minimize_outside_changed_count", "expression": sum(changed[s] for s in outside)},
-        {"type": "minimize_outside_displacement", "expression": sum(displacement[s] for s in outside)},
-        {"type": "minimize_all_changed_count", "expression": sum(changed[s] for s in all_steps)},
-        {"type": "minimize_all_displacement", "expression": sum(displacement[s] for s in all_steps)},
+        {"type": "minimize_makespan", "expression": schedule_model.makespan},
+        {
+            "type": "minimize_outside_order_inversions",
+            "expression": sum(inversions[pair] for pair in outside_pairs),
+        },
+        {
+            "type": "minimize_all_order_inversions",
+            "expression": sum(inversions[pair] for pair in all_pairs),
+        },
         {"type": "minimize_priority_weighted_start", "expression": priority_expression},
     ]
 

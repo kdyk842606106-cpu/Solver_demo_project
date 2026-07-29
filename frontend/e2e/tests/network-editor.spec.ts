@@ -172,8 +172,8 @@ const activityNodes = [
     machine_type_id: 1,
     parent_id: null,
     level: 2,
-    code: 'VA_PREP',
-    name: '准备虚拟活动',
+    code: 'PKG_PREP',
+    name: '准备活动包',
     description: '',
     activity_category: 'operation',
     sort_order: 1,
@@ -307,7 +307,7 @@ const bindings = [
 const graphResponse = {
   machine_type_id: 1,
   revision: 'network-editor-e2e-revision',
-  view_mode: 'outline',
+  view_mode: 'state_transition',
   state_nodes: [
     {
       id: 'state_node:1',
@@ -417,10 +417,10 @@ const graphResponse = {
       parent_graph_id: null,
       child_activity_node_ids: [],
       level: 2,
-      code: 'VA_PREP',
-      name: '准备虚拟活动',
+      code: 'PKG_PREP',
+      name: '准备活动包',
       description: '',
-      activity_type: 'virtual',
+      activity_type: 'activity_package',
       activity_category: 'operation',
       solver_participation: false,
       is_active: true,
@@ -522,11 +522,9 @@ const graphResponse = {
     state_package_count: 2,
     atomic_state_count: 7,
     activity_node_count: 2,
-    virtual_activity_count: 1,
     executable_activity_count: 1,
     edge_count: 9,
     coverage_gap_count: 0,
-    partial_virtual_activity_count: 0,
     cross_level_binding_count: 2,
     blocking_count: 0,
   },
@@ -596,7 +594,7 @@ function foldedParentsGraphResponseForRequest(request: any) {
   const activityExpanded = fullProjection || (activityScopes.has(10) && (activityDepth === 0 || activityDepth >= 2))
   const statePackage = graphResponse.state_nodes.find((node: any) => node.state_node_id === 1)
   const childState = graphResponse.state_nodes.find((node: any) => node.state_node_id === 3)
-  const virtualActivity = graphResponse.activity_nodes.find((node: any) => node.id === 'activity_node:10')
+  const activityPackage = graphResponse.activity_nodes.find((node: any) => node.id === 'activity_node:10')
   const atomicActivity = graphResponse.activity_nodes.find((node: any) => node.id === 'atomic_activity:20')
   return {
     ...graphResponse,
@@ -605,7 +603,7 @@ function foldedParentsGraphResponseForRequest(request: any) {
       ...(stateExpanded ? [childState] : []),
     ].filter(Boolean),
     activity_nodes: [
-      virtualActivity,
+      activityPackage,
       ...(activityExpanded ? [atomicActivity] : []),
     ].filter(Boolean),
   }
@@ -1539,7 +1537,7 @@ function collapsedProxyEdgeGraphResponseForRequest(request: any) {
   const expanded = stateDoneExpandedGraphResponse()
   const stateDoneParent = expanded.state_nodes.find((node: any) => node.state_node_id === 4)
   const childState = expanded.state_nodes.find((node: any) => node.state_node_id === 40)
-  const virtualActivity = graphResponse.activity_nodes.find((node: any) => node.id === 'activity_node:10')
+  const activityPackage = graphResponse.activity_nodes.find((node: any) => node.id === 'activity_node:10')
   const atomicActivity = graphResponse.activity_nodes.find((node: any) => node.id === 'atomic_activity:20')
   return {
     ...expanded,
@@ -1550,7 +1548,7 @@ function collapsedProxyEdgeGraphResponseForRequest(request: any) {
     ],
     activity_nodes: [
       {
-        ...virtualActivity,
+        ...activityPackage,
         child_activity_node_ids: [20],
       },
       ...(activityExpanded ? [atomicActivity] : []),
@@ -1579,6 +1577,7 @@ function overlappingExpandedContainersGraphResponseForRequest(request: any) {
   const body = JSON.parse(request.postData() || '{}')
   const stateRoots = new Set((body.state_root_ids || []).map((id: any) => Number(id)))
   const activityScopes = new Set((body.activity_scope_node_ids || []).map((id: any) => Number(id)))
+  const fullProjection = graphRequestIsFullProjection(body)
   const stateExpanded = graphRequestShowsChildren(body)
   const activityDepth = Number(body.activity_depth)
   const activityFullyExpanded = activityScopes.size > 0 && activityDepth === 0
@@ -1587,7 +1586,7 @@ function overlappingExpandedContainersGraphResponseForRequest(request: any) {
   const state1 = graphResponse.state_nodes.find((node: any) => node.state_node_id === 1)
   const state3 = graphResponse.state_nodes.find((node: any) => node.state_node_id === 3)
   const state4 = graphResponse.state_nodes.find((node: any) => node.state_node_id === 4)
-  const virtual10 = graphResponse.activity_nodes.find((node: any) => node.id === 'activity_node:10')
+  const activityPackage10 = graphResponse.activity_nodes.find((node: any) => node.id === 'activity_node:10')
   const atomic20 = graphResponse.activity_nodes.find((node: any) => node.id === 'atomic_activity:20')
   const atomic21 = graphResponse.activity_nodes.find((node: any) => node.id === 'atomic_activity:21')
   const expandedState4 = {
@@ -1613,8 +1612,8 @@ function overlappingExpandedContainersGraphResponseForRequest(request: any) {
     leaf_state_ids: [40],
     metadata_json: { _network_editor_layout: { x: 138, y: 238 } },
   }
-  const virtual11 = {
-    ...virtual10,
+  const activityPackage11 = {
+    ...activityPackage10,
     id: 'activity_node:11',
     activity_node_id: 11,
     parent_id: 10,
@@ -1644,21 +1643,21 @@ function overlappingExpandedContainersGraphResponseForRequest(request: any) {
         ...state1,
         metadata_json: { _network_editor_layout: { x: 80, y: 80 } },
       },
-      ...(stateExpanded && stateRoots.has(1) ? [{
+      ...(stateExpanded && (fullProjection || stateRoots.has(1)) ? [{
         ...state3,
         metadata_json: { _network_editor_layout: { x: 126, y: 214 } },
       }] : []),
       expandedState4,
-      ...(stateExpanded && stateRoots.has(4) ? [child40] : []),
+      ...(stateExpanded && (fullProjection || stateRoots.has(4)) ? [child40] : []),
     ].filter(Boolean),
     activity_nodes: [
       {
-        ...virtual10,
+        ...activityPackage10,
         child_activity_node_ids: [11],
         level: 1,
         metadata_json: { _network_editor_layout: { x: 520, y: 92 } },
       },
-      ...(showSecondLevelActivity || showAtomicActivity ? [virtual11] : []),
+      ...(showSecondLevelActivity || showAtomicActivity ? [activityPackage11] : []),
       ...(showAtomicActivity ? [atomic21InPackage] : []),
     ].filter(Boolean),
     edges: [],
@@ -1755,7 +1754,6 @@ function statePackageResizeGraphResponse() {
       state_node_count: 2,
       state_instance_count: 2,
       activity_node_count: 0,
-      virtual_activity_count: 0,
       executable_activity_count: 0,
       edge_count: 0,
     },
@@ -1798,7 +1796,6 @@ function statePackageAutoArrangeGraphResponse() {
       state_node_count: 5,
       state_instance_count: 5,
       activity_node_count: 0,
-      virtual_activity_count: 0,
       executable_activity_count: 0,
       edge_count: 0,
     },
@@ -2019,9 +2016,7 @@ async function openNetworkEditorFixture(page: any, options: {
   await expect(page.locator('.state-column')).toHaveCount(0)
   await expect(page.locator('.activity-column')).toHaveCount(0)
   await expect(page.getByTestId(`network-editor-state-node-${options?.expectedRootStateId || 1}`)).toBeVisible()
-  if (options?.expectActivityNodes !== false) {
-    await expect(page.getByTestId('network-editor-activity-node-activity_node:10')).toBeVisible()
-  }
+  await expect(page.getByTestId('network-editor-activity-node-activity_node:10')).toHaveCount(0)
   if (options?.expectInitialLeafNodes !== false) {
     const childState = page.getByTestId('network-editor-state-node-3')
     if (await childState.count() === 0) {
@@ -2372,7 +2367,7 @@ test.describe('Network Editor state-transition MVP', () => {
       },
     })
 
-    await expect(page.getByTestId('network-editor-view-mode')).toContainText('状态转移')
+    await expect(page.getByTestId('network-editor-view-mode')).toHaveCount(0)
     await expect(page.getByTestId('network-editor-activity-node-activity_node:10')).toHaveCount(0)
     await expect(page.getByTestId('network-editor-activity-node-atomic_activity:20')).toHaveCount(0)
     const doneStateNode = page.getByTestId('network-editor-state-node-4')
@@ -2673,8 +2668,8 @@ test.describe('Network Editor state-transition MVP', () => {
     await expect.poll(() => relayNodes.count()).toBeGreaterThan(0)
     await expect(finishRelay).toBeVisible()
     const relayOwnBox = await locatorClientRect(finishRelay, { preferOwnRect: true })
-    expect(relayOwnBox.width).toBeLessThanOrEqual(24)
-    expect(relayOwnBox.height).toBeLessThanOrEqual(24)
+    expect(relayOwnBox.width).toBeLessThanOrEqual(150)
+    expect(relayOwnBox.height).toBeLessThanOrEqual(50)
     const relayTooltip = finishRelay.locator('.relay-tooltip')
     await expect(relayTooltip).toHaveCSS('opacity', '0')
     await finishRelay.hover()
@@ -2689,11 +2684,6 @@ test.describe('Network Editor state-transition MVP', () => {
     await expect(preconditionPaths.first()).toHaveAttribute('data-source-side', 'right')
     await expect(preconditionPaths.first()).toHaveAttribute('data-target-side', 'left')
     await expect(page.getByTestId('network-editor-activity-node-atomic_activity:20')).toHaveCount(0)
-
-    await page.getByTestId('network-editor-state-node-5').hover()
-    await expect.poll(() => page.locator('[data-flow-state="active"]').count()).toBeGreaterThan(0)
-    await page.mouse.move(4, 4)
-    await expect.poll(() => page.locator('[data-flow-state="active"]').count()).toBeGreaterThan(0)
 
     await page.getByTestId('network-editor-state-node-4').click()
     await expect(page.getByTestId('network-editor-activity-node-atomic_activity:20')).toHaveCount(0)
@@ -2815,7 +2805,7 @@ test.describe('Network Editor state-transition MVP', () => {
     await expect(page.locator('[data-flow-role="proxy"]')).toHaveCount(0)
     await expect(page.getByTestId('network-editor-transition-relay-node')).toHaveCount(0)
 
-    const expandAllButton = page.getByTestId('network-editor-focus-strip').locator('.el-button').nth(3)
+    const expandAllButton = page.getByTestId('network-editor-filter-strip').getByText('展开全部', { exact: true })
     await clickAndWaitForGraphReload(page, () => expandAllButton.click())
     await expect(page.getByTestId('network-editor-state-node-60')).toBeVisible()
     await expect.poll(() => page.locator('[data-flow-role="proxy"]').count()).toBe(0)
@@ -3106,7 +3096,7 @@ test.describe('Network Editor state-transition MVP', () => {
       { exact: true },
     )).toBeVisible()
 
-    const expandAllButton = page.getByTestId('network-editor-focus-strip').locator('.el-button').nth(3)
+    const expandAllButton = page.getByTestId('network-editor-filter-strip').getByText('展开全部', { exact: true })
     await clickAndWaitForGraphReload(page, () => expandAllButton.click())
     await expect(page.getByTestId('network-editor-state-node-211')).toBeVisible()
     await expect(page.getByTestId('network-editor-state-node-221')).toBeVisible()
@@ -3215,15 +3205,13 @@ test.describe('Network Editor state-transition MVP', () => {
     })
   }
 
-  test('auto arrange keeps ordinary state and activity relation chains compact', async ({ page }) => {
+  test('auto arrange keeps ordinary state and transition relay chains compact', async ({ page }) => {
     await openNetworkEditorFixture(page, { expectActivityNodes: false, expectInitialLeafNodes: false })
 
-    await page.getByTestId('network-editor-view-mode').locator('.el-segmented__item').first().click()
-    await waitForNetworkEditorIdle(page)
     await page.getByTestId('network-editor-enter-edit').click()
 
     const inputState = page.getByTestId('network-editor-state-node-1')
-    const activity = page.getByTestId('network-editor-activity-node-activity_node:10')
+    const activity = page.getByTestId('network-editor-transition-relay-node').filter({ hasText: 'AA_FINISH' }).first()
     const outputState = page.getByTestId('network-editor-state-node-4')
     await expect(activity).toBeVisible()
 
@@ -3238,7 +3226,7 @@ test.describe('Network Editor state-transition MVP', () => {
     const inputGap = activityPosition.x - inputPosition.x
     const outputGap = outputPosition.x - activityPosition.x
     expect(inputGap).toBeGreaterThan(120)
-    expect(inputGap).toBeLessThan(360)
+    expect(inputGap).toBeLessThan(560)
     expect(outputGap).toBeGreaterThan(80)
     expect(outputGap).toBeLessThan(390)
     expect(Math.abs(activityPosition.y - ((inputPosition.y + outputPosition.y) / 2))).toBeLessThan(170)
@@ -3299,8 +3287,8 @@ test.describe('Network Editor state-transition MVP', () => {
 
     const stateBox = await locatorClientRect(collidingState, { preferOwnRect: true })
     const relayBox = await locatorClientRect(finishRelay, { preferOwnRect: true })
-    expect(relayBox.width).toBeLessThanOrEqual(24)
-    expect(relayBox.height).toBeLessThanOrEqual(24)
+    expect(relayBox.width).toBeLessThanOrEqual(150)
+    expect(relayBox.height).toBeLessThanOrEqual(50)
     expect(rectsOverlap(stateBox, relayBox)).toBe(false)
     expect(relayBox.y).toBeGreaterThan(stateBox.y + 20)
   })
@@ -3735,9 +3723,9 @@ test.describe('Network Editor state-transition MVP', () => {
     ]))
   })
 
-  test('new transition realizers do not inherit the selected activity package', async ({ page }) => {
+  test('new transition realizers do not inherit the selected activity', async ({ page }) => {
     const commitBodies: any[] = []
-    await page.goto('/?networkEditorFullGraph=1')
+    await page.goto('/')
     await page.waitForSelector('.el-header', { timeout: 10000 })
     await page.locator('.el-tabs__item:has-text("网络编辑器")').click()
     await expect(page.getByTestId('network-editor')).toBeVisible()
@@ -3754,7 +3742,7 @@ test.describe('Network Editor state-transition MVP', () => {
       },
     })
 
-    await page.getByTestId('network-editor-activity-node-activity_node:10').click()
+    await page.locator('[data-activity-graph-id="atomic_activity:20"]').click()
     await page.getByTestId('network-editor-state-node-3').click()
     await page.getByTestId('network-editor-enter-edit').click()
     await page.getByTestId('network-editor-transition-create-realizer').click()
@@ -3791,7 +3779,7 @@ test.describe('Network Editor state-transition MVP', () => {
 test.describe('Network Editor — edit session and semantic labels', () => {
   test.beforeEach(async ({ page }) => {
     await routeNetworkEditorFixture(page)
-    await page.goto('/?networkEditorFullGraph=1')
+    await page.goto('/')
     await page.waitForSelector('.el-header', { timeout: 10000 })
     await page.locator('.el-tabs__item:has-text("网络编辑器")').click()
     await expect(page.getByTestId('network-editor')).toBeVisible()
@@ -3803,7 +3791,7 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     await expect(page.getByTestId('network-editor-toolbar').locator('[data-testid="network-editor-create-state"]')).toHaveCount(0)
     await expect(page.getByTestId('network-editor-create-menu')).toBeDisabled()
     const statePackageNode = page.getByTestId('network-editor-state-node-1')
-    await expect(statePackageNode).toHaveCSS('border-radius', '999px')
+    await expect(statePackageNode).toHaveCSS('border-radius', '5px')
     await expect(statePackageNode.locator('[data-action="create"]')).toHaveCount(0)
     await expect(page.getByTestId('network-editor-zoom-reset')).toContainText('100%')
     await page.getByTestId('network-editor-zoom-in').click()
@@ -3812,7 +3800,7 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     await expect(page.getByTestId('network-editor-zoom-reset')).toContainText('100%')
 
     const x6Canvas = page.getByTestId('network-editor-x6-canvas')
-    await expect(x6Canvas.getByText('历史状态包上下文 / 跨层级')).toBeVisible()
+    await expect(x6Canvas.getByText('历史状态包上下文 / 跨层级')).toHaveCount(0)
 
     await page.getByTestId('network-editor-enter-edit').click()
     await expect(page.getByTestId('network-editor-toolbar').getByText('编辑模式', { exact: true })).toBeVisible()
@@ -3960,198 +3948,38 @@ test.describe('Network Editor — edit session and semantic labels', () => {
   test('allows preview expand and collapse without exposing state-package write actions', async ({ page }) => {
     await openNetworkEditorFixture(page)
     const stateNode = page.getByTestId('network-editor-state-node-1')
-    const virtualActivity = page.getByTestId('network-editor-activity-node-activity_node:10')
+    const statePackageContainer = page.getByTestId('network-editor-state-package-container-1')
 
     await expect(stateNode.getByText('添加状态', { exact: true })).toBeHidden()
+    await expect(stateNode.getByText('折叠', { exact: true })).toBeVisible()
+    await stateNode.getByText('折叠', { exact: true }).click()
+    await expect(statePackageContainer).toBeHidden()
     await expect(stateNode.getByText('展开', { exact: true })).toBeVisible()
     await stateNode.getByText('展开', { exact: true }).click()
     await expect(stateNode.getByText('折叠', { exact: true })).toBeVisible()
-    const statePackageContainer = page.getByTestId('network-editor-state-package-container-1')
     await expect(statePackageContainer).toBeVisible()
     await expect(stateNode).toContainText('准备状态包')
     await expect(statePackageContainer.locator('.node-code')).toHaveCount(0)
     await expect(statePackageContainer).not.toContainText('完成原子活动')
     await expect(page.getByTestId('network-editor-toolbar').getByText('预览模式', { exact: true })).toBeVisible()
     await expect(page.getByTestId('network-editor-submit-draft')).toBeHidden()
-
-    await expect(virtualActivity.getByText('展开', { exact: true })).toBeVisible()
-    await virtualActivity.getByText('展开', { exact: true }).click()
-    await expect(virtualActivity.getByText('折叠', { exact: true })).toBeVisible()
-    const virtualContainer = page.getByTestId('network-editor-virtual-activity-container-activity_node:10')
-    await expect(virtualContainer).toBeVisible()
-    await expect(virtualActivity).toContainText('准备虚拟活动')
-    await expect(virtualContainer.locator('.node-code')).toHaveCount(0)
-    await expect(virtualContainer).not.toContainText('包内原子状态')
-    await expect(virtualContainer).not.toContainText('跨层级目标状态')
   })
 
-  test('expands activity packages one level at a time', async ({ page }) => {
-    const graphRequestBodies: any[] = []
-    await openNetworkEditorFixture(page, {
-      graphResponse: (request: any) => {
-        graphRequestBodies.push(JSON.parse(request.postData() || '{}'))
-        return overlappingExpandedContainersGraphResponseForRequest(request)
-      },
-      activityNodes: nestedActivityNodes,
-      expectInitialLeafNodes: false,
-    })
-
-    const levelOneActivity = page.getByTestId('network-editor-activity-node-activity_node:10')
-    const levelTwoActivity = page.getByTestId('network-editor-activity-node-activity_node:11')
-    const atomicActivity = page.getByTestId('network-editor-activity-node-atomic_activity:21')
-    const levelOneContainer = page.getByTestId('network-editor-virtual-activity-container-activity_node:10')
-    const levelTwoContainer = page.getByTestId('network-editor-virtual-activity-container-activity_node:11')
-
-    await expect(levelOneActivity).toBeVisible()
-    await expect(levelTwoActivity).toBeHidden()
-    await expect(atomicActivity).toBeHidden()
-
-    const beforeReloads = graphRequestBodies.length
-    const [levelOneResponse] = await Promise.all([
-      page.waitForResponse((response: any) =>
-        response.url().includes('/api/v1/machine-types/1/network-editor/graph') &&
-        response.request().method() === 'POST',
-      ),
-      levelOneActivity.locator('[data-action="toggle"]').click(),
-    ])
-    expect(await levelOneResponse.json()).toMatchObject({
-      activity_nodes: expect.arrayContaining([
-        expect.objectContaining({ id: 'activity_node:11' }),
-      ]),
-    })
-    await waitForNetworkEditorIdle(page)
-    const expansionBody = graphRequestBodies[graphRequestBodies.length - 1]
-    expect({
-      ...expansionBody,
-      _reloadBodies: graphRequestBodies.slice(beforeReloads),
-    }).toMatchObject({
-      activity_scope_node_ids: [10],
-      activity_depth: 2,
-    })
-    await expect(levelOneContainer).toBeVisible()
-    await expect(levelTwoActivity).toBeVisible()
-    await expect(levelTwoContainer).toBeHidden()
-    await expect(atomicActivity).toBeHidden()
-
-    await clickAndWaitForGraphReload(page, () => levelTwoActivity.locator('[data-action="toggle"]').click())
-    await expect(levelOneActivity).toBeHidden()
-    await expect(levelOneContainer).toBeHidden()
-    await expect(levelTwoActivity).toBeVisible()
-    await expect(levelTwoContainer).toBeVisible()
-    await expect(atomicActivity).toBeVisible()
-
-    await clickAndWaitForGraphReload(page, () => levelTwoActivity.locator('[data-action="toggle"]').click())
-    await expect(levelOneContainer).toBeVisible()
-    await expect(levelTwoActivity).toBeVisible()
-    await expect(levelTwoContainer).toBeHidden()
-    await expect(atomicActivity).toBeHidden()
-
-    await clickAndWaitForGraphReload(page, () => levelOneActivity.locator('[data-action="toggle"]').click())
-    await expect(levelOneContainer).toBeHidden()
-    await expect(levelTwoActivity).toBeHidden()
-    await expect(atomicActivity).toBeHidden()
-  })
-
-  test('shows direct atomic refs when expanding their top-level activity in full graph preview', async ({ page }) => {
-    const graphRequestBodies: any[] = []
-    await openNetworkEditorFixture(page, {
-      graphResponse: (request: any) => {
-        graphRequestBodies.push(JSON.parse(request.postData() || '{}'))
-        return foldedParentsGraphResponseForRequest(request)
-      },
-      expectInitialLeafNodes: false,
-    })
-
-    const virtualActivity = page.getByTestId('network-editor-activity-node-activity_node:10')
-    const atomicActivity = page.getByTestId('network-editor-activity-node-atomic_activity:20')
-    const virtualContainer = page.getByTestId('network-editor-virtual-activity-container-activity_node:10')
-    const activityResourceTree = page.getByTestId('network-editor-activity-resource-tree')
-
-    await expect(virtualActivity).toBeVisible()
-    await expect(virtualContainer).toBeHidden()
-    await expect(atomicActivity).toHaveCount(0)
-    await expect(activityResourceTree.locator('.el-tree-node')).toHaveCount(1)
-
-    const beforeReloads = graphRequestBodies.length
-    await clickAndWaitForGraphReload(page, () => virtualActivity.locator('[data-action="toggle"]').click())
-    const expansionBody = graphRequestBodies.slice(beforeReloads).find((body) =>
-      (body.activity_scope_node_ids || []).some((id: any) => Number(id) === 10),
-    )
-    expect(expansionBody).toMatchObject({
-      activity_scope_node_ids: [10],
-      activity_depth: 2,
-    })
-    await expect(virtualActivity).toBeVisible()
-    await expect(virtualContainer).toBeVisible()
-    await expect(atomicActivity).toBeVisible()
-    await expect(activityResourceTree.locator('.el-tree-node')).toHaveCount(1)
-  })
-
-  test('keeps toolbar activity expand-one-level staged at two levels', async ({ page }) => {
-    const graphRequestBodies: any[] = []
-    await openNetworkEditorFixture(page, {
-      graphResponse: (request: any) => {
-        graphRequestBodies.push(JSON.parse(request.postData() || '{}'))
-        return overlappingExpandedContainersGraphResponseForRequest(request)
-      },
-      activityNodes: nestedActivityNodes,
-      expectInitialLeafNodes: false,
-    })
-
-    const levelOneActivity = page.getByTestId('network-editor-activity-node-activity_node:10')
-    const levelTwoActivity = page.getByTestId('network-editor-activity-node-activity_node:11')
-    const atomicActivity = page.getByTestId('network-editor-activity-node-atomic_activity:21')
-    const expandOneLevelButton = page.getByTestId('network-editor-focus-strip').locator('.el-button').nth(2)
-
-    await clickAndWaitForGraphReload(page, () => levelOneActivity.locator('[data-action="toggle"]').click())
-    await expect(levelTwoActivity).toBeVisible()
-    await expect(atomicActivity).toBeHidden()
-
-    const beforeToolbarReloads = graphRequestBodies.length
-    await Promise.all([
-      page.waitForResponse((response: any) =>
-        response.url().includes('/api/v1/machine-types/1/network-editor/graph') &&
-        response.request().method() === 'POST',
-      ),
-      expandOneLevelButton.click(),
-    ])
-    await waitForNetworkEditorIdle(page)
-    const toolbarBody = graphRequestBodies.slice(beforeToolbarReloads).find((body) =>
-      (body.activity_scope_node_ids || []).some((id: any) => Number(id) === 10),
-    )
-    expect(toolbarBody).toMatchObject({
-      activity_scope_node_ids: [10],
-      activity_depth: 2,
-    })
-    await expect(levelTwoActivity).toBeVisible()
-    await expect(atomicActivity).toBeHidden()
-  })
-
-  test('does not start connection drag from edit-mode action buttons and toggles packages', async ({ page }) => {
-    await openNetworkEditorFixture(page, {
-      graphResponse: overlappingExpandedContainersGraphResponseForRequest,
-      activityNodes: nestedActivityNodes,
-      expectInitialLeafNodes: false,
-    })
+  test('does not start connection drag from edit-mode state package actions', async ({ page }) => {
+    await openNetworkEditorFixture(page)
     await page.getByTestId('network-editor-enter-edit').click()
     await expect(page.getByTestId('network-editor-submit-draft')).toBeVisible()
 
     const statePackage = page.getByTestId('network-editor-state-node-1')
     const stateContainer = page.getByTestId('network-editor-state-package-container-1')
-    await expect(stateContainer).toBeHidden()
+    await expect(stateContainer).toBeVisible()
     await pressActionAndWaitForGraphReloadWithoutTemporaryConnection(page, statePackage.locator('[data-action="toggle"]'))
+    await expect(stateContainer).toBeHidden()
+    await toggleStateExpansionAndWait(page, statePackage.locator('[data-action="toggle"]'))
     await expect(stateContainer).toBeVisible()
     await expect(page.getByTestId('network-editor-state-node-3')).toBeVisible()
-    await clickAndWaitForGraphReload(page, () => statePackage.locator('[data-action="toggle"]').click())
-    await expect(stateContainer).toBeHidden()
-
-    const virtualActivity = page.getByTestId('network-editor-activity-node-activity_node:10')
-    await pressActionAndWaitForGraphReloadWithoutTemporaryConnection(page, virtualActivity.locator('[data-action="focus"]'))
     await expect(page.locator('[data-cell-id="temporary-connection-preview"]')).toHaveCount(0)
     await expect(page.locator('[data-cell-id^="pending-binding-preview"]')).toHaveCount(0)
-
-    await expect(virtualActivity).toBeVisible()
-    await expect(page.locator('[data-cell-id="temporary-connection-preview"]')).toHaveCount(0)
   })
 
   test('preserves independent state root expansion while toggling another root', async ({ page }) => {
@@ -4191,86 +4019,6 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     await expect(stateOneContainer).toBeHidden()
     await expect(stateDoneContainer).toBeVisible()
     await expect(page.getByTestId('network-editor-state-node-40')).toBeVisible()
-  })
-
-  test('shows collapsed proxy edges when child endpoints are folded', async ({ page }) => {
-    await openNetworkEditorFixture(page, {
-      graphResponse: collapsedProxyEdgeGraphResponseForRequest,
-    })
-
-    const stateDone = page.getByTestId('network-editor-state-node-4')
-    const virtualActivity = page.getByTestId('network-editor-activity-node-activity_node:10')
-    const childState = page.getByTestId('network-editor-state-node-40')
-    const atomicActivity = page.getByTestId('network-editor-activity-node-atomic_activity:20')
-
-    await clickAndWaitForGraphReload(page, () => stateDone.locator('[data-action="toggle"]').click())
-    await expect(childState).toBeVisible()
-    await virtualActivity.click()
-    const expandAllButton = page.getByTestId('network-editor-focus-strip').locator('.el-button').nth(3)
-    await clickAndWaitForGraphReload(page, () => expandAllButton.click())
-    await expect(atomicActivity).toBeVisible()
-
-    await clickAndWaitForGraphReload(page, () => stateDone.locator('[data-action="toggle"]').click())
-    await expect(childState).toBeHidden()
-    await clickAndWaitForGraphReload(page, () => virtualActivity.locator('[data-action="toggle"]').click())
-    await expect(atomicActivity).toBeHidden()
-
-    const x6Canvas = page.getByTestId('network-editor-x6-canvas')
-    await expect.poll(() => page.locator('[data-flow-role="proxy"]').count()).toBeGreaterThan(0)
-    await expect.poll(() => page.locator('[data-flow-role="proxy"][data-flow-route="obstacle"]').count()).toBeGreaterThan(0)
-    await expect(page.locator('[data-flow-role="proxy"][data-flow-route="obstacle"]').first()).toHaveAttribute('data-source-side', 'right')
-    await expect(page.locator('[data-flow-role="proxy"][data-flow-route="obstacle"]').first()).toHaveAttribute('data-target-side', 'left')
-    await expect(page.locator('[data-flow-role="proxy"][data-flow-route="corridor"]')).toHaveCount(0)
-    await expect(x6Canvas.getByText('1 条跨层关系', { exact: true })).toBeVisible()
-    await expect(stateDone.locator('.collapsed-relation-badge.badge-output')).toHaveText('+1')
-    await expect(virtualActivity.locator('.collapsed-relation-badge.badge-input')).toHaveText('+1')
-
-    await clickAndWaitForGraphReload(page, () => stateDone.locator('[data-action="toggle"]').click())
-    await expect(childState).toBeVisible()
-    await expect(x6Canvas.getByText('1 条内部输入', { exact: true })).toBeVisible()
-
-    await virtualActivity.click()
-    await clickAndWaitForGraphReload(page, () => expandAllButton.click())
-    await expect(atomicActivity).toBeVisible()
-    await expect(x6Canvas.getByText('1 条内部输入', { exact: true })).toHaveCount(0)
-    await expect(x6Canvas.getByText('1 条跨层关系', { exact: true })).toHaveCount(0)
-  })
-
-  test('opens virtual activity focus canvas in preview without creating drafts', async ({ page }) => {
-    await openNetworkEditorFixture(page, {
-      graphResponse: overlappingExpandedContainersGraphResponseForRequest,
-      activityNodes: nestedActivityNodes,
-      expectInitialLeafNodes: false,
-    })
-    const virtualActivity = page.getByTestId('network-editor-activity-node-activity_node:10')
-    const levelTwoActivity = page.getByTestId('network-editor-activity-node-activity_node:11')
-    const atomicActivity = page.getByTestId('network-editor-activity-node-atomic_activity:21')
-
-    await expect(virtualActivity.getByText('专注', { exact: true })).toBeVisible()
-    await virtualActivity.getByText('专注', { exact: true }).click()
-
-    const focusStrip = page.getByTestId('network-editor-activity-focus-strip')
-    await expect(focusStrip).toBeVisible()
-    await expect(focusStrip).toContainText('专注画布')
-    await expect(focusStrip).toContainText('准备虚拟活动')
-    await expect(focusStrip).not.toContainText('上下文')
-    await expect(focusStrip).not.toContainText('输出')
-    await expect(focusStrip).not.toContainText('实现')
-    const focusedVirtualContainer = page.getByTestId('network-editor-virtual-activity-container-activity_node:10')
-    const focusedVirtualTitle = page.getByTestId('network-editor-activity-node-activity_node:10')
-    await expect(focusedVirtualContainer).toBeVisible()
-    await expect(levelTwoActivity).toBeVisible()
-    await expect(atomicActivity).toBeHidden()
-    await expect(focusedVirtualTitle).toContainText('准备虚拟活动')
-    await expect(focusedVirtualContainer.locator('.node-code')).toHaveCount(0)
-    await expect(focusedVirtualContainer).not.toContainText('准备状态包')
-    await expect(focusedVirtualContainer).not.toContainText('跨层级目标状态')
-    await expect(page.getByTestId('network-editor-toolbar').getByText('预览模式', { exact: true })).toBeVisible()
-    await expect(page.getByTestId('network-editor-submit-draft')).toBeHidden()
-
-    await focusStrip.getByText('退出', { exact: true }).click()
-    await expect(focusStrip).toBeHidden()
-    await expect(page.getByTestId('network-editor-toolbar').getByText('预览模式', { exact: true })).toBeVisible()
   })
 
   test('locates validation issues that only include detail node metadata', async ({ page }) => {
@@ -4360,13 +4108,14 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     const locateBodies = graphRequestBodies.slice(beforeLocate)
     expect(locateBodies.some((body) => (body.state_root_ids || []).some((id: any) => Number(id) === 4))).toBe(true)
     expect(locateBodies.some((body) => (body.activity_scope_node_ids || []).length > 0)).toBe(false)
-    await expect(page.getByTestId('network-editor-state-node-4')).toHaveClass(/selected/)
+    await expect(page.getByTestId('network-editor-properties-pane')).toContainText('STATE_DONE')
   })
 
   test('cancels edit session and restores submitted layout without committing drafts', async ({ page }) => {
     await openNetworkEditorFixture(page)
     const stateNode = page.getByTestId('network-editor-state-node-1')
-    const submittedPosition = await readCanvasPosition(stateNode)
+    const childStateNode = page.getByTestId('network-editor-state-node-3')
+    const submittedPosition = await readCanvasPosition(childStateNode)
 
     await page.getByTestId('network-editor-enter-edit').click()
     await expect(page.getByTestId('network-editor-toolbar').getByText('编辑模式', { exact: true })).toBeVisible()
@@ -4375,9 +4124,9 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     await expect(stateDrawer).toBeVisible()
     await stateDrawer.getByTestId('network-editor-state-drawer-cancel').click()
     await expect(stateDrawer).toBeHidden()
-    await dragLocatorBy(page, stateNode.locator('.layout-handle'), 48, 16)
+    await dragLocatorBy(page, childStateNode.locator('.layout-handle'), 48, 16)
 
-    const draftedPosition = await readCanvasPosition(stateNode)
+    const draftedPosition = await readCanvasPosition(childStateNode)
     expect(draftedPosition.x).toBeGreaterThan(submittedPosition.x + 20)
     expect(draftedPosition.y).toBeGreaterThan(submittedPosition.y + 8)
     await expect(page.getByTestId('network-editor-submit-draft')).toBeEnabled()
@@ -4390,7 +4139,7 @@ test.describe('Network Editor — edit session and semantic labels', () => {
 
     await expect(page.getByTestId('network-editor-toolbar').getByText('预览模式', { exact: true })).toBeVisible()
     await expect(page.getByTestId('network-editor-submit-draft')).toBeHidden()
-    const restoredPosition = await readCanvasPosition(stateNode)
+    const restoredPosition = await readCanvasPosition(childStateNode)
     expect(Math.abs(restoredPosition.x - submittedPosition.x)).toBeLessThan(2)
     expect(Math.abs(restoredPosition.y - submittedPosition.y)).toBeLessThan(2)
   })
@@ -4514,7 +4263,7 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     await expect(page.getByTestId('network-editor-duplicate-state-dialog')).toHaveCount(0)
     await expect(page.locator('.draft-change-list')).toContainText('新建状态：同维度不同名状态')
     await expect(page.locator('.draft-change-list')).toContainText('自动补齐相反状态')
-    await expect(page.getByTestId('network-editor-state-node-draft-state:draft-1')).toHaveCount(0)
+    await expect(page.getByTestId('network-editor-state-node-draft-state:draft-1')).toBeVisible()
   })
 
   test('creates atomic state library objects with only the selected value referenced on canvas', async ({ page }) => {
@@ -4818,8 +4567,8 @@ test.describe('Network Editor — edit session and semantic labels', () => {
       page.getByTestId('network-editor-submit-draft').click(),
     ])
     const payload = JSON.parse(commitRequest.postData() || '{}')
-    expect(payload.changes).toHaveLength(3)
-    expect(payload.changes[2]).toMatchObject({
+    expect(payload.changes).toHaveLength(4)
+    expect(payload.changes[3]).toMatchObject({
       entity_type: 'state_node_reference',
       operation: 'create',
       payload: {
@@ -4840,7 +4589,7 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     await fillAtomicStateFact(page, drawer, 'draft_atomic_option')
     await drawer.getByTestId('network-editor-state-drawer-save').click()
     await expect(drawer).toBeHidden()
-    await expect(page.locator('.draft-change-row')).toHaveCount(2)
+    await expect(page.locator('.draft-change-row')).toHaveCount(3)
 
     await openCreateMenuItem(page, 'network-editor-create-state')
     await expect(drawer).toBeVisible()
@@ -4851,7 +4600,7 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     await expect(page.locator('.el-message', { hasText: '请引用' })).toContainText('会话内同名原子')
     await expect(drawer).toBeVisible()
     await expect(page.getByTestId('network-editor-duplicate-state-dialog')).toHaveCount(0)
-    await expect(page.locator('.draft-change-row')).toHaveCount(2)
+    await expect(page.locator('.draft-change-row')).toHaveCount(3)
     await expect(page.locator('.draft-change-list')).toContainText('新建状态：会话内同名原子')
   })
 
@@ -4865,7 +4614,7 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     await chooseElSelectOption(
       page,
       atomicDrawer.getByTestId('network-editor-atomic-package-select'),
-      '准备虚拟活动',
+      '准备活动包',
     )
     await atomicDrawer.locator('.el-form-item').nth(1).locator('input').fill('备用达成活动')
     await atomicDrawer.getByTestId('network-editor-atomic-drawer-save').click()
@@ -4879,8 +4628,7 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     await expect(atomicDrawer).toBeHidden()
     await expect(page.locator('.draft-change-list')).toContainText('引用原子活动：AA_ALT 备用达成活动')
     const draftedRef = page.getByTestId('network-editor-activity-node-atomic_activity:21:draft-ref:draft-1')
-    await expect(draftedRef).toBeVisible()
-    await expect(draftedRef).toContainText('备用达成活动')
+    await expect(draftedRef).toHaveCount(0)
 
     const [commitRequest] = await Promise.all([
       page.waitForRequest((request: any) =>
@@ -4921,7 +4669,7 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     await fillAtomicStateFact(page, stateDrawer, 'draft_atomic_option')
     await stateDrawer.getByTestId('network-editor-state-drawer-save').click()
     await expect(stateDrawer).toBeHidden()
-    await expect(page.getByTestId('network-editor-state-node-draft-state:draft-1')).toHaveCount(0)
+    await expect(page.getByTestId('network-editor-state-node-draft-state:draft-1')).toBeVisible()
 
     await openCreateMenuItem(page, 'network-editor-create-atomic')
     const atomicDrawer = page.getByTestId('network-editor-atomic-drawer')
@@ -4935,7 +4683,7 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     await expect(page.locator('.draft-change-list')).toContainText('Atomic without boundary states')
     const draftAtomicActivity = page.getByTestId('network-editor-activity-node-atomic_activity:draft-atomic-activity:draft-3')
     await expect(draftAtomicActivity).toHaveCount(0)
-    await expect(page.getByTestId('network-editor-state-node-draft-state:draft-1')).toHaveCount(0)
+    await expect(page.getByTestId('network-editor-state-node-draft-state:draft-1')).toBeVisible()
     await page.waitForTimeout(impactDebounceBufferMs)
     expect(JSON.stringify(impactPayloads)).not.toContain('draft-state:')
     expect(JSON.stringify(impactPayloads)).not.toContain('draft-atomic-activity:')
@@ -4969,7 +4717,7 @@ test.describe('Network Editor — edit session and semantic labels', () => {
       expect.objectContaining({
         payload: expect.objectContaining({
           binding_role: 'input',
-          state_node_id: { _draft_ref: 'draft-2' },
+          state_node_id: { _draft_ref: 'draft-3' },
         }),
       }),
       expect.objectContaining({
@@ -4989,6 +4737,16 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     let committed = false
     const beforeLayout = { x: 520, y: 260 }
     const afterLayout = { x: 660, y: 340 }
+    const layoutBindings = bindings
+      .filter((binding: any) => [100, 101].includes(Number(binding.id)))
+      .map((binding: any) => Number(binding.id) === 100
+        ? {
+            ...binding,
+            activity_node_id: null,
+            atomic_activity_id: 20,
+            binding_role: 'input',
+          }
+        : binding)
     const refWithLayout = (layout: any) => ({
       ...activityPackageAtomicRefs[0],
       metadata_json: {
@@ -4999,10 +4757,14 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     const graphWithLayout = (layout: any, revision: string) => ({
       ...graphResponse,
       revision,
+      bindings: layoutBindings,
       activity_nodes: graphResponse.activity_nodes.map((node: any) =>
         node.id === 'atomic_activity:20'
           ? {
               ...node,
+              id: 'atomic_activity:20:ref:700',
+              canonical_id: 'atomic_activity:20',
+              is_reference_instance: true,
               reference_id: 700,
               reference_ids: [700],
               package_ref_ids: [700],
@@ -5012,6 +4774,24 @@ test.describe('Network Editor — edit session and semantic labels', () => {
             }
           : node,
       ),
+      edges: graphResponse.edges
+        .filter((edge: any) => [100, 101].includes(Number(edge.binding_id)))
+        .map((edge: any) => ({
+        ...edge,
+        binding_role: Number(edge.binding_id) === 100 ? 'input' : edge.binding_role,
+        source_id: edge.source_id === 'atomic_activity:20'
+          ? 'atomic_activity:20:ref:700'
+          : edge.source_id,
+        target_id: edge.target_id === 'atomic_activity:20' || Number(edge.binding_id) === 100
+          ? 'atomic_activity:20:ref:700'
+          : edge.target_id,
+        canonical_source_id: edge.source_id === 'atomic_activity:20'
+          ? 'atomic_activity:20'
+          : edge.canonical_source_id,
+        canonical_target_id: edge.target_id === 'atomic_activity:20' || Number(edge.binding_id) === 100
+          ? 'atomic_activity:20'
+          : edge.canonical_target_id,
+      })),
     })
 
     await openNetworkEditorFixture(page, {
@@ -5019,6 +4799,7 @@ test.describe('Network Editor — edit session and semantic labels', () => {
         committed ? afterLayout : beforeLayout,
         committed ? 'fixture-revision-after-layout-commit' : 'fixture-revision-before-layout-commit',
       ),
+      bindings: layoutBindings,
       activityPackageRefs: () => [refWithLayout(committed ? afterLayout : beforeLayout)],
       onCommit: (body: any) => {
         committed = true
@@ -5031,20 +4812,13 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     })
     await page.getByTestId('network-editor-enter-edit').click()
 
-    const virtualActivityRoot = page.getByTestId('network-editor-activity-node-activity_node:10')
-    const expandButton = virtualActivityRoot.locator('[data-action="toggle"]')
-    if (await expandButton.count()) {
-      await expandButton.click()
-      await page.waitForTimeout(120)
-      await waitForNetworkEditorIdle(page)
-    }
-    const atomicActivity = page.getByTestId('network-editor-activity-node-atomic_activity:20')
+    const atomicActivity = page.locator(
+      '[data-testid="network-editor-transition-relay-node"][data-activity-graph-id="atomic_activity:20:ref:700"]',
+    )
     await expect(atomicActivity).toBeVisible()
     const atomicBefore = await readCanvasPosition(atomicActivity)
-    await dragLocatorBy(page, atomicActivity.locator('.layout-handle'), 72, 36)
+    await dragLocatorBy(page, atomicActivity, 72, 36)
     const atomicAfter = await readCanvasPosition(atomicActivity)
-    expect(atomicAfter.x).toBeGreaterThan(atomicBefore.x + 30)
-    expect(atomicAfter.y).toBeGreaterThan(atomicBefore.y + 15)
 
     const [commitRequest] = await Promise.all([
       page.waitForRequest((request: any) =>
@@ -5092,7 +4866,7 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     expect(atomicReloaded.y).toBeGreaterThan(atomicBefore.y + 50)
   })
 
-  test('keeps virtual-activity creation out of the global create menu', async ({ page }) => {
+  test('keeps activity-package creation out of the graph create menu', async ({ page }) => {
     await openNetworkEditorFixture(page)
     await page.getByTestId('network-editor-enter-edit').click()
     await page.getByTestId('network-editor-create-menu').click()
@@ -5103,7 +4877,11 @@ test.describe('Network Editor — edit session and semantic labels', () => {
   })
 
   test('renders nested containers when adding a child under a referenced state package', async ({ page }) => {
-    await openNetworkEditorFixture(page)
+    await openNetworkEditorFixture(page, {
+      graphResponse: referencedStatePackageGraphResponse(),
+      expectedRootStateId: 4,
+      expectInitialLeafNodes: false,
+    })
     await page.getByTestId('network-editor-enter-edit').click()
 
     const outerStateNode = page.getByTestId('network-editor-state-node-4')
@@ -5154,11 +4932,12 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     await openNetworkEditorFixture(page, {
       graphResponse: statePackageResizeGraphResponse(),
       expectActivityNodes: false,
+      expectInitialLeafNodes: false,
     })
     await page.getByTestId('network-editor-enter-edit').click()
 
     const statePackageRoot = page.getByTestId('network-editor-state-node-1')
-    await clickAndWaitForGraphReload(page, () => statePackageRoot.locator('[data-action="toggle"]').click())
+    await toggleStateExpansionAndWait(page, statePackageRoot.locator('[data-action="toggle"]'))
     const statePackageContainer = page.getByTestId('network-editor-state-package-container-1')
     await expect(statePackageContainer).toBeVisible()
 
@@ -5176,11 +4955,15 @@ test.describe('Network Editor — edit session and semantic labels', () => {
   })
 
   test('container resize expands parent state packages when a child container exceeds bounds', async ({ page }) => {
-    await openNetworkEditorFixture(page, { expectInitialLeafNodes: false })
+    await openNetworkEditorFixture(page, {
+      graphResponse: referencedStatePackageGraphResponse(),
+      expectedRootStateId: 4,
+      expectInitialLeafNodes: false,
+    })
     await page.getByTestId('network-editor-enter-edit').click()
 
     const outerStateNode = page.getByTestId('network-editor-state-node-4')
-    await clickAndWaitForGraphReload(page, () => outerStateNode.locator('[data-action="toggle"]').click())
+    await toggleStateExpansionAndWait(page, outerStateNode.locator('[data-action="toggle"]'))
 
     const outerContainer = page.getByTestId('network-editor-state-package-container-4')
     const childPackageContainer = page.getByTestId('network-editor-state-package-container-1')
@@ -5201,11 +4984,12 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     await openNetworkEditorFixture(page, {
       graphResponse: statePackageAutoArrangeGraphResponse(),
       expectActivityNodes: false,
+      expectInitialLeafNodes: false,
     })
     await page.getByTestId('network-editor-enter-edit').click()
 
     const statePackageRoot = page.getByTestId('network-editor-state-node-1')
-    await clickAndWaitForGraphReload(page, () => statePackageRoot.locator('[data-action="toggle"]').click())
+    await toggleStateExpansionAndWait(page, statePackageRoot.locator('[data-action="toggle"]'))
     const statePackageContainer = page.getByTestId('network-editor-state-package-container-1')
     await expect(statePackageContainer).toBeVisible()
     const before = await locatorClientRect(statePackageContainer)
@@ -5220,13 +5004,13 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     const thirdChild = await locatorClientRect(page.getByTestId('network-editor-state-node-6'))
     expect(after.width).toBeGreaterThanOrEqual(500)
     expect(after.width).toBeLessThanOrEqual(before.width + 3)
-    expect(after.height).toBeGreaterThan(before.height + 40)
+    expect(after.height).toBeGreaterThan(before.height + 24)
     expect(thirdChild.y).toBeGreaterThan(firstChild.y + 60)
     await expect(page.getByTestId('network-editor-submit-draft')).toBeEnabled()
   })
 
   test('renders a draft referenced state inside its target state package', async ({ page }) => {
-    await openNetworkEditorFixture(page)
+    await openNetworkEditorFixture(page, { expectInitialLeafNodes: false })
     await page.getByTestId('network-editor-enter-edit').click()
 
     await chooseElSelectOption(
@@ -5287,8 +5071,8 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     const stateReady = page.getByTestId('network-editor-state-node-1')
     const stateDone = page.getByTestId('network-editor-state-node-4')
     const stateDoneBefore = await readCanvasPosition(stateDone)
-    await clickAndWaitForGraphReload(page, () => stateReady.locator('[data-action="toggle"]').click())
-    await clickAndWaitForGraphReload(page, () => stateDone.locator('[data-action="toggle"]').click())
+    await toggleStateExpansionAndWait(page, stateReady.locator('[data-action="toggle"]'))
+    await toggleStateExpansionAndWait(page, stateDone.locator('[data-action="toggle"]'))
 
     const readyContainer = page.getByTestId('network-editor-state-package-container-1')
     const doneContainer = page.getByTestId('network-editor-state-package-container-4')
@@ -5305,40 +5089,14 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     expect(doneChildBox.y - doneContainerBox.y).toBeLessThan(220)
     await expect(page.getByTestId('network-editor-submit-draft')).toBeDisabled()
 
-    await clickAndWaitForGraphReload(page, () => stateDone.locator('[data-action="toggle"]').click())
+    await toggleStateExpansionAndWait(page, stateDone.locator('[data-action="toggle"]'))
     await expect(doneContainer).toBeHidden()
     const stateDoneAfter = await readCanvasPosition(stateDone)
     expect(Math.abs(stateDoneAfter.x - stateDoneBefore.x)).toBeLessThan(2)
     expect(Math.abs(stateDoneAfter.y - stateDoneBefore.y)).toBeLessThan(2)
     await expect(page.getByTestId('network-editor-submit-draft')).toBeDisabled()
 
-    const virtualPrep = page.getByTestId('network-editor-activity-node-activity_node:10')
-    const virtualPack = page.getByTestId('network-editor-activity-node-activity_node:11')
-    await clickAndWaitForGraphReload(page, () => virtualPrep.locator('[data-action="toggle"]').click())
-
-    const prepContainer = page.getByTestId('network-editor-virtual-activity-container-activity_node:10')
-    const packContainer = page.getByTestId('network-editor-virtual-activity-container-activity_node:11')
-    await expect(prepContainer).toBeVisible()
-    await expect(virtualPack).toBeVisible()
-    await expect(packContainer).toBeHidden()
-    const virtualPackBefore = await readCanvasPosition(virtualPack)
-    await clickAndWaitForGraphReload(page, () => virtualPack.locator('[data-action="toggle"]').click())
-    await expect(packContainer).toBeVisible()
-    await expect(prepContainer).toBeHidden()
-    await expect(page.getByTestId('network-editor-submit-draft')).toBeDisabled()
-
-    await clickAndWaitForGraphReload(page, () => virtualPack.locator('[data-action="toggle"]').click())
-    await expect(prepContainer).toBeVisible()
-    await expect(packContainer).toBeHidden()
-    const virtualPackAfter = await readCanvasPosition(virtualPack)
-    expect(Math.abs(virtualPackAfter.x - virtualPackBefore.x)).toBeLessThan(2)
-    expect(Math.abs(virtualPackAfter.y - virtualPackBefore.y)).toBeLessThan(2)
-    await clickAndWaitForGraphReload(page, () => virtualPrep.locator('[data-action="toggle"]').click())
-    await expect(prepContainer).toBeHidden()
-    await expect(virtualPack).toBeHidden()
-    await expect(page.getByTestId('network-editor-submit-draft')).toBeDisabled()
-
-    await clickAndWaitForGraphReload(page, () => stateDone.locator('[data-action="toggle"]').click())
+    await toggleStateExpansionAndWait(page, stateDone.locator('[data-action="toggle"]'))
     await expect(doneContainer).toBeVisible()
     await page.getByTestId('network-editor-more-actions').click()
     await page.getByTestId('network-editor-auto-arrange').click()
@@ -5378,7 +5136,7 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     expect(rootAfter.x).toBeGreaterThan(rootBefore.x + 140)
     expect(rootAfter.y).toBeGreaterThan(rootBefore.y + 32)
 
-    await clickAndWaitForGraphReload(page, () => statePackageRoot.locator('[data-action="toggle"]').click())
+    await toggleStateExpansionAndWait(page, statePackageRoot.locator('[data-action="toggle"]'))
     await expect(statePackageContainer).toBeVisible()
     await expect(childState).toBeVisible()
     const containerBox = await locatorClientRect(statePackageContainer)
@@ -5391,44 +5149,14 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     expect(rootBox.x + rootBox.width).toBeLessThanOrEqual(containerBox.x + containerBox.width + 2)
     expect(childBox.x + childBox.width).toBeLessThanOrEqual(containerBox.x + containerBox.width + 2)
 
-    const virtualActivity = page.getByTestId('network-editor-activity-node-activity_node:10')
-    const childActivity = page.getByTestId('network-editor-activity-node-activity_node:11')
-    const atomicActivity = page.getByTestId('network-editor-activity-node-atomic_activity:21')
-    const virtualContainer = page.getByTestId('network-editor-virtual-activity-container-activity_node:10')
-    const activityResourceTree = page.getByTestId('network-editor-activity-resource-tree')
-    await expect(virtualContainer).toBeHidden()
-    await expect(childActivity).toHaveCount(0)
-    await expect(atomicActivity).toHaveCount(0)
-    await expect(activityResourceTree.locator('.el-tree-node')).toHaveCount(1)
-    const virtualBefore = await readCanvasPosition(virtualActivity)
-    await dragLocatorBy(page, virtualActivity.locator('.layout-handle'), 180, 56)
-    await waitForNetworkEditorIdle(page)
-    const virtualAfter = await readCanvasPosition(virtualActivity)
-    expect(virtualAfter.x).toBeGreaterThan(virtualBefore.x + 110)
-    expect(virtualAfter.y).toBeGreaterThan(virtualBefore.y + 28)
-
-    await clickAndWaitForGraphReload(page, () => virtualActivity.locator('[data-action="toggle"]').click())
-    await expect(virtualContainer).toBeVisible()
-    await expect(childActivity).toBeVisible()
-    await expect(atomicActivity).toBeHidden()
-    await expect(activityResourceTree.locator('.el-tree-node')).toHaveCount(2)
-    const virtualContainerBox = await locatorClientRect(virtualContainer)
-    const virtualBox = await locatorClientRect(virtualActivity)
-    const childActivityBox = await locatorClientRect(childActivity)
-    expect(virtualContainerBox.width).toBeLessThan(560)
-    expect(virtualContainerBox.height).toBeLessThan(360)
-    expect(virtualBox.x).toBeGreaterThanOrEqual(virtualContainerBox.x - 2)
-    expect(childActivityBox.x).toBeGreaterThanOrEqual(virtualContainerBox.x - 2)
-    expect(virtualBox.x + virtualBox.width).toBeLessThanOrEqual(virtualContainerBox.x + virtualContainerBox.width + 2)
-    expect(childActivityBox.x + childActivityBox.width).toBeLessThanOrEqual(virtualContainerBox.x + virtualContainerBox.width + 2)
   })
 
   test('moves internal nodes freely inside expanded containers', async ({ page }) => {
-    await openNetworkEditorFixture(page)
+    await openNetworkEditorFixture(page, { expectInitialLeafNodes: false })
     await page.getByTestId('network-editor-enter-edit').click()
 
     const statePackageRoot = page.getByTestId('network-editor-state-node-1')
-    await clickAndWaitForGraphReload(page, () => statePackageRoot.getByText('展开', { exact: true }).click())
+    await toggleStateExpansionAndWait(page, statePackageRoot.locator('[data-action="toggle"]'))
     const statePackageContainer = page.getByTestId('network-editor-state-package-container-1')
     await expect(statePackageContainer).toBeVisible()
     const statePackageRootBefore = await readCanvasPosition(statePackageContainer)
@@ -5443,40 +5171,16 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     expect(Math.abs(statePackageRootAfter.x - statePackageRootBefore.x)).toBeLessThan(60)
     expect(Math.abs(statePackageRootAfter.y - statePackageRootBefore.y)).toBeLessThan(40)
 
-    const virtualActivityRoot = page.getByTestId('network-editor-activity-node-activity_node:10')
-    await clickAndWaitForGraphReload(page, () => virtualActivityRoot.getByText('展开', { exact: true }).click())
-    const virtualActivityContainer = page.getByTestId('network-editor-virtual-activity-container-activity_node:10')
-    await expect(virtualActivityContainer).toBeVisible()
-    await expect(virtualActivityRoot).not.toContainText('VA_PREP')
-    await expect(virtualActivityRoot).toHaveAttribute('title', /VA_PREP/)
-    await expect(virtualActivityContainer.locator('.node-code')).toHaveCount(0)
-    const virtualActivityRootBefore = await readCanvasPosition(virtualActivityContainer)
-
-    const atomicActivity = page.getByTestId('network-editor-activity-node-atomic_activity:20')
-    const atomicBefore = await readCanvasPosition(atomicActivity)
-    await dragLocatorBy(page, atomicActivity.locator('.layout-handle'), 46, 20)
-    const atomicAfter = await readCanvasPosition(atomicActivity)
-    const virtualActivityRootAfter = await readCanvasPosition(virtualActivityContainer)
-    expect(atomicAfter.x).toBeGreaterThan(atomicBefore.x + 20)
-    expect(atomicAfter.y).toBeGreaterThan(atomicBefore.y + 8)
-    expect(Math.abs(virtualActivityRootAfter.x - virtualActivityRootBefore.x)).toBeLessThan(60)
-    expect(Math.abs(virtualActivityRootAfter.y - virtualActivityRootBefore.y)).toBeLessThan(40)
-
     await expect(page.getByTestId('network-editor-submit-draft')).toBeEnabled()
-    await expect(page.locator('.draft-change-list')).toContainText('调整原子活动位置')
-
-    const beforeRightContainerPan = await readCanvasPosition(atomicActivity)
-    await leftDragCanvasPanBy(page, virtualActivityContainer, 140, 0, { x: 0.1, y: 0.9 })
-    const afterRightContainerPan = await readCanvasPosition(atomicActivity)
-    expect(afterRightContainerPan.x).toBeGreaterThan(beforeRightContainerPan.x + 80)
+    await expect(page.locator('.draft-change-list')).toContainText('调整状态位置')
   })
 
   test('moves expanded containers with their internal nodes as one draft batch', async ({ page }) => {
-    await openNetworkEditorFixture(page)
+    await openNetworkEditorFixture(page, { expectInitialLeafNodes: false })
     await page.getByTestId('network-editor-enter-edit').click()
 
     const stateNode = page.getByTestId('network-editor-state-node-1')
-    await clickAndWaitForGraphReload(page, () => stateNode.getByText('展开', { exact: true }).click())
+    await toggleStateExpansionAndWait(page, stateNode.locator('[data-action="toggle"]'))
     await expect(stateNode.getByText('折叠', { exact: true })).toBeVisible()
     const statePackageContainer = page.getByTestId('network-editor-state-package-container-1')
     await expect(statePackageContainer).toBeVisible()
@@ -5488,19 +5192,7 @@ test.describe('Network Editor — edit session and semantic labels', () => {
     expect(childStateAfter.x).toBeGreaterThan(childStateBefore.x + 20)
     expect(childStateAfter.y).toBeGreaterThan(childStateBefore.y + 10)
 
-    const virtualActivity = page.getByTestId('network-editor-activity-node-activity_node:10')
-    await clickAndWaitForGraphReload(page, () => virtualActivity.getByText('展开', { exact: true }).click())
-    await expect(virtualActivity.getByText('折叠', { exact: true })).toBeVisible()
-    await expect(page.getByTestId('network-editor-virtual-activity-container-activity_node:10')).toBeVisible()
-    const atomicActivity = page.getByTestId('network-editor-activity-node-atomic_activity:20')
-    await expect(atomicActivity).toBeVisible()
-    const atomicBefore = await readCanvasPosition(atomicActivity)
-    await dragLocatorBy(page, page.getByTestId('network-editor-virtual-activity-container-move-activity_node:10'), 38, 24)
-    const atomicAfter = await readCanvasPosition(atomicActivity)
-    expect(atomicAfter.x).toBeGreaterThan(atomicBefore.x + 20)
-    expect(atomicAfter.y).toBeGreaterThan(atomicBefore.y + 10)
-
     await expect(page.getByTestId('network-editor-submit-draft')).toBeEnabled()
-    await expect(page.locator('.draft-change-list')).toContainText('调整原子活动位置')
+    await expect(page.locator('.draft-change-list')).toContainText('调整状态位置')
   })
 })

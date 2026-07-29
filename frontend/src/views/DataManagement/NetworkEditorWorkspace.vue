@@ -28,17 +28,6 @@
             />
           </el-option-group>
         </el-select>
-        <el-segmented
-          v-model="viewMode"
-          data-testid="network-editor-view-mode"
-          aria-label="视图模式"
-          :options="[
-            { label: '纲要', value: 'outline' },
-            { label: '状态转移', value: 'implementation' },
-            { label: '求解', value: 'solver_ready' },
-          ]"
-          @change="reloadGraph"
-        />
         <el-switch v-model="includeInactive" data-testid="network-editor-include-inactive" active-text="停用" @change="reloadGraph" />
         <el-tag :type="isEditMode ? 'warning' : 'info'">{{ editorModeLabel }}</el-tag>
         <el-tag v-if="hasDraftChanges" type="danger">未提交 {{ draftChangeCount }}</el-tag>
@@ -79,7 +68,7 @@
     <el-empty v-if="!machineTypeId" description="先选择一个设备类型" />
 
     <template v-else>
-      <div class="focus-strip" data-testid="network-editor-focus-strip">
+      <div class="filter-strip" data-testid="network-editor-filter-strip">
         <el-select
           v-model="selectedStateRootIds"
           multiple
@@ -112,75 +101,10 @@
           <span>活动深度</span>
           <el-input-number v-model="activityDepth" :min="0" :max="12" controls-position="right" @change="reloadGraph" />
         </div>
-        <el-button :disabled="!selectedStateId && !selectedActivityGraphId" @click="focusCurrentSelection">聚焦选中</el-button>
         <el-button :disabled="!selectedStateId && !selectedActivityGraphId" @click="collapseCurrentSelection">折叠选中</el-button>
         <el-button :disabled="!selectedStateId && !selectedActivityGraphId" @click="expandCurrentSelectionOneLevel">展开一层</el-button>
         <el-button :disabled="!selectedStateId && !selectedActivityGraphId" @click="expandCurrentSelectionAll">展开全部</el-button>
-        <el-button :disabled="!selectedStateRootIds.length && !selectedActivityScopeIds.length" @click="clearGraphFocus">清除焦点</el-button>
-      </div>
-
-      <div v-if="focusedActivityCanvas" class="focus-context-strip" data-testid="network-editor-activity-focus-strip">
-        <div class="focus-context-main">
-          <el-tag size="small" type="primary">专注画布</el-tag>
-          <span
-            v-for="item in focusedActivityCanvas.breadcrumb"
-            :key="item.id"
-            class="focus-breadcrumb-item"
-          >
-            {{ nodeLabel(item) }}
-          </span>
-        </div>
-        <div
-          v-if="
-            focusedActivityCanvas.contextStates.length ||
-            focusedActivityCanvas.outputStates.length ||
-            focusedActivityCanvas.metrics.declaredOutputCount
-          "
-          class="focus-boundaries"
-        >
-          <span>上下文</span>
-          <el-tag
-            v-for="state in focusedActivityCanvas.contextStates.slice(0, 3)"
-            :key="`ctx-${state.id}`"
-            size="small"
-            effect="plain"
-          >
-            {{ nodeLabel(state) }}
-          </el-tag>
-          <el-tag v-if="focusedActivityCanvas.contextStates.length > 3" size="small" effect="plain">
-            +{{ focusedActivityCanvas.contextStates.length - 3 }}
-          </el-tag>
-          <span>输出</span>
-          <el-tag
-            v-for="state in focusedActivityCanvas.outputStates.slice(0, 3)"
-            :key="`out-${state.id}`"
-            size="small"
-            type="success"
-            effect="plain"
-          >
-            {{ nodeLabel(state) }}
-          </el-tag>
-          <el-tag v-if="focusedActivityCanvas.outputStates.length > 3" size="small" type="success" effect="plain">
-            +{{ focusedActivityCanvas.outputStates.length - 3 }}
-          </el-tag>
-          <el-tag
-            v-if="focusedActivityCanvas.metrics.declaredOutputCount"
-            size="small"
-            :type="focusedActivityCanvas.metrics.missingOutputCount ? 'warning' : 'success'"
-          >
-            实现 {{ focusedActivityCanvas.metrics.implementedOutputCount }}/{{ focusedActivityCanvas.metrics.declaredOutputCount }}
-          </el-tag>
-        </div>
-        <div class="focus-context-actions">
-          <el-button
-            v-if="focusedActivityCanvas.parentId"
-            size="small"
-            @click="enterActivityFocusById(focusedActivityCanvas.parentId)"
-          >
-            上层
-          </el-button>
-          <el-button size="small" @click="clearGraphFocus">退出</el-button>
-        </div>
+        <el-button :disabled="!selectedStateRootIds.length && !selectedActivityScopeIds.length" @click="clearGraphFocus">清除筛选</el-button>
       </div>
 
       <div class="summary-strip">
@@ -245,7 +169,7 @@
                     <el-dropdown-item command="state" :disabled="!canMutate" data-testid="network-editor-create-state">
                       状态
                     </el-dropdown-item>
-                    <el-dropdown-item v-if="!isStateTransitionView || fullGraphDebugEnabled" command="atomic" :disabled="!canMutate" data-testid="network-editor-create-atomic">
+                    <el-dropdown-item command="atomic" :disabled="!canMutate" data-testid="network-editor-create-atomic">
                       原子活动
                     </el-dropdown-item>
                   </el-dropdown-menu>
@@ -339,7 +263,7 @@
                       <el-button :icon="Plus" size="small" text circle :disabled="!canMutate" @click.stop="openCreateActivityChild(data)" />
                     </el-tooltip>
                     <el-tag size="small" :type="data.resource_type === 'atomic_activity' ? 'success' : data.level <= 2 ? 'info' : 'warning'">
-                      {{ data.resource_type === 'atomic_activity' ? '原子' : data.level <= 2 ? '虚拟' : '旧执行' }}
+                      {{ data.resource_type === 'atomic_activity' ? '原子' : data.level <= 2 ? '活动包' : '历史数据' }}
                     </el-tag>
                   </div>
                 </div>
@@ -370,7 +294,7 @@
                 type="button"
                 @click="selectGraphActivity(node)"
               >
-                <span>{{ node.activity_type === 'virtual' ? '虚拟活动' : '原子活动' }}</span>
+                <span>{{ node.atomic_activity_id ? '原子活动' : '活动包' }}</span>
                 <strong>{{ node.code }}</strong>
               </button>
             </div>
@@ -435,14 +359,6 @@
             <span>网络画板</span>
             <el-tag size="small" :type="canvasStatusType">{{ canvasStatusLabel }}</el-tag>
           </div>
-          <div
-            v-if="viewMode === 'solver_ready'"
-            class="solver-view-note"
-            data-testid="network-editor-solver-view-note"
-          >
-            <strong>求解视图</strong>
-            <span>仅显示原子活动与求解事实投影，虚拟活动作为分组元数据保留在求解预检中。</span>
-          </div>
           <div class="canvas-action-bar">
             <span class="drag-hint">{{ dragHintLabel }}</span>
             <div class="canvas-view-controls" data-testid="network-editor-canvas-view-controls">
@@ -483,7 +399,6 @@
               @edit-activity="handleX6EditActivity"
               @create-state-inside="openCreateStateInside"
               @create-activity-inside="openCreateActivityInside"
-              @focus-activity="enterActivityFocus"
               @layout-change="handleX6LayoutChange"
               @container-resize="handleX6ContainerResize"
               @blank-dblclick="handleX6BlankDoubleClick"
@@ -683,44 +598,6 @@
             </div>
 
             <div class="canvas-column activity-column">
-              <div
-                v-for="container in virtualActivityContainers"
-                :key="container.id"
-                class="virtual-container"
-                :data-testid="`network-editor-virtual-activity-container-${container.id}`"
-                :class="{ selected: selectedActivityGraphId === container.id }"
-                :style="{
-                  top: `${container.top}px`,
-                  height: `${container.height}px`,
-                  left: `${container.left}px`,
-                  width: `${container.width}px`,
-                }"
-              >
-                <div class="container-title">{{ container.name }}</div>
-                <div class="container-meta">
-                  <small>{{ container.childCount }} 项</small>
-                  <small v-if="container.contextCount">历史上下文 {{ container.contextCount }}</small>
-                  <small
-                    v-if="container.declaredOutputCount"
-                    :class="{ warning: container.missingOutputCount, success: !container.missingOutputCount }"
-                  >
-                    输出 {{ container.implementedOutputCount }}/{{ container.declaredOutputCount }}
-                  </small>
-                </div>
-                <span
-                  v-if="isEditMode"
-                  class="container-move-handle"
-                  :data-testid="`network-editor-virtual-activity-container-move-${container.id}`"
-                  title="拖动移动容器及内部活动"
-                  @pointerdown.stop.prevent="startContainerMove(container, 'activity', $event)"
-                />
-                <span
-                  v-if="isEditMode"
-                  class="container-resize-handle"
-                  title="拖动调整容器尺寸"
-                  @pointerdown.stop.prevent="startContainerResize(container, 'activity', $event)"
-                />
-              </div>
               <button
                 v-for="(node, index) in visibleActivityNodes"
                 :key="node.id"
@@ -728,8 +605,7 @@
                 :data-testid="`network-editor-activity-node-${node.id}`"
                 :class="{
                   selected: selectedActivityGraphId === node.id,
-                  executable: node.activity_type === 'executable',
-                  'focus-root': focusedActivityCanvas?.node.id === node.activity_node_id,
+                  executable: node.atomic_activity_id,
                   dragging: canvasDrag?.graphId === node.id,
                   'drop-target': dragOverTarget === node.id,
                   'impact-highlight': impactHighlights.activityIds.has(node.id),
@@ -742,7 +618,6 @@
                 @dragover.prevent="dragOverActivity(node, $event)"
                 @dragleave="leaveDropTarget(node)"
                 @drop.prevent="dropOnActivity(node, $event)"
-                @dblclick.prevent="enterActivityFocus(node)"
                 @contextmenu.prevent.stop="openActivityContextMenu(node, $event)"
               >
                 <span
@@ -754,84 +629,15 @@
                 <span class="node-code">{{ node.code }}</span>
                 <span class="node-name">{{ node.name }}</span>
                 <span class="node-meta">
-                  <span class="node-kind-badge">{{ node.activity_type === 'virtual' ? '虚拟' : '可执行' }}</span>
-                  <span
-                    v-if="node.activity_type === 'virtual' && activityNodeMetrics(node).childCount"
-                    class="node-metric-badge"
-                  >
-                    子活动 {{ activityNodeMetrics(node).childCount }}
-                  </span>
-                  <span
-                    v-if="node.activity_type === 'virtual' && activityNodeMetrics(node).maxDescendantDepth"
-                    class="node-metric-badge"
-                  >
-                    深度 {{ activityNodeMetrics(node).maxDescendantDepth }}
-                  </span>
-                  <span
-                    v-if="node.activity_type === 'virtual' && activityNodeMetrics(node).declaredOutputCount"
-                    :class="['node-metric-badge', activityNodeMetrics(node).missingOutputCount ? 'warning' : 'complete']"
-                  >
-                    实现 {{ activityNodeMetrics(node).implementedOutputCount }}/{{ activityNodeMetrics(node).declaredOutputCount }}
-                  </span>
+                  <span class="node-kind-badge">原子活动</span>
                   <span v-if="activityNodeMetrics(node).inputCount" class="node-metric-badge">
                     输入 {{ activityNodeMetrics(node).inputCount }}
-                  </span>
-                  <span v-if="activityNodeMetrics(node).inheritedInputCount" class="node-metric-badge inherited">
-                    历史上下文 {{ activityNodeMetrics(node).inheritedInputCount }}
                   </span>
                   <span v-if="activityNodeMetrics(node).outputCount" class="node-metric-badge">
                     输出 {{ activityNodeMetrics(node).outputCount }}
                   </span>
                   <span v-if="activityNodeMetrics(node).crossLevelCount" class="node-metric-badge warning">
                     跨层级 {{ activityNodeMetrics(node).crossLevelCount }}
-                  </span>
-                </span>
-                <span v-if="node.activity_type === 'virtual'" class="node-actions" @click.stop>
-                  <span
-                    class="node-action"
-                    role="button"
-                    tabindex="0"
-                    :title="isGraphActivityExpanded(node) ? '折叠该虚拟活动' : '展开该虚拟活动'"
-                    @click.stop="toggleGraphActivityExpansion(node)"
-                    @keydown.enter.stop.prevent="toggleGraphActivityExpansion(node)"
-                    @keydown.space.stop.prevent="toggleGraphActivityExpansion(node)"
-                  >
-                    {{ isGraphActivityExpanded(node) ? '折叠' : '展开' }}
-                  </span>
-                  <span
-                    class="node-action"
-                    role="button"
-                    tabindex="0"
-                    title="进入专注画布"
-                    @click.stop="enterActivityFocus(node)"
-                    @keydown.enter.stop.prevent="enterActivityFocus(node)"
-                    @keydown.space.stop.prevent="enterActivityFocus(node)"
-                  >
-                    专注
-                  </span>
-                  <span
-                    v-if="canMutate && node.level === 1"
-                    class="node-action"
-                    role="button"
-                    tabindex="0"
-                    title="添加内部虚拟活动"
-                    @click.stop="openCreateActivityInside(node)"
-                    @keydown.enter.stop.prevent="openCreateActivityInside(node)"
-                    @keydown.space.stop.prevent="openCreateActivityInside(node)"
-                  >
-                    子活动
-                  </span>
-                  <span
-                    v-if="canMutate && node.level === 2"
-                    class="node-action"
-                    role="button"
-                    tabindex="0"
-                    title="添加内部原子活动"
-                    @click.stop="openCreateActivityInside(node)"
-                    @keydown.enter.stop.prevent="openCreateActivityInside(node)"
-                    @keydown.space.stop.prevent="openCreateActivityInside(node)"
-                  >
-                    原子
                   </span>
                 </span>
               </button>
@@ -845,9 +651,6 @@
               @click.stop
             >
               <div class="context-menu-title">{{ contextMenuTitle }}</div>
-              <button v-if="contextMenu.kind === 'state'" type="button" @click="focusContextState">
-                设为状态焦点
-              </button>
               <button
                 v-if="contextMenu.kind === 'state'"
                 type="button"
@@ -873,16 +676,6 @@
               >
                 删除状态
               </button>
-              <button v-if="contextMenu.kind === 'activity'" type="button" @click="focusContextActivity">
-                设为活动焦点
-              </button>
-              <button
-                v-if="contextMenu.kind === 'activity' && contextMenu.node.activity_type === 'virtual'"
-                type="button"
-                @click="focusContextVirtualActivity"
-              >
-                进入专注画布
-              </button>
               <button
                 v-if="contextMenu.kind === 'activity'"
                 type="button"
@@ -892,7 +685,7 @@
                 编辑活动
               </button>
               <button
-                v-if="contextMenu.kind === 'activity' && contextMenu.node.activity_type === 'virtual' && contextMenu.node.level === 2"
+                v-if="contextMenu.kind === 'activity' && contextMenu.node.activity_type === 'activity_package' && contextMenu.node.level === 2"
                 type="button"
                 :disabled="!canMutate"
                 @click="createContextActivityInside"
@@ -1570,10 +1363,6 @@
               <strong>{{ solverPrecheck.summary?.state_aggregation_rule_count ?? 0 }}</strong>
             </div>
             <div>
-              <span>虚拟活动组</span>
-              <strong>{{ solverPrecheck.summary?.virtual_activity_group_count ?? 0 }}</strong>
-            </div>
-            <div>
               <span>阻塞项</span>
               <strong>{{ solverPrecheck.summary?.blocking_issue_count ?? 0 }}</strong>
             </div>
@@ -1599,7 +1388,7 @@
             </div>
             <div class="template-row">
               <span>活动范围</span>
-              <strong>{{ solverPrecheck.solve_request_template.body?.activity_scope_node_ids?.length || 0 }}</strong>
+              <strong>{{ solverPrecheck.solve_request_template.body?.atomic_activity_scope_ids?.length || 0 }}</strong>
             </div>
             <div class="template-row">
               <span>目标函数</span>
@@ -2053,66 +1842,6 @@
     </el-dialog>
 
     <el-drawer
-      v-model="activityDrawerVisible"
-      :title="activityDrawerTitle"
-      size="460px"
-      destroy-on-close
-      data-testid="network-editor-activity-drawer"
-    >
-      <el-form label-width="110px" @submit.prevent>
-        <el-form-item label="编码">
-          <el-input v-model="activityForm.code" placeholder="留空自动生成" maxlength="64" />
-        </el-form-item>
-        <el-form-item label="名称">
-          <el-input v-model="activityForm.name" maxlength="128" />
-        </el-form-item>
-        <el-form-item label="说明">
-          <el-input
-            v-model="activityForm.description"
-            type="textarea"
-            :rows="3"
-            maxlength="512"
-            show-word-limit
-          />
-        </el-form-item>
-        <el-form-item label="层级">
-          <el-segmented
-            v-model="activityForm.level"
-            data-testid="network-editor-activity-level-segmented"
-            aria-label="活动层级"
-            :options="[
-              { label: '一级', value: 1 },
-              { label: '二级', value: 2 },
-            ]"
-            @change="onActivityLevelChange"
-          />
-        </el-form-item>
-        <el-form-item v-if="activityForm.level === 2" label="所属一级活动">
-          <el-select v-model="activityForm.parent_id" filterable style="width: 100%">
-            <el-option v-for="item in activityParentOptions" :key="item.id" :label="nodeLabel(item)" :value="item.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="类型">
-          <el-select v-model="activityForm.activity_category" style="width: 100%">
-            <el-option label="普通" value="normal" />
-            <el-option label="维修" value="repair" />
-            <el-option label="维护" value="maintenance" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="排序">
-          <el-input-number v-model="activityForm.sort_order" :min="0" style="width: 100%" />
-        </el-form-item>
-        <el-form-item label="启用">
-          <el-switch v-model="activityForm.is_active" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button data-testid="network-editor-activity-drawer-cancel" @click="activityDrawerVisible = false">取消</el-button>
-        <el-button type="primary" :loading="savingActivity" data-testid="network-editor-activity-drawer-save" @click="saveQuickActivityNode">保存</el-button>
-      </template>
-    </el-drawer>
-
-    <el-drawer
       v-model="atomicDrawerVisible"
       :title="atomicDrawerTitle"
       size="460px"
@@ -2323,8 +2052,7 @@ const PROPERTIES_PANE_MAX_WIDTH = 560
 const machineTypes = ref([])
 const machineTypeId = ref(null)
 const recentMachineTypeIds = ref(readRecentMachineTypeIds())
-const viewMode = ref('implementation')
-const fullGraphDebugEnabled = ref(readNetworkEditorFullGraphDebugFlag())
+const viewMode = ref('state_transition')
 const includeInactive = ref(false)
 const loading = ref(false)
 const keyword = ref('')
@@ -2396,14 +2124,12 @@ const bindingForm = ref(defaultBindingForm())
 const transitionRealizerActivityId = ref(null)
 const transitionPreconditionStateId = ref(null)
 const stateDrawerVisible = ref(false)
-const activityDrawerVisible = ref(false)
 const atomicDrawerVisible = ref(false)
 const duplicateStateDialogVisible = ref(false)
 const duplicateStateCandidates = ref([])
 const duplicateStateSelectedId = ref(null)
 const pendingStatePayload = ref(null)
 const pendingStateLayout = ref(null)
-const pendingActivityLayout = ref(null)
 const pendingAtomicActivityLayout = ref(null)
 const batchBindingDialogVisible = ref(false)
 const batchBindingForm = ref({ input_state_ids: [], output_state_ids: [], op_rule_id: null })
@@ -2414,13 +2140,10 @@ const packageForkName = ref('')
 const packageForkReason = ref('')
 const pendingPackageChange = ref(null)
 const savingState = ref(false)
-const savingActivity = ref(false)
 const savingAtomic = ref(false)
 const stateEditId = ref(null)
-const activityEditId = ref(null)
 const atomicEditId = ref(null)
 const stateForm = ref(defaultStateForm())
-const activityForm = ref(defaultActivityForm())
 const atomicForm = ref(defaultAtomicForm())
 
 const canvasWidth = 820
@@ -2472,7 +2195,6 @@ const activityFirstIssueCodes = new Set([
   'EXECUTABLE_RULE_BINDING_INVALID',
   'EXECUTABLE_RULE_NOT_EXPLICIT',
   'ORPHAN_ACTIVITY',
-  'VIRTUAL_ACTIVITY_NOT_DECOMPOSED',
 ])
 
 const issueSeverityLabels = {
@@ -2516,15 +2238,12 @@ const issueCodeLabels = {
   ORPHAN_STATE: '孤立状态',
   OUTPUT_STATE_UNUSED: '产出状态未被消费',
   LEAF_STATE_WITHOUT_FEATURE: '原子状态缺少特征',
-  SELF_DEPENDENCY: '求解自依赖',
   SELECTED_ACTIVITY_INACTIVE: '活动范围已停用',
   SELECTED_STATE_INACTIVE: '目标状态已停用',
-  SCOPE_GUARD_WITHOUT_PRECONDITION: '范围约束缺少前置',
   STATE_AGGREGATION_CYCLE: '状态包聚合成环',
   STATE_PACKAGE_COVERAGE_LARGE: '状态包覆盖过宽',
   STATE_REFERENCE_CYCLE: '状态包引用成环',
   TARGET_STATE_HAS_NO_LEAF: '目标状态没有原子状态',
-  VIRTUAL_ACTIVITY_NOT_DECOMPOSED: '虚拟活动未分解',
 }
 const issueMessageLabels = {
   ACTIVITY_CONTAINER_CYCLE: '活动容器层级中存在循环引用。',
@@ -2557,22 +2276,19 @@ const issueMessageLabels = {
   ORPHAN_STATE: '该状态当前没有连接到任何活动。',
   OUTPUT_STATE_UNUSED: '该产出状态在当前图中没有下游活动消费。',
   LEAF_STATE_WITHOUT_FEATURE: '作为目标展开出来的原子状态缺少 feature_key，不能转换为求解事实。',
-  SELF_DEPENDENCY: '求解链路中存在活动依赖自身结果的情况。',
   SELECTED_ACTIVITY_INACTIVE: '选中的活动范围已停用，默认求解预检会跳过它。',
   SELECTED_STATE_INACTIVE: '选中的目标状态已停用，默认求解预检会跳过它。',
-  SCOPE_GUARD_WITHOUT_PRECONDITION: '活动范围约束没有配置前置条件。',
   STATE_AGGREGATION_CYCLE: '状态包聚合关系存在循环。',
   STATE_PACKAGE_COVERAGE_LARGE: '该状态包绑定覆盖的原子状态较多。',
   STATE_REFERENCE_CYCLE: '状态包成员引用关系存在循环。',
   TARGET_STATE_HAS_NO_LEAF: '目标状态下没有启用的原子状态，不能展开为求解目标。',
-  VIRTUAL_ACTIVITY_NOT_DECOMPOSED: '虚拟活动下没有可执行原子活动。',
 }
 const issueSuggestedActionLabels = {
   ACTIVITY_CONTAINER_CYCLE: '移除或改向其中一个活动归属关系，打断循环。',
   ACTIVITY_MISSING_INPUT: '为原子活动添加至少一个输入状态绑定。',
   ACTIVITY_MISSING_OUTPUT: '为原子活动添加至少一个产出状态绑定。',
   ACTIVITY_PACKAGE_WITHOUT_ATOMIC_REF: '在该活动包下添加原子活动引用，或调整活动范围。',
-  ACTIVITY_SOLVER_PARTICIPATION_MISMATCH: '修正活动类型或求解参与标记；通常虚拟活动仅展示，原子活动参与求解。',
+  ACTIVITY_SOLVER_PARTICIPATION_MISMATCH: '修正活动类型或求解参与标记；只有原子活动参与求解。',
   ACTIVITY_SCOPE_HAS_NO_LEAF: '展开该活动范围，补充下级活动包和原子活动，或改选更具体的范围。',
   ACTIVITY_WITHOUT_RULE: '前往活动能力或规则维护，为该活动创建或启用规则。',
   ATOMIC_ACTIVITY_INACTIVE: '启用该原子活动，或从求解范围中移除它。',
@@ -2598,15 +2314,12 @@ const issueSuggestedActionLabels = {
   ORPHAN_STATE: '把该状态连到一个活动，或确认它只是暂存/候选状态。',
   OUTPUT_STATE_UNUSED: '把该状态作为下游活动输入，或确认它是终点/目标状态。',
   LEAF_STATE_WITHOUT_FEATURE: '在状态抽屉中补齐 feature_key 和目标值，或不要把该状态作为目标原子状态。',
-  SELF_DEPENDENCY: '拆分状态或调整活动输入/输出，避免活动依赖自身产出。',
   SELECTED_ACTIVITY_INACTIVE: '启用该活动范围，或重新选择一个启用的活动范围。',
   SELECTED_STATE_INACTIVE: '启用该目标状态，或重新选择一个启用的目标状态。',
-  SCOPE_GUARD_WITHOUT_PRECONDITION: '补充范围约束的前置条件，或删除无效约束。',
   STATE_AGGREGATION_CYCLE: '移除或改向其中一个状态包成员关系，打断循环。',
   STATE_PACKAGE_COVERAGE_LARGE: '确认覆盖范围是否过宽；必要时改成更小状态包或部分原子状态覆盖。',
   STATE_REFERENCE_CYCLE: '移除指回自身后代的状态包成员引用。',
   TARGET_STATE_HAS_NO_LEAF: '为该状态包补充启用的原子状态，或直接选择可求解的原子状态作为目标。',
-  VIRTUAL_ACTIVITY_NOT_DECOMPOSED: '在虚拟活动容器内新增下级活动包或原子活动。',
 }
 const coverageStatusLabels = {
   complete: '完整',
@@ -2624,9 +2337,8 @@ const networkEditorStatusLabels = {
 }
 const issueNodeTypeLabels = {
   state_node: '状态',
-  activity_node: '虚拟活动',
+  activity_node: '活动包',
   atomic_activity: '原子活动',
-  scope_guard: '范围约束',
   activity_package_atomic_ref: '原子活动引用',
 }
 
@@ -2745,7 +2457,6 @@ const canCreateActivityFromStateSelection = computed(() =>
 const graphSummary = computed(() => graph.value?.summary || {})
 const validationSummary = computed(() => graph.value?.validation_summary || validationResult.value?.summary || {})
 const summaryOverflowMetrics = computed(() => [
-  { label: '虚拟活动', value: graphSummary.value.virtual_activity_count || 0 },
   { label: '原子活动', value: graphSummary.value.executable_activity_count || 0 },
   { label: '状态深度', value: graphSummary.value.max_state_depth || 0 },
   { label: '活动深度', value: graphSummary.value.max_activity_depth || 0 },
@@ -2900,8 +2611,13 @@ const stateTransitionEdges = computed(() => {
   ])
   const seen = new Set(edges.map((edge) => edge.id))
   const seenBindingEdges = new Set(edges.map(bindingEdgeDedupeKey).filter(Boolean))
+  const seenBindingRoles = new Set(edges
+    .filter((edge) => edge?.binding_id && edge?.binding_role)
+    .map((edge) => `${Number(edge.binding_id)}:${edge.binding_role}`))
   for (const binding of bindings.value) {
     if (!binding?.id || deletedBindingIdSet.value.has(Number(binding.id))) continue
+    const bindingRoleKey = `${Number(binding.id)}:${binding.binding_role}`
+    if (seenBindingRoles.has(bindingRoleKey)) continue
     const edge = bindingPayloadEdge(binding, {
       idPrefix: `binding:${binding.id}`,
       sourceKind: 'activity_state_binding',
@@ -2910,6 +2626,7 @@ const stateTransitionEdges = computed(() => {
     if (!edge || seen.has(edge.id) || (bindingKey && seenBindingEdges.has(bindingKey))) continue
     edges.push({ ...edge, binding_id: binding.id, coverage_status: binding.coverage_status || edge.coverage_status })
     seen.add(edge.id)
+    seenBindingRoles.add(bindingRoleKey)
     if (bindingKey) seenBindingEdges.add(bindingKey)
   }
   return edges
@@ -3020,8 +2737,8 @@ function graphEndpointDeleted(graphId) {
   return false
 }
 
-const isStateTransitionView = computed(() => viewMode.value === 'implementation')
-const isStateTransitionCanvas = computed(() => isStateTransitionView.value && !fullGraphDebugEnabled.value)
+const isStateTransitionView = computed(() => viewMode.value === 'state_transition')
+const isStateTransitionCanvas = computed(() => isStateTransitionView.value)
 const stateTransitionProjection = computed(() => buildStateTransitionProjection({
   edges: stateTransitionEdges.value,
   visibleStateNodes: isStateTransitionCanvas.value ? stateTransitionProjectionStateNodes.value : visibleStateNodes.value,
@@ -3091,11 +2808,17 @@ const stateTransitionRelayNodes = computed(() => {
   if (!isStateTransitionCanvas.value) return []
   const plan = stateTransitionVisualPlan.value
   return stateTransitionRelayGroups.value.map((group, index) => {
-    const position = plan.relayPositions.get(group.relayId) || transitionRelayFallbackPosition(index)
     const activity = graphActivityById.value.get(group.activityId) || fallbackActivityGraphNode(group.activityId)
-    const parentGraphId = relayExpandedStateOwnerGraphId(group)
+    const activityWithLayout = nodeWithDraftLayout(activity)
+    const savedPosition = metadataLayout(activityWithLayout)
+    const position = savedPosition ||
+      plan.relayPositions.get(group.relayId) ||
+      transitionRelayFallbackPosition(index)
+    const parentGraphId = activityWithLayout?.reference_id
+      ? ''
+      : relayExpandedStateOwnerGraphId(group)
     return {
-      ...(activity || {}),
+      ...(activityWithLayout || {}),
       id: group.relayId,
       name: group.label,
       code: activity?.code || group.activityId,
@@ -3107,6 +2830,9 @@ const stateTransitionRelayNodes = computed(() => {
       parent_activity_node_ids: [],
       child_activity_node_ids: [],
       _network_editor_transition_relay: true,
+      _network_editor_preserve_relay_layout: Boolean(
+        activityWithLayout?.reference_id && savedPosition,
+      ),
       transitionRelayActivityGraphId: group.activityId,
       transitionRelayInputStateIds: group.inputStateIds,
       transitionRelayOutputStateIds: group.outputStateIds,
@@ -3212,7 +2938,7 @@ const canvasHeight = computed(() => {
   const maxY = positions.reduce((value, pos) => Math.max(value, pos.y), topPadding)
   const containerBottom = [
     ...statePackageContainers.value.map((container) => container.top + container.height),
-    ...virtualActivityContainers.value.map((container) => container.top + container.height),
+    ...activityPackageContainers.value.map((container) => container.top + container.height),
   ].reduce((value, bottom) => Math.max(value, bottom), 0)
   return Math.max(420, maxY + rowHeight + topPadding, containerBottom + topPadding)
 })
@@ -3262,10 +2988,10 @@ const statePackageContainers = computed(() => {
   }
   return containers.sort((a, b) => b.height - a.height)
 })
-const virtualActivityContainers = computed(() => {
+const activityPackageContainers = computed(() => {
   const containers = []
   for (const node of visibleActivityNodes.value) {
-    if (node.activity_type !== 'virtual' || !node.activity_node_id) continue
+    if (node.activity_type !== 'activity_package' || !node.activity_node_id) continue
     const nodeIndex = visibleActivityNodes.value.findIndex((item) => item.id === node.id)
     const childIndices = visibleActivityNodes.value
       .map((candidate, index) => ({ candidate, index }))
@@ -3526,12 +3252,10 @@ const activityNodeMetricsById = computed(() => {
     if (!activity || !supportsGraphActivityBinding(activity) || !String(stateId).startsWith('state_node:')) continue
     const item = ensure(activityId)
     if (edge.type === 'STATE_TO_ACTIVITY') {
-      if (edge.binding_role === 'context_input' || edge.is_inherited || edge.source_kind === 'inherited_context_binding') {
-        item.inheritedStateIds.add(stateId)
-      } else {
+      if (edge.binding_role === 'input') {
         item.inputStateIds.add(stateId)
       }
-    } else if (edge.binding_role === 'output' || edge.binding_role === 'declared_output') {
+    } else if (edge.binding_role === 'output') {
       item.outputStateIds.add(stateId)
     }
   }
@@ -3550,7 +3274,7 @@ const activityNodeMetricsById = computed(() => {
   }
 
   for (const node of visibleActivityNodes.value) {
-    if (node.activity_type !== 'virtual' || !node.activity_node_id) continue
+    if (node.activity_type !== 'activity_package' || !node.activity_node_id) continue
     const descendants = visibleActivityNodes.value.filter((candidate) =>
       candidate.id !== node.id && activityPathContains(candidate, node.activity_node_id),
     )
@@ -3671,12 +3395,8 @@ const batchBindingRoles = computed(() => {
     ? { input: 'input', output: 'output' }
     : { input: '', output: '' }
 })
-const batchInputRoleLabel = computed(() =>
-  batchBindingRoles.value.input === 'context_input' ? '历史上下文输入' : '输入状态',
-)
-const batchOutputRoleLabel = computed(() =>
-  batchBindingRoles.value.output === 'declared_output' ? '历史声明输出' : '产出状态',
-)
+const batchInputRoleLabel = computed(() => '输入状态')
+const batchOutputRoleLabel = computed(() => '产出状态')
 const batchOpRuleOptions = computed(() => {
   const atomicId = batchBindingActivity.value?.atomic_activity_id
   if (!atomicId) return []
@@ -3748,7 +3468,7 @@ const dragHintLabel = computed(() => {
     return '已选活动：可在右侧编辑栏查看和维护相关状态绑定。'
   }
   if (!supportsGraphActivityBinding(selectedGraphActivity.value)) {
-    return '当前活动不能直接绑定状态；请选择原子活动，虚拟活动仅作为管理包。'
+    return '活动包不能直接绑定状态；请选择原子活动。'
   }
   return '已选状态和活动：在右侧编辑栏选择角色后创建绑定。'
 })
@@ -3849,25 +3569,6 @@ const packageChangeImpact = computed(() => {
   }
 })
 const selectedGraphActivity = computed(() => graphActivityById.value.get(selectedActivityGraphId.value) || null)
-const focusedActivityCanvas = computed(() => {
-  if (selectedActivityScopeIds.value.length !== 1) return null
-  const node = activityNodeById.value.get(selectedActivityScopeIds.value[0])
-  if (!node) return null
-  const graphNode = graphActivityById.value.get(`activity_node:${node.id}`) || { id: `activity_node:${node.id}` }
-  return {
-    node,
-    parentId: node.parent_id || null,
-    breadcrumb: activityBreadcrumb(node.id),
-    contextStates: [],
-    outputStates: [],
-    metrics: {
-      ...activityNodeMetrics(graphNode),
-      declaredOutputCount: 0,
-      implementedOutputCount: 0,
-      missingOutputCount: 0,
-    },
-  }
-})
 const selectedEditableLabel = computed(() => {
   if (selectionFocus.value === 'state' && selectedStateId.value) return selectedStateLabel.value
   if (selectionFocus.value === 'activity' && selectedGraphActivity.value) return selectedActivityLabel.value
@@ -3879,7 +3580,7 @@ const selectedDeleteActionLabel = computed(() => {
   const kind = focusedSelectionKind()
   if (kind === 'state') return '删除状态本体'
   if (kind === 'activity') {
-    return selectedGraphActivity.value?.atomic_activity_id ? '删除原子活动' : '删除虚拟活动'
+    return selectedGraphActivity.value?.atomic_activity_id ? '删除原子活动' : '移除活动包'
   }
   return '删除选中'
 })
@@ -3889,13 +3590,12 @@ const selectedDeleteConfirmText = computed(() => {
     return `确认删除状态本体「${selectedStateLabel.value}」？这不是移出状态包，相关引用和绑定需要一并复核。`
   }
   if (kind === 'activity') {
-    const label = selectedGraphActivity.value?.atomic_activity_id ? '原子活动' : '虚拟活动'
+    const label = selectedGraphActivity.value?.atomic_activity_id ? '原子活动' : '活动包'
     return `确认删除${label}「${selectedActivityLabel.value}」？`
   }
   return `确认删除「${selectedEditableLabel.value}」？`
 })
 const stateDrawerTitle = computed(() => (stateEditId.value ? '编辑状态' : '新建状态'))
-const activityDrawerTitle = computed(() => (activityEditId.value ? '编辑虚拟活动' : '新建虚拟活动'))
 const atomicDrawerTitle = computed(() => (atomicEditId.value ? '编辑原子活动' : '新建原子活动'))
 const canvasStatusType = computed(() => {
   const blocking = validationSummary.value.blocking_count || 0
@@ -3940,7 +3640,6 @@ const solverReadinessButtonType = computed(() => (solverReadinessType.value === 
 const filteredStateTree = computed(() => filterTree(stateTree.value, keyword.value))
 const filteredActivityTree = computed(() => filterTree(stagedActivityTree.value, keyword.value))
 const stateParentOptions = computed(() => allStateNodes.value.filter((node) => node.state_kind === 'aggregate' || !node.feature_key))
-const activityParentOptions = computed(() => allActivityNodes.value.filter((node) => node.level === 1))
 const level2ActivityPackages = computed(() => allActivityNodes.value.filter((node) => node.level === 2))
 const localSelectedImpact = computed(() => {
   if (selectionFocus.value === 'activity' && selectedActivityGraphId.value) {
@@ -4021,7 +3720,7 @@ const impactHighlights = computed(() => {
   if (impactResult.value?.selection_type === 'state') {
     ;(impactResult.value.upstream_activities || []).forEach(addActivity)
     ;(impactResult.value.downstream_activities || []).forEach(addActivity)
-    ;(impactResult.value.affected_virtual_activities || []).forEach(addActivity)
+    ;(impactResult.value.affected_activity_packages || []).forEach(addActivity)
     ;(impactResult.value.affected_executable_activities || []).forEach(addActivity)
     ;(impactResult.value.parent_state_chain || []).forEach(addState)
     ;(impactResult.value.reference_parent_states || []).forEach(addState)
@@ -4030,7 +3729,7 @@ const impactHighlights = computed(() => {
     ;(impactResult.value.inherited_precondition_states || []).forEach(addState)
     ;(impactResult.value.output_states || []).forEach(addState)
     ;(impactResult.value.downstream_activities || []).forEach(addActivity)
-    ;(impactResult.value.owner_virtual_activities || []).forEach(addActivity)
+    ;(impactResult.value.owner_activity_packages || []).forEach(addActivity)
     ;(impactResult.value.affected_parent_states || []).forEach(addState)
   } else {
     localSelectedImpact.value.upstream.forEach((item) => {
@@ -4064,7 +3763,7 @@ const impactSections = computed(() => {
     return [
       { label: '所在状态包路径', items: impact.parent_state_chain || [], type: 'info' },
       { label: '其他出现位置', items: impact.reference_parent_states || [], type: 'warning' },
-      { label: '影响虚拟活动', items: impact.affected_virtual_activities || [], type: 'info' },
+      { label: '影响活动包', items: impact.affected_activity_packages || [], type: 'info' },
       { label: '影响原子活动', items: impact.affected_executable_activities || [], type: 'success' },
       { label: '问题', items: impact.issues || [], type: 'danger', issue: true },
     ].filter((section) => section.items.length)
@@ -4073,7 +3772,7 @@ const impactSections = computed(() => {
     { label: '直接前置状态', items: impact.direct_precondition_states || [], type: 'primary' },
     { label: '继承前置状态', items: impact.inherited_precondition_states || [], type: 'warning' },
     { label: '产出状态', items: impact.output_states || [], type: 'success' },
-    { label: '所属虚拟活动', items: impact.owner_virtual_activities || [], type: 'info' },
+    { label: '所属活动包', items: impact.owner_activity_packages || [], type: 'info' },
     { label: '受影响状态包', items: impact.affected_parent_states || [], type: 'info' },
     { label: '下游活动', items: impact.downstream_activities || [], type: 'success' },
     { label: '问题', items: impact.issues || [], type: 'danger', issue: true },
@@ -4528,21 +4227,6 @@ function defaultTargetValueForFeature(featureKey) {
   return ''
 }
 
-function defaultActivityForm(parent = null) {
-  const level = parent ? 2 : 1
-  const parentId = parent?.id || null
-  return {
-    code: '',
-    name: '',
-    description: '',
-    parent_id: parentId,
-    level,
-    activity_category: 'normal',
-    sort_order: nextSortOrder(activityNodes.value.filter((node) => String(node.parent_id || '') === String(parentId || ''))),
-    is_active: true,
-  }
-}
-
 function defaultAtomicForm(packageId = null) {
   return {
     code: '',
@@ -4741,16 +4425,6 @@ function readRecentMachineTypeIds() {
   }
 }
 
-function readNetworkEditorFullGraphDebugFlag() {
-  try {
-    const params = new URLSearchParams(window.location.search || '')
-    return params.get('networkEditorFullGraph') === '1' ||
-      window.localStorage?.getItem('network-editor-full-graph') === '1'
-  } catch (_) {
-    return false
-  }
-}
-
 function rememberMachineType(id) {
   if (!id) return
   const next = [
@@ -4940,32 +4614,6 @@ function validationIssueReviewMessage(validation, severity = 'warning') {
   return issueLines.join('\n')
 }
 
-function activityBreadcrumb(activityNodeId) {
-  const result = []
-  const seen = new Set()
-  let current = activityNodeById.value.get(activityNodeId)
-  while (current && !seen.has(current.id)) {
-    seen.add(current.id)
-    result.unshift(current)
-    current = current.parent_id ? activityNodeById.value.get(current.parent_id) : null
-  }
-  return result
-}
-
-function boundaryStatesForActivity(activityNodeId, roles) {
-  const roleSet = new Set(roles)
-  const seen = new Set()
-  const result = []
-  for (const binding of bindings.value) {
-    if (binding.activity_node_id !== activityNodeId || !roleSet.has(binding.binding_role)) continue
-    const state = stateById.value.get(binding.state_node_id)
-    if (!state || seen.has(state.id)) continue
-    seen.add(state.id)
-    result.push(state)
-  }
-  return result
-}
-
 function statePackageCoverage(node) {
   return statePackageCoverageById.value.get(node?.state_node_id) || null
 }
@@ -5146,8 +4794,6 @@ function supportsGraphActivityBinding(activity) {
 
 function bindingRoleText(role) {
   return {
-    context_input: '历史上下文输入',
-    declared_output: '历史声明输出',
     input: '输入',
     output: '产出',
   }[role] || role || '-'
@@ -5523,7 +5169,7 @@ function draftActivityGraphNode(change, graphByActivityId) {
     code: payload.code || null,
     name: payload.name,
     description: payload.description || '',
-    activity_type: 'virtual',
+    activity_type: 'activity_package',
     activity_category: payload.activity_category || 'normal',
     solver_participation: false,
     sort_order: payload.sort_order || 0,
@@ -5647,7 +5293,7 @@ function bindingPayloadEdge(payload, { idPrefix, sourceKind, isDraft = false, is
   const stateGraphId = graphIdForBindingState(payload.state_node_id)
   const activityGraphId = graphIdForBindingActivity(payload)
   if (!stateGraphId || !activityGraphId) return null
-  const isOutput = ['output', 'declared_output'].includes(payload.binding_role)
+  const isOutput = payload.binding_role === 'output'
   const type = isOutput ? 'ACTIVITY_TO_STATE' : 'STATE_TO_ACTIVITY'
   return {
     id: `${idPrefix}:${type}:${stateGraphId}:${activityGraphId}:${payload.binding_role}`,
@@ -6251,7 +5897,6 @@ function startEditSession() {
   layoutDraft.value = {}
   containerDraft.value = {}
   pendingStateLayout.value = null
-  pendingActivityLayout.value = null
   pendingAtomicActivityLayout.value = null
   resetCollapsedStateContainers()
   resetCollapsedActivityContainers()
@@ -6286,7 +5931,6 @@ async function cancelEditSession() {
   layoutDraft.value = {}
   containerDraft.value = {}
   pendingStateLayout.value = null
-  pendingActivityLayout.value = null
   pendingAtomicActivityLayout.value = null
   resetCollapsedStateContainers()
   resetCollapsedActivityContainers()
@@ -6378,7 +6022,6 @@ async function submitDraftChanges() {
       containerDraft.value = {}
     }
     pendingStateLayout.value = null
-    pendingActivityLayout.value = null
     pendingAtomicActivityLayout.value = null
     resetCollapsedStateContainers()
     resetCollapsedActivityContainers()
@@ -6664,29 +6307,6 @@ function openActivityContextMenu(node, event) {
     x: Math.round(Math.min(Math.max(8, point.x), canvasWidth - 156)),
     y: Math.round(Math.max(8, point.y)),
   }
-}
-
-async function focusContextState() {
-  const node = contextMenu.value?.node
-  closeContextMenu()
-  if (!node) return
-  selectGraphState(node)
-  await focusCurrentSelection()
-}
-
-async function focusContextActivity() {
-  const node = contextMenu.value?.node
-  closeContextMenu()
-  if (!node) return
-  selectGraphActivity(node)
-  await focusCurrentSelection()
-}
-
-async function focusContextVirtualActivity() {
-  const node = contextMenu.value?.node
-  closeContextMenu()
-  if (!node) return
-  await enterActivityFocus(node)
 }
 
 function editContextState() {
@@ -7737,7 +7357,7 @@ async function expandProxyEndpoint(graphId) {
     return
   }
   const activity = graphActivityById.value.get(id)
-  if (activity && activity.activity_type === 'virtual' && !isGraphActivityExpanded(activity)) {
+  if (activity && activity.activity_type === 'activity_package' && !isGraphActivityExpanded(activity)) {
     await toggleGraphActivityExpansion(activity)
   }
 }
@@ -8012,29 +7632,11 @@ function handleStatePackageContainerDoubleClick(container, event) {
   openCreateState(parent, { layout: newStateLayoutFromCanvasPoint(point) })
 }
 
-function openCreateActivityNode(parent = null, options = {}) {
-  if (!requireEditMode('新建虚拟活动')) return
-  activityEditId.value = null
-  pendingActivityLayout.value = options.layout || null
-  const selectedParent = parent || (options.useSelectedParent === false ? null : selectedLevelOneActivity())
-  const selectedParentId = selectedParent?.id || null
-  activityForm.value = {
-    ...defaultActivityForm(selectedParent),
-    sort_order: nextSortOrder(allActivityNodes.value.filter((node) =>
-      String(node.parent_id || '') === String(selectedParentId || ''),
-    )),
-  }
-  if (activityForm.value.level === 2 && !activityForm.value.parent_id && activityParentOptions.value.length) {
-    activityForm.value.parent_id = activityParentOptions.value[0].id
-  }
-  activityDrawerVisible.value = true
-}
-
 function openCreateActivityChild(node) {
   if (!requireEditMode('新建子活动')) return
   if (!node || node.resource_type === 'atomic_activity') return
   if (node.level === 1) {
-    ElMessage.info('虚拟活动包不再从网络编辑器中新建；请直接添加原子活动或在活动能力页维护活动包。')
+    ElMessage.info('活动包只在活动能力页维护；网络编辑器只维护状态转移。')
     return
   }
   if (node.level === 2) {
@@ -8049,7 +7651,7 @@ function openCreateActivityInside(node) {
   const source = activityNodeById.value.get(node.activity_node_id)
   if (!source) return
   if (source.level === 1) {
-    ElMessage.info('虚拟活动包不再从网络编辑器中新建；请直接添加原子活动或在活动能力页维护活动包。')
+    ElMessage.info('活动包只在活动能力页维护；网络编辑器只维护状态转移。')
     return
   }
   if (source.level === 2) {
@@ -8060,92 +7662,8 @@ function openCreateActivityInside(node) {
 }
 
 function openEditActivityNode(node) {
-  if (!requireEditMode('编辑虚拟活动')) return
   if (!node) return
-  activityEditId.value = node.id
-  pendingActivityLayout.value = null
-  activityForm.value = {
-    code: node.code || '',
-    name: node.name || '',
-    description: node.description || '',
-    parent_id: node.parent_id || null,
-    level: node.level,
-    activity_category: node.activity_category || 'normal',
-    sort_order: node.sort_order || 0,
-    is_active: node.is_active,
-  }
-  activityDrawerVisible.value = true
-}
-
-function onActivityLevelChange(level) {
-  if (level === 1) {
-    activityForm.value.parent_id = null
-    activityForm.value.sort_order = nextSortOrder(allActivityNodes.value.filter((node) => !node.parent_id))
-    return
-  }
-  if (!activityForm.value.parent_id && activityParentOptions.value.length) {
-    activityForm.value.parent_id = activityParentOptions.value[0].id
-  }
-  activityForm.value.sort_order = nextSortOrder(allActivityNodes.value.filter((node) =>
-    String(node.parent_id || '') === String(activityForm.value.parent_id || ''),
-  ))
-}
-
-async function saveQuickActivityNode() {
-  if (!requireEditMode('保存虚拟活动')) return
-  const code = activityForm.value.code?.trim() || null
-  const name = activityForm.value.name.trim()
-  const description = activityForm.value.description?.trim() || null
-  if (!name) return ElMessage.warning('请填写活动名称')
-  if (activityForm.value.level === 2 && !activityForm.value.parent_id) {
-    return ElMessage.warning('二级虚拟活动需要所属一级活动')
-  }
-  savingActivity.value = true
-  try {
-    const payload = {
-      machine_type_id: machineTypeId.value,
-      parent_id: activityForm.value.level === 1 ? null : activityForm.value.parent_id,
-      level: activityForm.value.level,
-      code,
-      name,
-      description,
-      activity_category: activityForm.value.activity_category,
-      sort_order: activityForm.value.sort_order,
-      is_active: activityForm.value.is_active,
-      metadata_json: !activityEditId.value && pendingActivityLayout.value
-        ? metadataWithLayout(null, pendingActivityLayout.value)
-        : null,
-    }
-    const { machine_type_id: _activityMachineTypeId, ...activityUpdatePayload } = payload
-    const activityDraftId = queueDraftChange({
-      entityType: 'activity_node',
-      operation: activityEditId.value ? 'update' : 'create',
-      entityId: activityEditId.value || null,
-      payload: activityEditId.value ? activityUpdatePayload : payload,
-      label: `${activityEditId.value ? '更新虚拟活动' : '新建虚拟活动'}：${name}`,
-    })
-    if (!activityEditId.value && activityDraftId) {
-      expandActivityContainerForDraftChild(payload.parent_id)
-    }
-    activityDrawerVisible.value = false
-    pendingActivityLayout.value = null
-    if (activityEditId.value) {
-      selectedActivityGraphId.value = `activity_node:${activityEditId.value}`
-      selectionFocus.value = 'activity'
-      bindingForm.value.activity_graph_id = selectedActivityGraphId.value
-    } else if (activityDraftId) {
-      selectedActivityGraphId.value = `activity_node:${draftActivityId(activityDraftId)}`
-      selectionFocus.value = 'activity'
-      bindingForm.value.activity_graph_id = selectedActivityGraphId.value
-    }
-    onBindingActivityChange()
-    ElMessage.success(activityEditId.value ? '虚拟活动更新已加入草稿' : '虚拟活动创建已加入草稿')
-    activityEditId.value = null
-  } catch (error) {
-      notifyOperationError('加入虚拟活动草稿失败', error)
-  } finally {
-    savingActivity.value = false
-  }
+  ElMessage.info('活动包只在活动能力页维护；网络编辑器只维护状态转移。')
 }
 
 function openCreateAtomicActivity(packageNode = null, options = {}) {
@@ -8255,7 +7773,7 @@ async function deleteSelected() {
           entityType: 'activity_node',
           operation: 'delete',
           entityId: graphActivity.activity_node_id,
-          label: `删除虚拟活动：${selectedActivityLabel.value}`,
+          label: `移除活动包：${selectedActivityLabel.value}`,
         })
       }
       selectedActivityGraphId.value = null
@@ -8465,6 +7983,9 @@ function finiteNumber(value) {
 }
 
 function layoutKey(node) {
+  if (node?._network_editor_transition_relay) {
+    return transitionRelayActivityGraphId(node) || node?.id || ''
+  }
   return node?.id || ''
 }
 
@@ -8628,7 +8149,7 @@ function layoutUpdateForNode(node, pos, kind) {
     return {
       entityType: 'activity_node',
       entityId: source.id,
-      label: `调整虚拟活动位置：${nodeLabel(source)}`,
+      label: `调整活动包位置：${nodeLabel(source)}`,
       payload: {
         parent_id: source.parent_id || null,
         level: source.level,
@@ -8726,7 +8247,7 @@ function containerUpdateForNode(node, size, kind) {
     return {
       entityType: 'activity_node',
       entityId: source.id,
-      label: `调整虚拟活动容器尺寸：${nodeLabel(source)}`,
+      label: `调整活动包容器尺寸：${nodeLabel(source)}`,
       payload: {
         parent_id: source.parent_id || null,
         level: source.level,
@@ -8875,7 +8396,7 @@ function currentContainerForNode(node, kind) {
       ),
     ) || null
   }
-  return virtualActivityContainers.value.find((container) =>
+  return activityPackageContainers.value.find((container) =>
     container.id === node.id ||
     String(container.activityNodeId || '') === String(node.activity_node_id || ''),
   ) || null
@@ -8958,7 +8479,7 @@ function ancestorContainersForNode(node, kind) {
       .filter((item) => item.node)
       .sort((a, b) => Number(b.node.level || 0) - Number(a.node.level || 0))
   }
-  return virtualActivityContainers.value
+  return activityPackageContainers.value
     .filter((container) =>
       container.id !== node.id &&
       String(container.activityNodeId || '') !== String(node.activity_node_id || '') &&
@@ -9250,7 +8771,7 @@ function isExpandedStateContainerForAutoLayout(node, nodes) {
 }
 
 function isExpandedActivityContainerForAutoLayout(node, nodes) {
-  if (!node?.activity_node_id || node.activity_type !== 'virtual') return false
+  if (!node?.activity_node_id || node.activity_type !== 'activity_package') return false
   const hasVisibleChild = (nodes || []).some((candidate) =>
     candidate.id !== node.id &&
     activityPathContains(candidate, node.activity_node_id),
@@ -9599,7 +9120,7 @@ function compactContainerCandidates(kind, nextLayout) {
   const candidates = nodes
     .filter((node) => kind === 'state'
       ? !node.is_leaf && node.state_node_id
-      : node.activity_type === 'virtual' && node.activity_node_id)
+      : node.activity_type === 'activity_package' && node.activity_node_id)
     .map((node) => {
       const members = compactContainerMembers(node, kind, nextLayout)
       if (!members.length) return null
@@ -10042,9 +9563,9 @@ function buildStateTransitionRelayGroups() {
     return map.get(key)
   }
   for (const edge of stateTransitionEdges.value) {
-    if (edge.type === 'STATE_TO_ACTIVITY' && ['input', 'context_input'].includes(edge.binding_role)) {
+    if (edge.type === 'STATE_TO_ACTIVITY' && edge.binding_role === 'input') {
       ensure(inputsByActivity, edge.target_id).push(edge)
-    } else if (edge.type === 'ACTIVITY_TO_STATE' && ['output', 'declared_output'].includes(edge.binding_role)) {
+    } else if (edge.type === 'ACTIVITY_TO_STATE' && edge.binding_role === 'output') {
       ensure(outputsByActivity, edge.source_id).push(edge)
     }
   }
@@ -10581,8 +10102,6 @@ function edgeSemanticLabel(edge) {
   let label = roleLabel
   if (binding?.binding_type === 'state_package') {
     label = {
-      context_input: '历史状态包上下文',
-      declared_output: '历史状态包声明输出',
       input: '状态包输入',
       output: '状态包产出',
     }[binding.binding_role] || `状态包${roleLabel}`
@@ -10732,7 +10251,7 @@ async function dropOnActivity(node) {
   if (!requireEditMode('创建绑定')) return endCanvasDrag()
   if (canvasDrag.value?.type !== 'state') return endCanvasDrag()
   if (!supportsGraphActivityBinding(node)) {
-    ElMessage.warning('虚拟活动仅作为管理包，不能直接绑定状态')
+    ElMessage.warning('活动包不能直接绑定状态')
     return endCanvasDrag()
   }
   selectGraphActivity(node)
@@ -10748,7 +10267,7 @@ async function dropOnState(node) {
   const activity = graphActivityById.value.get(canvasDrag.value.activityGraphId)
   if (!activity) return endCanvasDrag()
   if (!supportsGraphActivityBinding(activity)) {
-    ElMessage.warning('虚拟活动仅作为管理包，不能直接绑定状态')
+    ElMessage.warning('活动包不能直接绑定状态')
     return endCanvasDrag()
   }
   selectGraphState(node)
@@ -10762,11 +10281,44 @@ function graphPayload() {
   return {
     state_root_ids: selectedStateRootIds.value.filter((id) => !isDraftStateId(id)),
     activity_scope_node_ids: selectedActivityScopeIds.value.filter((id) => !isDraftActivityId(id)),
+    atomic_activity_scope_ids: resolvedAtomicActivityScopeIds(),
     view_mode: viewMode.value,
     include_inactive: includeInactive.value,
     state_depth: stateDepth.value,
     activity_depth: activityDepth.value,
   }
+}
+
+function resolvedAtomicActivityScopeIds() {
+  const roots = selectedActivityScopeIds.value
+    .filter((id) => !isDraftActivityId(id))
+    .map(Number)
+  if (!roots.length) return []
+  const childrenByParent = new Map()
+  for (const node of activityNodes.value) {
+    const parentId = node.parent_id === null || node.parent_id === undefined
+      ? null
+      : Number(node.parent_id)
+    if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, [])
+    childrenByParent.get(parentId).push(Number(node.id))
+  }
+  const packageIds = new Set()
+  const queue = [...roots]
+  while (queue.length) {
+    const packageId = queue.shift()
+    if (!Number.isFinite(packageId) || packageIds.has(packageId)) continue
+    packageIds.add(packageId)
+    queue.push(...(childrenByParent.get(packageId) || []))
+  }
+  const atomicIds = new Set()
+  for (const packageId of packageIds) {
+    for (const ref of atomicRefsByPackage.value.get(packageId) || []) {
+      if (includeInactive.value || ref.is_active) {
+        atomicIds.add(Number(ref.atomic_activity_id))
+      }
+    }
+  }
+  return [...atomicIds].filter(Number.isFinite).sort((left, right) => left - right)
 }
 
 function shouldLoadStateTransitionProjectionGraph() {
@@ -10778,16 +10330,18 @@ function stateTransitionProjectionPayload(basePayload = graphPayload()) {
     ...basePayload,
     state_root_ids: [],
     activity_scope_node_ids: [],
+    atomic_activity_scope_ids: [],
     state_depth: 0,
     activity_depth: 0,
-    view_mode: 'implementation',
+    view_mode: 'state_transition',
   }
 }
 
 function solverPrecheckPayload() {
   return {
     ...graphPayload(),
-    view_mode: 'solver_ready',
+    activity_scope_node_ids: [],
+    view_mode: 'state_transition',
     state_depth: 0,
     activity_depth: 0,
   }
@@ -11233,16 +10787,6 @@ function pruneCollapsedActivityContainers() {
   if (next.size !== collapsedActivityContainerKeys.value.size) collapsedActivityContainerKeys.value = next
 }
 
-async function focusCurrentSelection() {
-  resetLocalStateTransitionExpansion()
-  resetCollapsedStateContainers()
-  resetCollapsedActivityContainers()
-  applySelectionAsGraphFocus()
-  if (selectedStateRootIds.value.length && stateDepth.value !== 0) stateDepth.value = 2
-  if (selectedActivityScopeIds.value.length && activityDepth.value !== 0) activityDepth.value = 2
-  await reloadGraph()
-}
-
 function isGraphStateExpanded(node) {
   if (isStateTransitionCanvas.value) return expandedStateGraphIds.value.has(String(node?.id || ''))
   if (!node?.state_node_id || !selectedStateRootIds.value.length) return false
@@ -11338,24 +10882,7 @@ async function toggleGraphActivityExpansion(node) {
   await reloadGraph()
 }
 
-async function enterActivityFocus(node) {
-  if (node?.activity_type !== 'virtual' || !node.activity_node_id) return
-  await enterActivityFocusById(node.activity_node_id)
-}
-
-async function enterActivityFocusById(activityNodeId) {
-  const node = activityNodeById.value.get(activityNodeId)
-  if (!node) return
-  selectedActivityScopeIds.value = [node.id]
-  selectedActivityGraphId.value = `activity_node:${node.id}`
-  selectionFocus.value = 'activity'
-  bindingForm.value.activity_graph_id = selectedActivityGraphId.value
-  activityDepth.value = 2
-  onBindingActivityChange()
-  await reloadGraph()
-}
-
-function applySelectionAsGraphFocus() {
+function applySelectionAsGraphFilter() {
   if (selectedStateId.value) {
     selectedStateRootIds.value = [selectedStateId.value]
   }
@@ -11368,7 +10895,7 @@ function applySelectionAsGraphFocus() {
 }
 
 async function collapseCurrentSelection() {
-  applySelectionAsGraphFocus()
+  applySelectionAsGraphFilter()
   if (selectedStateRootIds.value.length) stateDepth.value = 1
   if (selectedActivityScopeIds.value.length) {
     const node = activityNodeById.value.get(selectedActivityScopeIds.value[0])
@@ -11384,7 +10911,7 @@ async function collapseCurrentSelection() {
 }
 
 async function expandCurrentSelectionOneLevel() {
-  applySelectionAsGraphFocus()
+  applySelectionAsGraphFilter()
   if (selectedStateRootIds.value.length) {
     stateDepth.value = stateDepth.value > 0 ? Math.min(stateDepth.value + 1, 12) : 2
   }
@@ -11395,7 +10922,7 @@ async function expandCurrentSelectionOneLevel() {
 }
 
 async function expandCurrentSelectionAll() {
-  applySelectionAsGraphFocus()
+  applySelectionAsGraphFilter()
   if (selectedStateRootIds.value.length) stateDepth.value = 0
   if (selectedActivityScopeIds.value.length) activityDepth.value = 0
   await reloadGraph()
@@ -11740,7 +11267,7 @@ function draftOperationLabel(operation) {
 function draftEntityLabel(entityType) {
   const labels = {
     state_node: '状态',
-    activity_node: '虚拟活动',
+    activity_node: '活动包',
     atomic_activity: '原子活动',
     activity_state_binding: '状态-活动绑定',
     state_node_reference: '状态包成员引用',
@@ -11774,7 +11301,6 @@ async function onTypeChange() {
   layoutDraft.value = {}
   containerDraft.value = {}
   pendingStateLayout.value = null
-  pendingActivityLayout.value = null
   pendingAtomicActivityLayout.value = null
   resetCollapsedStateContainers()
   resetCollapsedActivityContainers()
@@ -11809,7 +11335,10 @@ async function loadAll({ preserveAutoLayout = false } = {}) {
     activityNodes.value = activities
     atomicActivities.value = atomic
     stateReferences.value = refs
-    bindings.value = bindingRows
+    bindings.value = bindingRows.filter((binding) =>
+      binding.atomic_activity_id &&
+      ['input', 'output'].includes(binding.binding_role),
+    )
     opRules.value = rules
     stateFeatureDefs.value = featureDefs
     await loadActivityPackageRefs(activities.filter((item) => item.level === 2))
@@ -12042,7 +11571,7 @@ async function createBindingFromForm() {
 function openBatchBindingDialog() {
   if (!requireEditMode('批量绑定')) return
   if (!supportsGraphActivityBinding(batchBindingActivity.value)) {
-    ElMessage.warning('请先选择可绑定的虚拟活动或原子活动')
+    ElMessage.warning('请先选择可绑定的原子活动')
     return
   }
   batchBindingForm.value = {
@@ -12466,7 +11995,7 @@ async function confirmDroppedBinding(activity, role, stateNodeId) {
     `状态：${stateLabel}`,
     `活动：${activityLabel}`,
     `角色：${bindingRoleText(role)}`,
-    `规则：${activity.atomic_activity_id ? ruleLabel : '虚拟活动无需规则'}`,
+    `规则：${activity.atomic_activity_id ? ruleLabel : '活动包不参与求解'}`,
     bindingCoveragePreviewText(stateNodeId),
   ].join('\n')
   try {
@@ -12551,7 +12080,7 @@ function buildBindingPayload(activity, role, {
   allowMissingRule = false,
 } = {}) {
   if (!stateNodeId || !activity || !supportsGraphActivityBinding(activity)) {
-    ElMessage.warning('请先选择状态和原子活动；虚拟活动仅作为管理包')
+    ElMessage.warning('请先选择状态和原子活动')
     return null
   }
   if (!bindingRoleAllowedForActivity(activity, role)) {
@@ -12844,58 +12373,12 @@ onUnmounted(() => {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
-.focus-strip {
+.filter-strip {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
-}
-.focus-context-strip {
-  display: grid;
-  grid-template-columns: minmax(220px, 1.1fr) minmax(220px, 2fr) auto;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding: 8px 10px;
-  border: 1px solid #c6e2ff;
-  border-radius: 6px;
-  background: #f5f9ff;
-}
-.focus-context-main,
-.focus-boundaries,
-.focus-context-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-.focus-context-main,
-.focus-boundaries {
-  flex-wrap: wrap;
-}
-.focus-context-actions {
-  justify-content: flex-end;
-}
-.focus-breadcrumb-item {
-  min-width: 0;
-  max-width: 180px;
-  overflow: hidden;
-  color: #303133;
-  font-size: 12px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.focus-breadcrumb-item:not(:last-child)::after {
-  margin-left: 6px;
-  color: #909399;
-  content: "/";
-}
-.focus-boundaries > span {
-  color: #606266;
-  font-size: 12px;
-  font-weight: 600;
 }
 .depth-control {
   display: flex;
@@ -13490,7 +12973,7 @@ onUnmounted(() => {
 .activity-column {
   display: contents;
 }
-.virtual-container,
+.activity-package-container,
 .state-package-container {
   position: absolute;
   pointer-events: auto;
@@ -13503,7 +12986,7 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 8px;
 }
-.virtual-container {
+.activity-package-container {
   background: rgba(64, 158, 255, 0.06);
   box-shadow: inset 3px 0 0 rgba(64, 158, 255, 0.28);
 }
@@ -13511,7 +12994,7 @@ onUnmounted(() => {
   background: rgba(103, 194, 58, 0.07);
   box-shadow: inset 3px 0 0 rgba(103, 194, 58, 0.26);
 }
-.virtual-container.selected {
+.activity-package-container.selected {
   border-color: #409eff;
   background: rgba(64, 158, 255, 0.1);
 }
@@ -13519,7 +13002,7 @@ onUnmounted(() => {
   border-color: #67c23a;
   background: rgba(103, 194, 58, 0.11);
 }
-.virtual-container .container-title,
+.activity-package-container .container-title,
 .state-package-container .container-title {
   max-width: 132px;
   margin-left: 16px;
@@ -13529,24 +13012,24 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 600;
 }
-.virtual-container .container-meta {
+.activity-package-container .container-meta {
   min-width: 56px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 2px;
 }
-.virtual-container small,
+.activity-package-container small,
 .state-package-container small {
   color: #909399;
   font-size: 11px;
   white-space: nowrap;
 }
-.virtual-container small.warning {
+.activity-package-container small.warning {
   color: #e6a23c;
   font-weight: 600;
 }
-.virtual-container small.success {
+.activity-package-container small.success {
   color: #67c23a;
   font-weight: 600;
 }

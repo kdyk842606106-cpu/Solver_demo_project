@@ -8,13 +8,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import StateNode, StateNodeReference
 from app.db.schemas import LayeredExpansionRequest
+from app.core.modeling.semantics import is_atomic_state
 from app.services.layered_expansion import expand_layered_context
 
 FactKey = tuple[str, str]
 
 EXACT_EFFECT_TYPES = {"set", "reset"}
 EXACT_OPERATORS = {"eq", "completed"}
-BLOCKING_CODES = {"NO_PROVIDER", "BROKEN_CHAIN", "SELF_DEPENDENCY", "CONFLICTING_GOAL"}
+BLOCKING_CODES = {
+    "NO_PROVIDER",
+    "BROKEN_CHAIN",
+    "CONFLICTING_GOAL",
+    "ATOMIC_ACTIVITY_WITHOUT_RULE",
+}
 
 
 def _to_value(value: Any) -> str | None:
@@ -92,7 +98,7 @@ def _state_leaf_fact_keys(
         child for child in children_by_parent.get(node.id, [])
         if include_inactive or child.is_active
     ]
-    if not active_children:
+    if is_atomic_state(node):
         leaves = [node]
     else:
         stack = list(active_children)
@@ -104,7 +110,7 @@ def _state_leaf_fact_keys(
                 child for child in children_by_parent.get(current.id, [])
                 if include_inactive or child.is_active
             ]
-            if not current_children:
+            if is_atomic_state(current):
                 leaves.append(current)
             else:
                 stack.extend(current_children)
@@ -173,8 +179,6 @@ def _consumer_entry(rule: dict[str, Any], precondition: dict[str, Any]) -> dict[
         "activity_node_code": rule["activity_node_code"],
         "atomic_activity_id": rule.get("atomic_activity_id"),
         "source_type": precondition["source_type"],
-        "scope_guard_id": precondition.get("scope_guard_id"),
-        "scope_guard_name": precondition.get("scope_guard_name"),
         "source_activity_node_id": precondition.get("source_activity_node_id"),
     }
 
@@ -189,16 +193,6 @@ def _dedupe_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
         seen.add(key)
         result.append(entry)
     return result
-
-
-def _activity_path_ids(candidate: dict[str, Any]) -> set[int]:
-    return {int(item["id"]) for item in candidate.get("source_path") or []}
-
-
-def _is_inside_guarded_scope(provider: dict[str, Any], guarded_activity_node_id: int | None, path_ids_by_activity: dict[int, set[int]]) -> bool:
-    if guarded_activity_node_id is None:
-        return False
-    return guarded_activity_node_id in path_ids_by_activity.get(provider["activity_node_id"], set())
 
 
 def _add_diagnostic(
@@ -225,10 +219,13 @@ async def check_layered_health(
     session: AsyncSession,
     machine_type_id: int,
     payload: LayeredExpansionRequest,
+    *,
+    expansion: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a Provider/Consumer graph and rule-health diagnostics."""
 
-    expansion = await expand_layered_context(session, machine_type_id, payload)
+    if expansion is None:
+        expansion = await expand_layered_context(session, machine_type_id, payload)
 
     state_result = await session.execute(
         select(StateNode).where(StateNode.machine_type_id == machine_type_id)
@@ -250,11 +247,6 @@ async def check_layered_health(
     candidate_by_activity = {
         item["activity_node_id"]: item for item in expansion["candidate_activities"]
     }
-    path_ids_by_activity = {
-        item["activity_node_id"]: _activity_path_ids(item)
-        for item in expansion["candidate_activities"]
-    }
-
     provider_map: dict[FactKey, list[dict[str, Any]]] = defaultdict(list)
     consumer_map: dict[FactKey, list[dict[str, Any]]] = defaultdict(list)
     goal_map: dict[FactKey, list[dict[str, Any]]] = defaultdict(list)
@@ -389,39 +381,6 @@ async def check_layered_health(
                     "provider_count": 0,
                     "details": {
                         "required_facts": [{"feature_key": key[0], "target_value": key[1]} for key in keys],
-                    },
-                },
-            )
-
-        guarded_activity_node_id = precondition.get("source_activity_node_id")
-        if (
-            precondition.get("source_type") in {"parent_level_1_scope_guard", "parent_level_2_scope_guard"}
-            and providers_for_any_key
-            and all(
-                _is_inside_guarded_scope(provider, guarded_activity_node_id, path_ids_by_activity)
-                for provider in providers_for_any_key
-            )
-        ):
-            feature_key = precondition.get("feature_key") or (keys[0][0] if keys else None)
-            target_value = precondition.get("feature_value") or (keys[0][1] if keys else None)
-            _add_diagnostic(
-                diagnostics,
-                seen_diagnostics,
-                {
-                    "code": "SELF_DEPENDENCY",
-                    "severity": "error",
-                    "message": "Scope Guard depends on a fact only produced inside its own guarded subtree",
-                    "feature_key": feature_key,
-                    "operator": precondition.get("operator"),
-                    "target_value": target_value,
-                    "op_rule_id": rule["op_rule_id"],
-                    "activity_node_id": rule["activity_node_id"],
-                    "source_type": precondition.get("source_type"),
-                    "provider_count": len(providers_for_any_key),
-                    "details": {
-                        "guarded_activity_node_id": guarded_activity_node_id,
-                        "scope_guard_id": precondition.get("scope_guard_id"),
-                        "providers": providers_for_any_key,
                     },
                 },
             )

@@ -3,7 +3,7 @@
 import pytest
 from sqlalchemy import select
 
-from app.db.models import CandidatePlan, CandidatePlanStep, OpRule
+from app.db.models import CandidatePlan, CandidatePlanStep, OpRule, ScheduleResult
 
 from tests.integration.test_step3_api import _do_solve, _seed_base_data
 
@@ -229,6 +229,63 @@ async def test_adjustment_supports_fixed_freeze_finish_priority_and_precedence(c
     assert by_order[second["step_order"]]["new_start_min"] == frozen_start
     assert by_order[second["step_order"]]["new_end_min"] <= second["end_min"]
     assert body["diagnostics"]["adjustment_optimization"]
+
+
+@pytest.mark.asyncio
+async def test_adjustment_preview_left_compacts_avoidable_baseline_gap(client, db_session):
+    ids = await _seed_base_data(client)
+    initial = await _do_solve(client, ids)
+    cleaning = next(
+        item for item in initial["schedule"]["tasks"]
+        if item["op_rule_code"] == "OP_CLEANING"
+    )
+    schedule_result = await db_session.execute(
+        select(ScheduleResult)
+        .where(ScheduleResult.candidate_plan_id == initial["candidate_plan_id"])
+        .order_by(ScheduleResult.id.desc())
+    )
+    baseline_schedule = schedule_result.scalars().first()
+    assert baseline_schedule is not None
+    baseline_tasks = [dict(item) for item in baseline_schedule.tasks]
+    baseline_cleaning = next(
+        item for item in baseline_tasks if item["op_rule_code"] == "OP_CLEANING"
+    )
+    baseline_cleaning["start_min"] = 10
+    baseline_cleaning["end_min"] = 30
+    baseline_schedule.tasks = baseline_tasks
+    await db_session.commit()
+
+    created = await client.post(
+        f"/api/v1/plans/{initial['candidate_plan_id']}/adjustments",
+        json={"scope_step_ids": [cleaning["step_id"]]},
+    )
+    assert created.status_code == 200, created.text
+    preview = await client.post(
+        f"/api/v1/plan-adjustments/{created.json()['id']}/preview"
+    )
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["status"] == "preview_ready"
+    diff = next(
+        item for item in body["task_diffs"]
+        if item["op_rule_code"] == "OP_CLEANING"
+    )
+    assert diff["base_start_min"] == 10
+    assert diff["new_start_min"] == 0
+    assert body["summary"]["candidate_makespan_min"] == initial["schedule"]["makespan"]
+    stage_types = [
+        item["type"] for item in body["diagnostics"]["adjustment_optimization"]
+    ]
+    assert stage_types == [
+        "minimize_makespan",
+        "minimize_outside_order_inversions",
+        "minimize_all_order_inversions",
+        "minimize_priority_weighted_start",
+    ]
+    candidate = await db_session.get(CandidatePlan, body["candidate_plan_id"])
+    assert candidate.adjustment_snapshot["optimization_policy"] == (
+        "relative_order_compact_v1"
+    )
 
 
 @pytest.mark.asyncio

@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import (
-    ActivityPackageAtomicRef,
     ActivityNode,
     AtomicActivity,
     CandidatePlan,
@@ -123,9 +122,7 @@ async def load_rag(
             selectinload(OpRule.resource_reqs),
             selectinload(OpRule.effects),
             selectinload(OpRule.activity_node).selectinload(ActivityNode.parent),
-            selectinload(OpRule.atomic_activity)
-            .selectinload(AtomicActivity.package_refs)
-            .selectinload(ActivityPackageAtomicRef.activity_node),
+            selectinload(OpRule.atomic_activity),
         )
     )
     rules_map: dict[int, OpRule] = {r.id: r for r in rules_result.scalars().all()}
@@ -167,11 +164,9 @@ async def load_rag(
             activity_node_id = -atomic_activity.id
             activity_node_code = atomic_activity.code
             activity_node_level = 3
-            refs = sorted(
-                atomic_activity.package_refs,
-                key=lambda item: (item.sort_order, item.id),
-            )
-            activity_group = refs[0].activity_node if refs else None
+            # Package references are display/management context only.  There is
+            # no implicit "primary package" for scheduling semantics.
+            activity_group = None
         else:
             activity_node_id = activity_node.id if activity_node else None
             activity_node_code = activity_node.code if activity_node else None

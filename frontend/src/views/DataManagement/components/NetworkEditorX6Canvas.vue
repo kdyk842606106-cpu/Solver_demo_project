@@ -20,8 +20,8 @@ import {
 
 const NODE_WIDTH = 168
 const NODE_HEIGHT = 44
-const RELAY_NODE_WIDTH = 18
-const RELAY_NODE_HEIGHT = 18
+const RELAY_NODE_WIDTH = 132
+const RELAY_NODE_HEIGHT = 44
 const NODE_MAX_WIDTH = NETWORK_EDITOR_NODE_MAX_WIDTH
 const NODE_TEXT_SIDE_SPACE = 54
 const NODE_NAME_LINE_HEIGHT = 16
@@ -137,7 +137,6 @@ const emit = defineEmits([
   'edit-activity',
   'create-state-inside',
   'create-activity-inside',
-  'focus-activity',
   'layout-change',
   'container-resize',
   'blank-dblclick',
@@ -566,6 +565,7 @@ function avoidTransitionRelayDisplayCollisions(stateNodes, activityNodes) {
 
   return activityNodes.map((node) => {
     if (!isTransitionRelayNode(node)) return node
+    if (node?._network_editor_preserve_relay_layout) return node
     if (transitionRelayHasAutoRoute(node)) return node
     const start = transitionRelayTargetPosition(node, stateNodes) || nodePosition(node, 'activity')
     const size = nodeDimensions(node, 'activity')
@@ -594,6 +594,7 @@ function avoidTransitionRelayDisplayCollisions(stateNodes, activityNodes) {
 function alignTransitionRelaysToTargets(stateNodes, activityNodes) {
   return (activityNodes || []).map((node) => {
     if (!isTransitionRelayNode(node) || transitionRelayHasAutoRoute(node)) return node
+    if (node?._network_editor_preserve_relay_layout) return node
     const position = transitionRelayTargetPosition(node, stateNodes)
     return position ? nodeWithDisplayPosition(node, position) : node
   })
@@ -1091,7 +1092,7 @@ function expandContainerToContainNestedBounds(container, nestedBounds) {
 
 function buildActivityContainers(nodes = props.activityNodes) {
   return nodes
-    .filter((node) => node.activity_type === 'virtual' && node.activity_node_id && isExpandedNode(node, 'activity'))
+    .filter((node) => node.activity_type === 'activity_package' && node.activity_node_id && isExpandedNode(node, 'activity'))
     .map((node) => {
       const children = nodes.filter((candidate) => (
         candidate.id !== node.id &&
@@ -1465,7 +1466,7 @@ function createContainerCell(container, kind) {
       selected: isSelected(node, kind),
       testId: isState
         ? `network-editor-state-package-container-${node.state_node_id}`
-        : `network-editor-virtual-activity-container-${node.id}`,
+        : `network-editor-activity-package-container-${node.id}`,
       containerOrigin: {
         x: container.x,
         y: container.y,
@@ -1510,7 +1511,7 @@ function createContainerTitleCell(container, kind) {
         : `network-editor-activity-node-${node.id}`,
       moveTestId: isState
         ? `network-editor-state-package-container-move-${node.state_node_id}`
-        : `network-editor-virtual-activity-container-move-${node.id}`,
+        : `network-editor-activity-package-container-move-${node.id}`,
       label: node.name || node.code || node.id,
       code: node.code || node.id,
       meta: isState
@@ -1542,9 +1543,9 @@ function createNodeCell(node, kind) {
     zIndex: 10,
     data: {
       kind,
-      role: isRelay ? 'transition-relay' : 'node',
+      role: 'node',
       node,
-      canMutate: props.canMutate && !isRelay,
+      canMutate: props.canMutate,
       selected: isSelected(node, kind),
       testId: kind === 'state'
         ? `network-editor-state-node-${node.state_node_id}`
@@ -1556,9 +1557,9 @@ function createNodeCell(node, kind) {
       size,
       collapsedRelationCounts: node.collapsedRelationCounts || null,
       flowState: node.flowState || 'neutral',
-      canToggle: !isRelay && (kind === 'state' ? !node.is_leaf : node.activity_type === 'virtual'),
+      canToggle: !isRelay && (kind === 'state' ? !node.is_leaf : node.activity_type === 'activity_package'),
       actionLabel: isExpandedNode(node, kind) ? '折叠' : '展开',
-      isVirtual: kind === 'activity' && node.activity_type === 'virtual',
+      isPackage: kind === 'activity' && node.activity_type === 'activity_package',
       isTransitionRelay: isRelay,
       relayActivityGraphId: transitionRelayActivityGraphId(node),
     },
@@ -2202,9 +2203,17 @@ function renderNodeHtml(data) {
   const flowClass = data.flowState && data.flowState !== 'neutral' ? ` flow-${escapeAttr(data.flowState)}` : ''
   if (data.isTransitionRelay) {
     const tooltip = nodeTooltip(data)
+    const moveHandle = data.canMutate
+      ? '<span class="layout-handle" title="Drag to move"></span>'
+      : ''
     return `
-      <div class="x6-network-node x6-activity-node x6-transition-relay-node${selectedClass}${flowClass}" data-testid="${escapeAttr(data.testId)}" title="${escapeAttr(tooltip)}" tabindex="0">
+      <div class="x6-network-node x6-activity-node x6-transition-relay-node${selectedClass}${flowClass}" data-testid="${escapeAttr(data.testId)}" data-activity-graph-id="${escapeAttr(data.relayActivityGraphId || '')}" title="${escapeAttr(tooltip)}" tabindex="0">
+        ${moveHandle}
         <span class="relay-dot"></span>
+        <span class="relay-label">
+          <strong>${escapeHtml(data.code || '')}</strong>
+          <span>${escapeHtml(data.label || '')}</span>
+        </span>
         <span class="relay-tooltip" role="tooltip">${escapeHtml(tooltip)}</span>
       </div>
     `
@@ -2218,13 +2227,10 @@ function renderNodeHtml(data) {
   const edit = data.canMutate
     ? '<span class="node-action" role="button" tabindex="0" data-action="edit">编辑</span>'
     : ''
-  const focus = data.kind === 'activity' && data.isVirtual
-    ? '<span class="node-action" role="button" tabindex="0" data-action="focus">专注</span>'
-    : ''
   const canCreateInside = data.canMutate && (
     data.kind === 'state'
       ? data.canToggle
-      : data.isVirtual && Number(data.node?.level || 0) === 2
+      : data.isPackage && Number(data.node?.level || 0) === 2
   )
   const create = canCreateInside
     ? `<span class="node-action" role="button" tabindex="0" data-action="create">${data.kind === 'state' ? '添加状态' : '原子'}</span>`
@@ -2243,7 +2249,7 @@ function renderNodeHtml(data) {
       <span class="node-name" title="${escapeAttr(data.label)}">${escapeHtml(data.label)}</span>
       ${transitionSummary ? `<span class="node-transition" title="${escapeAttr(transitionSummary)}">${escapeHtml(transitionSummary)}</span>` : ''}
       ${transitionBadges}
-      <span class="node-actions">${toggle}${focus}${edit}${create}</span>
+      <span class="node-actions">${toggle}${edit}${create}</span>
     </div>
   `
 }
@@ -2277,10 +2283,6 @@ function renderContainerTitleHtml(data) {
   const create = canCreateInside
     ? `<span class="node-action" role="button" tabindex="0" data-action="create">${data.kind === 'state' ? '添加状态' : '原子'}</span>`
     : ''
-  const focus = data.kind === 'activity'
-    ? '<span class="node-action" role="button" tabindex="0" data-action="focus">专注</span>'
-    : ''
-
   const tooltip = nodeTooltip(data)
 
   return `
@@ -2291,7 +2293,6 @@ function renderContainerTitleHtml(data) {
       </div>
       <span class="node-actions">
         <span class="node-action" role="button" tabindex="0" data-action="toggle">${escapeHtml(data.actionLabel)}</span>
-        ${focus}
         ${create}
       </span>
     </div>
@@ -2430,10 +2431,6 @@ function dispatchNodeAction(data, action, event) {
     emit(data.kind === 'state' ? 'create-state-inside' : 'create-activity-inside', data.node)
     return true
   }
-  if (action === 'focus') {
-    emit('focus-activity', data.node)
-    return true
-  }
   if (action === 'edit') {
     emit(data.kind === 'state' ? 'edit-state' : 'edit-activity', data.node)
     return true
@@ -2442,12 +2439,13 @@ function dispatchNodeAction(data, action, event) {
 }
 
 function handleNodeMouseDown({ node, e }) {
+  const data = node.getData() || {}
   if (e?.target?.classList?.contains('container-move-handle')) {
-    startContainerMove(node.getData() || {}, node, e)
+    startContainerMove(data, node, e)
     return
   }
   if (e?.target?.dataset?.action === 'resize') {
-    startResize(node.getData() || {}, node, e)
+    startResize(data, node, e)
   }
 }
 
@@ -2495,7 +2493,14 @@ function handleCanvasPointerDown(event) {
   const nodeElement = nodeElementFromEvent(event)
   if (nodeElement) {
     const cell = cellFromEventTarget(nodeElement)
-    if (cell) startNodeMove(cell.getData() || {}, cell, event)
+    if (cell) {
+      const data = cell.getData() || {}
+      if (isTransitionRelayNode(data.node)) {
+        startNodeMove(data, cell, event)
+        return
+      }
+      startNodeMove(data, cell, event)
+    }
     return
   }
   const handle = containerMoveHandleFromEvent(event)
@@ -2838,7 +2843,7 @@ function startNodeMove(data, cell, event) {
     event.stopPropagation()
     return
   }
-  if (!props.canMutate || data.role !== 'node' || !data.node) return
+  if (!props.canMutate || !['node', 'transition-relay'].includes(data.role) || !data.node) return
   event.preventDefault()
   event.stopPropagation()
   movingNode.value = {
@@ -2960,7 +2965,7 @@ function descendantsForMovedNode(node, kind) {
       statePathContains(candidate, node.state_node_id),
     )
   }
-  if (node.activity_type !== 'virtual' || !node.activity_node_id) return []
+  if (node.activity_type !== 'activity_package' || !node.activity_node_id) return []
   return props.activityNodes.filter((candidate) =>
     candidate.id !== node.id &&
     activityPathContains(candidate, node.activity_node_id),
@@ -3230,7 +3235,7 @@ function nodeMeta(node, kind) {
     return parts.join(' / ')
   }
   if (isTransitionRelayNode(node)) return 'transition relay'
-  const type = node.activity_type === 'virtual' ? 'virtual' : 'atomic'
+  const type = node.activity_type === 'activity_package' ? 'package' : 'atomic'
   return `${type} / L${node.level || '-'}`
 }
 
@@ -3533,12 +3538,14 @@ function escapeAttr(value) {
 .x6-transition-relay-node {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  box-shadow: none;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 6px 10px 6px 24px;
+  border: 1px solid #6ee7b7;
+  border-left: 4px solid #0f9f6e;
+  border-radius: 8px;
+  background: #f0fdf4;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
   cursor: pointer;
 }
 
@@ -3551,6 +3558,30 @@ function escapeAttr(value) {
     0 0 0 3px rgba(15, 159, 110, 0.16),
     0 2px 5px rgba(15, 23, 42, 0.16);
   transition: transform 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
+}
+
+.x6-transition-relay-node .relay-label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.x6-transition-relay-node .relay-label strong,
+.x6-transition-relay-node .relay-label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.x6-transition-relay-node .relay-label strong {
+  color: #065f46;
+  font-size: 11px;
+}
+
+.x6-transition-relay-node .relay-label span {
+  color: #334155;
+  font-size: 10px;
 }
 
 .x6-transition-relay-node:hover .relay-dot,
@@ -3776,8 +3807,9 @@ function escapeAttr(value) {
 .node-action[data-action="create"] {
   position: absolute;
   z-index: 20;
-  left: 50%;
-  bottom: -20px;
+  right: 5px;
+  bottom: 3px;
+  left: auto;
   justify-content: center;
   min-width: 62px;
   min-height: 20px;
@@ -3789,7 +3821,7 @@ function escapeAttr(value) {
   color: #1d4ed8;
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-50%) translateY(-2px);
+  transform: translateY(-2px);
   transition: opacity 0.14s ease, transform 0.14s ease;
   white-space: nowrap;
 }
@@ -3804,7 +3836,7 @@ function escapeAttr(value) {
 .container-title-row:focus-within .node-action[data-action="create"] {
   opacity: 1;
   pointer-events: auto;
-  transform: translateX(-50%) translateY(0);
+  transform: translateY(0);
 }
 
 .node-action:hover,
@@ -3914,7 +3946,7 @@ function escapeAttr(value) {
 
 .container-title-row .node-action[data-action="create"] {
   right: 8px;
-  bottom: -19px;
+  bottom: 3px;
   left: auto;
   transform: none;
 }
@@ -3926,7 +3958,7 @@ function escapeAttr(value) {
 
 .container-title-row .node-action[data-action="focus"] {
   right: 76px;
-  bottom: -19px;
+  bottom: 3px;
 }
 
 .container-title-copy {

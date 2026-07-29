@@ -23,6 +23,7 @@ from app.db.models import (
     SolveRequest,
     StateFeatureDef,
     StateNode,
+    StateNodeReference,
     WorkCalendar,
     WorkCalendarRevision,
 )
@@ -352,17 +353,24 @@ async def _seed_cross_mode_continuity_scenario(session) -> dict[str, int]:
         ("PROP_B", "推进部件B安装", "PROPULSION", "propulsion_mount_b"),
     ]
     for index, (code, name, subsystem, feature_key) in enumerate(activity_specs, start=1):
-        session.add(
-            StateNode(
+        state = StateNode(
                 machine_type_id=machine_type.id,
-                parent_id=state_root.id,
-                level=2,
+                parent_id=None,
+                level=1,
                 code=f"STATE_{code}",
                 name=f"{name}完成",
                 feature_key=feature_key,
                 operator="eq",
                 target_value="true",
                 state_kind="atomic",
+                sort_order=index,
+            )
+        session.add(state)
+        await session.flush()
+        session.add(
+            StateNodeReference(
+                state_node_id=state.id,
+                parent_state_node_id=state_root.id,
                 sort_order=index,
             )
         )

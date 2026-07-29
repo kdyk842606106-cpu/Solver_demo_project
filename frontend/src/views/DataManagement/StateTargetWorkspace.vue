@@ -416,7 +416,7 @@ async function loadPreview() {
   if (!machineTypeId.value || !selectedNode.value) return
   preview.value = await previewLayeredExpansion(machineTypeId.value, {
     target_state_node_ids: [selectedNode.value.id],
-    activity_scope_node_ids: [],
+    atomic_activity_scope_ids: [],
     include_inactive: false,
   })
 }

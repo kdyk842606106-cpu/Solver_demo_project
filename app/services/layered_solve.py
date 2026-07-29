@@ -29,8 +29,7 @@ from app.db.models import (
     StateNode,
 )
 from app.db.schemas import LayeredExpansionRequest, LayeredSolveRequest
-from app.services.layered_expansion import expand_layered_context
-from app.services.layered_health import check_layered_health
+from app.services.effective_model import resolve_effective_model
 from app.services.scheduling_rule_requests import (
     materialize_scheduling_rule_overrides,
     prepare_scheduling_rule_constraints,
@@ -82,6 +81,7 @@ def _expanded_payload(payload: LayeredSolveRequest) -> LayeredExpansionRequest:
     return LayeredExpansionRequest(
         target_state_node_ids=payload.target_state_node_ids,
         activity_scope_node_ids=payload.activity_scope_node_ids,
+        atomic_activity_scope_ids=payload.atomic_activity_scope_ids,
         include_inactive=payload.include_inactive,
     )
 
@@ -958,16 +958,17 @@ async def solve_layered(
         )
 
     expansion_payload = _expanded_payload(request)
-    effective_activity_scope_node_ids = expansion_payload.activity_scope_node_ids
-    expansion = await expand_layered_context(session, machine.machine_type_id, expansion_payload)
     direct_goal_facts = _direct_goal_fact_dicts(request)
-    if direct_goal_facts:
-        expansion = {
-            **expansion,
-            "goal_facts": [*expansion["goal_facts"], *direct_goal_facts],
-        }
-    health = await check_layered_health(session, machine.machine_type_id, expansion_payload)
-
+    effective_model = await resolve_effective_model(
+        session,
+        machine.machine_type_id,
+        expansion_payload,
+        additional_goal_facts=direct_goal_facts,
+    )
+    expansion = effective_model["expansion"]
+    health = effective_model["health"]
+    effective_activity_scope_node_ids: list[int] = []
+    effective_atomic_activity_scope_ids = effective_model["canonical_atomic_activity_ids"]
     current_state = await load_state(request.current_state_id, session)
     if current_state is None:
         return _error_payload(None, "CURRENT_STATE_NOT_FOUND", "Current state not found")
@@ -1061,12 +1062,19 @@ async def solve_layered(
             "mode": request.context.get("mode", "layered") if request.context else "layered",
             "target_state_node_ids": request.target_state_node_ids,
             "activity_scope_node_ids": effective_activity_scope_node_ids,
+            "atomic_activity_scope_ids": effective_atomic_activity_scope_ids,
             "requested_activity_scope_node_ids": request.activity_scope_node_ids,
-            "activity_scope_defaulted": not bool(request.activity_scope_node_ids),
+            "requested_atomic_activity_scope_ids": request.atomic_activity_scope_ids,
+            "activity_scope_defaulted": not bool(
+                request.activity_scope_node_ids or request.atomic_activity_scope_ids
+            ),
             "current_state_overrides": current_state_overrides,
             "direct_goal_facts": [
                 fact.model_dump(mode="json") for fact in request.direct_goal_facts
             ],
+            "effective_model_version": effective_model["version"],
+            "effective_model_summary": effective_model["summary"],
+            "effective_model_snapshot": effective_model["snapshot"],
             "context": request.context,
         },
         status="running",
@@ -1365,6 +1373,8 @@ async def solve_layered(
             },
             "layered": {
                 "preflight_health": _preflight_health_summary(health),
+                "effective_model_version": effective_model["version"],
+                "effective_model_summary": effective_model["summary"],
                 "goal_facts": expansion["goal_facts"],
                 "candidate_activities": expansion["candidate_activities"],
                 "effective_preconditions": _effective_precondition_explanations(
@@ -1394,7 +1404,11 @@ async def solve_layered(
                 "context": request.context,
                 "requested_activity_scope_node_ids": request.activity_scope_node_ids,
                 "activity_scope_node_ids": effective_activity_scope_node_ids,
-                "activity_scope_defaulted": not bool(request.activity_scope_node_ids),
+                "requested_atomic_activity_scope_ids": request.atomic_activity_scope_ids,
+                "atomic_activity_scope_ids": effective_atomic_activity_scope_ids,
+                "activity_scope_defaulted": not bool(
+                    request.activity_scope_node_ids or request.atomic_activity_scope_ids
+                ),
             },
         }
     except Exception as exc:

@@ -236,7 +236,9 @@
 
 ## `POST /api/v1/solve/layered`
 
-从分层目标状态和活动能力范围发起求解。该入口会先展开目标状态树和活动范围，再复用 Planner / Scheduler 主链路。
+从分层目标状态和 canonical 原子活动范围发起求解。该入口与 Network Editor
+solver precheck 共用 `EffectiveModelResolver`，生成同一份 `effective-model/v1`，
+再进入 Planner / Scheduler 主链路。
 
 请求体核心字段：
 
@@ -245,7 +247,7 @@
   "machine_id": 1,
   "current_state_id": 1,
   "target_state_node_ids": [10],
-  "activity_scope_node_ids": [20, 21],
+  "atomic_activity_scope_ids": [42, 43],
   "include_inactive": false,
   "current_state_overrides": {},
   "goal_facts": [],
@@ -258,6 +260,8 @@
 
 响应在普通 `SolveResponse` 基础上增加：
 
+- `effective_model_version`：规范化有效模型快照的 SHA-256。
+- `effective_model_summary`：目标事实、候选活动、规则和阻塞计数。
 - `layered.preflight_health`：求解前健康检查摘要。
 - `diagnostics.layered_health`：完整健康检查结果。
 - `diagnostics.layered_expansion`：目标事实、候选活动和 effective rule 展开结果。
@@ -265,11 +269,16 @@
 - `layered.activity_tree` / `layered.state_tree`：层级结果树。
 - `layered.activity_selection`：候选活动 selected / skipped 解释。
 
-TICKET-036 后，状态目标递归展开到活跃无子节点状态；原子活动通过 `atomic_activity_id` 表达真实身份，兼容字段 `activity_node_id` 可能为负数合成 ID。
+求解请求的 `overrides` 同时保存 `effective_model_version`、
+`effective_model_summary` 和 `effective_model_snapshot`，供历史重放使用。
+旧 `activity_scope_node_ids` 只作为兼容边界输入；解析完成后不得继续进入
+Planner/Scheduler，也不得通过活动包层级、引用顺序或引用启停补充求解语义。
 
 ## `POST /api/v1/solve/maintenance`
 
-从一个或多个维护意图模板发起联合维护求解。服务会合并模板目标状态、候选活动范围、观测事实覆盖和期望事实，然后调用同一套分层求解链路。
+该入口是历史兼容接口。维护意图产品方向已经废弃，不再扩展模板语义，也不接入
+新的有效模型能力。新调用方应提交明确的目标状态和 canonical 原子活动范围到
+`/solve/layered`。
 
 请求体核心字段：
 
@@ -394,7 +403,7 @@ TICKET-036 后，状态目标递归展开到活跃无子节点状态；原子活
 
 路由文件：`app/api/v1/master_data.py`
 
-提供设备、状态、活动、资源、分层目标、活动能力和维护意图的 CRUD / preview 接口。
+提供设备、状态、活动、资源、分层目标和活动能力维护接口；维护意图仅保留历史兼容。
 
 核心端点：
 
@@ -402,13 +411,17 @@ TICKET-036 后，状态目标递归展开到活跃无子节点状态；原子活
 |------|------|------|
 | `GET/POST/PUT/DELETE` | `/api/v1/machine-types` 等 | 设备类型、设备、状态快照、规则、资源、特征定义 |
 | `GET/POST/PUT/DELETE` | `/api/v1/machine-types/{id}/state-nodes`、`/api/v1/state-nodes/{id}` | 任意深度状态目标树 |
-| `GET/POST/PUT/DELETE` | `/api/v1/machine-types/{id}/activity-nodes`、`/api/v1/activity-nodes/{id}` | 一级/二级活动包与 legacy 三级活动节点 |
+| `GET/POST/PUT/DELETE` | `/api/v1/machine-types/{id}/activity-nodes`、`/api/v1/activity-nodes/{id}` | 活动包；level 3 新增/编辑被拒绝 |
 | `GET/POST/PUT/DELETE` | `/api/v1/machine-types/{id}/atomic-activities`、`/api/v1/atomic-activities/{id}` | 可复用原子活动库 |
-| `GET/POST/DELETE` | `/api/v1/activity-nodes/{package_id}/atomic-activity-refs`、`/api/v1/activity-package-atomic-refs/{id}` | 二级活动包到原子活动的引用 |
-| `GET/POST/PUT/DELETE` | `/api/v1/activity-nodes/{id}/scope-guards`、`/api/v1/scope-guards/{id}` | Scope Guard 与公共前置条件 |
+| `GET/POST/DELETE` | `/api/v1/activity-nodes/{package_id}/atomic-activity-refs`、`/api/v1/activity-package-atomic-refs/{id}` | 活动包到原子活动的引用；端点不可更新 |
+| `GET` | `/api/v1/audit/activity-nodes/{id}/scope-guards` | 已日落数据只读审计 |
+| `POST/PUT/DELETE` | Scope Guard 历史写路径 | 410 `SCOPE_GUARD_SUNSET` |
+| `POST/PUT` | 活动包级状态绑定 | 410 `ACTIVITY_PACKAGE_BINDING_SUNSET` |
+| `POST` | `/api/v1/machine-types/{id}/network-editor/graph` | 始终返回 `view_mode=state_transition` |
+| `POST` | `/api/v1/machine-types/{id}/network-editor/solver-precheck` | 同画布预检，返回有效模型版本与摘要 |
 | `POST` | `/api/v1/machine-types/{id}/layered-expansion` | 展开状态目标、活动范围和 effective rules |
 | `POST` | `/api/v1/machine-types/{id}/layered-health-check` | Provider/Consumer 健康检查 |
-| `GET/POST/PUT/DELETE` | `/api/v1/machine-types/{id}/maintenance-intent-templates`、`/api/v1/maintenance-intent-templates/{id}` | 维护意图模板 |
+| 历史兼容 | `/api/v1/machine-types/{id}/maintenance-intent-templates` 等 | 产品方向已废弃，不再扩展 |
 
 `OpRuleCreate/Update` 支持 `atomic_activity_id`，也保留 `activity_node_id`。两者不能同时传；新数据优先使用 `atomic_activity_id`。
 
@@ -417,7 +430,10 @@ TICKET-036 后，状态目标递归展开到活跃无子节点状态；原子活
 
 ## 业务场景导入 API（已实现）
 
-业务场景导入包用于支撑真实端到端测试数据装载。TICKET-036 后，模板同时支持分层状态目标、活动包、原子活动、活动包引用、维护意图和导入后健康检查。
+业务场景导入包用于支撑真实端到端测试数据装载。模板支持状态包、原子状态、
+状态引用、活动包、原子活动、活动引用、canonical 规则和原子活动状态绑定。
+工作簿出现 Scope Guard 数据行、level-3 活动或仅使用
+`activity_node_code` 的新规则时会被拒绝，不会自动转换。
 
 ### `POST /api/v1/imports/scenario`
 

@@ -10,6 +10,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.modeling.semantics import (
+    STATE_TRANSITION_VIEW,
+    activity_graph_id as _activity_graph_id,
+    activity_reference_graph_id,
+    atomic_activity_graph_id as _atomic_graph_id,
+    is_atomic_state,
+    parse_graph_id,
+    state_graph_id as _state_graph_id,
+    state_reference_graph_id as _state_reference_graph_id,
+)
 from app.db.models import (
     ActivityPackageAtomicRef,
     ActivityNode,
@@ -23,12 +33,18 @@ from app.db.models import (
 )
 from app.db.schemas import LayeredExpansionRequest, NetworkEditorImpactRequest, NetworkEditorRequest
 from app.services.layered_health import check_layered_health
+from app.services.effective_model import resolve_effective_model
 from app.services.scheduling_rule_config import validate_machine_type_scheduling_rules
 
 
 INPUT_ROLES = {"input"}
 OUTPUT_ROLES = {"output"}
-BLOCKING_HEALTH_CODES = {"NO_PROVIDER", "BROKEN_CHAIN", "SELF_DEPENDENCY", "CONFLICTING_GOAL"}
+BLOCKING_HEALTH_CODES = {
+    "NO_PROVIDER",
+    "BROKEN_CHAIN",
+    "CONFLICTING_GOAL",
+    "ATOMIC_ACTIVITY_WITHOUT_RULE",
+}
 LARGE_COVERAGE_LEAF_THRESHOLD = 8
 CROSS_LEVEL_BINDING_MANY_THRESHOLD = 3
 
@@ -198,36 +214,12 @@ async def get_network_editor_revision(session: AsyncSession, machine_type_id: in
     return _network_editor_revision(context)
 
 
-def _node_id(prefix: str, id_value: int) -> str:
-    return f"{prefix}:{id_value}"
-
-
-def _state_graph_id(state_node_id: int) -> str:
-    return _node_id("state_node", state_node_id)
-
-
-def _state_reference_graph_id(state_node_id: int, ref_id: int) -> str:
-    return f"state_node:{state_node_id}:ref:{ref_id}"
-
-
 def _state_node_id_from_graph_id(graph_id: str) -> int | None:
-    if not graph_id.startswith("state_node:"):
-        return None
-    parts = graph_id.split(":")
-    if len(parts) < 2:
-        return None
     try:
-        return int(parts[1])
+        identity = parse_graph_id(graph_id)
     except ValueError:
         return None
-
-
-def _activity_graph_id(activity_node_id: int) -> str:
-    return _node_id("activity_node", activity_node_id)
-
-
-def _atomic_graph_id(atomic_activity_id: int) -> str:
-    return _node_id("atomic_activity", atomic_activity_id)
+    return identity.canonical_id if identity.entity_kind == "state_node" else None
 
 
 def _children_by_parent(nodes: list[StateNode] | list[ActivityNode]) -> dict[int | None, list[Any]]:
@@ -302,10 +294,10 @@ def _state_leaf_ids_under(
             child for child in state_children.get(node.id, [])
             if include_inactive or child.is_active
         ]
-        if children:
-            stack.extend(children)
-        elif node.feature_key and node.target_value:
+        if is_atomic_state(node):
             leaves.append(node.id)
+        else:
+            stack.extend(children)
     return leaves
 
 
@@ -402,7 +394,7 @@ def _binding_leaf_facts(
     facts: list[dict[str, Any]] = []
     for leaf_id in binding.covered_leaf_state_ids or []:
         leaf = state_by_id.get(int(leaf_id))
-        if leaf and (include_inactive or leaf.is_active) and leaf.feature_key and leaf.target_value:
+        if leaf and (include_inactive or leaf.is_active) and is_atomic_state(leaf):
             facts.append(_state_fact(leaf))
     return facts
 
@@ -494,7 +486,7 @@ def _state_summary(node: StateNode | dict[str, Any] | None) -> dict[str, Any]:
         "feature_key": node.feature_key,
         "operator": node.operator,
         "target_value": node.target_value,
-        "is_leaf": bool(node.feature_key and node.target_value),
+        "is_leaf": is_atomic_state(node),
     }
 
 
@@ -524,7 +516,7 @@ def _activity_summary(node: ActivityNode | AtomicActivity | dict[str, Any] | Non
             "code": node.code,
             "name": node.name,
             "level": 3,
-            "activity_type": "executable",
+            "activity_type": "atomic_activity",
             "activity_category": node.activity_category,
             "solver_participation": True,
         }
@@ -535,7 +527,7 @@ def _activity_summary(node: ActivityNode | AtomicActivity | dict[str, Any] | Non
         "code": node.code,
         "name": node.name,
         "level": node.level,
-        "activity_type": "virtual" if node.level in (1, 2) else "executable",
+        "activity_type": "activity_package" if node.level in (1, 2) else "legacy_activity",
         "activity_category": node.activity_category,
         "solver_participation": node.level == 3,
     }
@@ -741,94 +733,6 @@ def _project_legacy_rule_edges(
     return edges
 
 
-def _solver_ready_leaf_edge(
-    *,
-    binding: ActivityStateBinding,
-    leaf_state_id: int,
-    activity_id: str,
-    role: str,
-    source_kind: str,
-    coverage_status: str,
-) -> dict[str, Any]:
-    state_id = _state_graph_id(leaf_state_id)
-    if role in INPUT_ROLES:
-        source_id = state_id
-        target_id = activity_id
-        edge_type = "STATE_TO_ACTIVITY"
-    else:
-        source_id = activity_id
-        target_id = state_id
-        edge_type = "ACTIVITY_TO_STATE"
-
-    return {
-        "id": f"{source_kind}:{binding.id}:{role}:leaf:{leaf_state_id}:{activity_id}",
-        "source_id": source_id,
-        "target_id": target_id,
-        "type": edge_type,
-        "binding_id": binding.id,
-        "binding_role": role,
-        "source_kind": source_kind,
-        "coverage_status": coverage_status,
-        "expanded_from_state_node_id": binding.state_node_id,
-        "leaf_state_node_id": leaf_state_id,
-        "is_inherited": source_kind == "inherited_context_binding",
-    }
-
-
-def _dedupe_solver_ready_edges(edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    deduped: list[dict[str, Any]] = []
-    seen: set[tuple[str, str, str]] = set()
-    for edge in edges:
-        key = (edge["source_id"], edge["target_id"], edge["type"])
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(edge)
-    return deduped
-
-
-def _project_solver_ready_edges(
-    context: NetworkEditorContext,
-    *,
-    include_inactive: bool,
-    legacy_edges: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    state_by_id = context.state_by_id
-    state_children = _state_display_children_by_parent(
-        context.state_nodes,
-        context.state_refs,
-        include_inactive=include_inactive,
-    )
-    edges: list[dict[str, Any]] = []
-
-    active_bindings = [
-        binding for binding in context.bindings
-        if include_inactive or binding.is_active
-    ]
-    for binding in active_bindings:
-        if binding.atomic_activity_id is None or binding.binding_role not in {"input", "output"}:
-            continue
-        activity_id = _atomic_graph_id(binding.atomic_activity_id)
-        coverage_status = _coverage_status(binding, state_by_id, state_children)
-        for leaf_id in binding.covered_leaf_state_ids or []:
-            leaf = state_by_id.get(int(leaf_id))
-            if leaf is None or (not include_inactive and not leaf.is_active):
-                continue
-            edges.append(
-                _solver_ready_leaf_edge(
-                    binding=binding,
-                    leaf_state_id=leaf.id,
-                    activity_id=activity_id,
-                    role=binding.binding_role,
-                    source_kind="activity_state_binding_leaf",
-                    coverage_status=coverage_status,
-                )
-            )
-
-    edges.extend(legacy_edges)
-    return _dedupe_solver_ready_edges(edges)
-
-
 def _activity_package_refs_by_atomic(context: NetworkEditorContext) -> dict[int, list[ActivityPackageAtomicRef]]:
     refs: dict[int, list[ActivityPackageAtomicRef]] = defaultdict(list)
     for ref in context.package_refs:
@@ -876,21 +780,16 @@ def _filter_graph(
     selected_atomic_ids: set[int],
     view_mode: str,
 ) -> dict[str, Any]:
-    state_node_ids = {_state_graph_id(item_id) for item_id in selected_state_ids}
-    activity_node_ids = {_activity_graph_id(item_id) for item_id in selected_activity_ids}
-    atomic_node_ids = {_atomic_graph_id(item_id) for item_id in selected_atomic_ids}
-    allowed_activity_ids = activity_node_ids | atomic_node_ids
-    if view_mode == "solver_ready":
-        allowed_activity_ids = atomic_node_ids | {
-            node_id for node_id in activity_node_ids
-            if any(item["id"] == node_id and item["activity_type"] == "executable" for item in graph["activity_nodes"])
-        }
+    allowed_activity_ids = {
+        node["id"]
+        for node in graph["activity_nodes"]
+        if node.get("atomic_activity_id") in selected_atomic_ids
+    }
     selected_state_roots = set(selected_state_root_ids or [])
 
     reference_state_ids_in_selected_roots = {
         node["state_node_id"] for node in graph["state_nodes"]
-        if view_mode != "solver_ready"
-        and selected_state_roots
+        if selected_state_roots
         and node.get("reference_id")
         and any(root_id in (node.get("path_ids") or []) for root_id in selected_state_roots)
     }
@@ -898,19 +797,13 @@ def _filter_graph(
         node for node in graph["state_nodes"]
         if node["state_node_id"] in selected_state_ids
         and (
-            (view_mode == "solver_ready" and not node.get("reference_id"))
-            or (
-                view_mode != "solver_ready"
-                and (
-                    not selected_state_roots
-                    or any(root_id in (node.get("path_ids") or []) for root_id in selected_state_roots)
-                    or (not node.get("reference_id") and node["state_node_id"] not in reference_state_ids_in_selected_roots)
-                )
+            not selected_state_roots
+            or any(root_id in (node.get("path_ids") or []) for root_id in selected_state_roots)
+            or (not node.get("reference_id") and node["state_node_id"] not in reference_state_ids_in_selected_roots)
             )
-        )
     ]
     preferred_state_graph_ids: dict[int, str] = {}
-    if view_mode != "solver_ready" and selected_state_roots:
+    if selected_state_roots:
         reference_candidates = [
             node for node in graph["state_nodes"]
             if node.get("reference_id")
@@ -939,25 +832,10 @@ def _filter_graph(
         edge for edge in graph["edges"]
         if edge["source_id"] in allowed_ids and edge["target_id"] in allowed_ids
     ]
-    if view_mode == "solver_ready":
-        incident_state_ids = {
-            node_id
-            for edge in graph["edges"]
-            for node_id in (edge["source_id"], edge["target_id"])
-            if node_id.startswith("state_node:")
-        }
-        incident_state_node_ids = {
-            state_node_id for state_node_id in (_state_node_id_from_graph_id(node_id) for node_id in incident_state_ids)
-            if state_node_id is not None
-        }
-        graph["state_nodes"] = [node for node in graph["state_nodes"] if node["state_node_id"] in incident_state_node_ids]
     graph["bindings"] = [
         item for item in graph["bindings"]
         if item["state_node_id"] in selected_state_ids
-        and (
-            (item.get("activity_node_id") and _activity_graph_id(item["activity_node_id"]) in allowed_activity_ids)
-            or (item.get("atomic_activity_id") and _atomic_graph_id(item["atomic_activity_id"]) in allowed_activity_ids)
-        )
+        and item.get("atomic_activity_id") in selected_atomic_ids
     ]
     return graph
 
@@ -1115,8 +993,7 @@ def _build_graph_summary(graph: dict[str, Any]) -> dict[str, Any]:
 
     stale_binding_count = sum(1 for item in bindings if item["coverage_status"] == "stale")
     partial_binding_count = sum(1 for item in bindings if item["coverage_status"] == "partial")
-    virtual_activity_count = sum(1 for item in activity_nodes if item["activity_type"] == "virtual")
-    executable_activity_count = sum(1 for item in activity_nodes if item["activity_type"] == "executable")
+    executable_activity_count = sum(1 for item in activity_nodes if item.get("atomic_activity_id") is not None)
     return {
         "state_node_count": len(unique_state_nodes),
         "state_instance_count": len(state_nodes),
@@ -1124,14 +1001,11 @@ def _build_graph_summary(graph: dict[str, Any]) -> dict[str, Any]:
         "state_package_count": sum(1 for item in unique_state_nodes.values() if not item["is_leaf"]),
         "atomic_state_count": sum(1 for item in unique_state_nodes.values() if item["is_leaf"]),
         "activity_node_count": len(activity_nodes),
-        "virtual_activity_count": virtual_activity_count,
         "executable_activity_count": executable_activity_count,
         "binding_count": len(bindings),
         "edge_count": len(edges),
         "state_package_binding_count": sum(1 for item in bindings if item["binding_type"] == "state_package"),
         "atomic_state_binding_count": sum(1 for item in bindings if item["binding_type"] == "atomic_state"),
-        "context_input_binding_count": sum(1 for item in bindings if item["binding_role"] == "context_input"),
-        "declared_output_binding_count": sum(1 for item in bindings if item["binding_role"] == "declared_output"),
         "stale_binding_count": stale_binding_count,
         "partial_binding_count": partial_binding_count,
         "coverage_gap_count": stale_binding_count + partial_binding_count,
@@ -1158,7 +1032,6 @@ def _add_issue_counts_to_summary(
         "modeling_issue_count": len(modeling_issues),
         "solver_ready_issue_count": len(solver_ready_issues),
         "blocking_issue_count": sum(1 for issue in solver_ready_issues if issue["severity"] == "error"),
-        "partial_virtual_activity_count": 0,
     })
 
 
@@ -1222,7 +1095,7 @@ def _build_graph_from_context(context: NetworkEditorContext, payload: NetworkEdi
             "operator": node.operator,
             "target_value": node.target_value,
             "is_active": node.is_active,
-            "is_leaf": bool(node.feature_key and node.target_value),
+            "is_leaf": is_atomic_state(node),
             "leaf_state_ids": leaf_ids,
             "leaf_count": len(leaf_ids),
             "path_ids": _state_path(node, state_by_id),
@@ -1252,7 +1125,7 @@ def _build_graph_from_context(context: NetworkEditorContext, payload: NetworkEdi
             "reference_parent_ids": [ref.parent_state_node_id],
             "reference_ids": [ref.id],
             "child_ids": [child.id for child in state_display_children.get(node.id, [])],
-            "level": node.level,
+            "level": parent.level + 1,
             "code": node.code,
             "name": node.name,
             "state_kind": node.state_kind,
@@ -1260,7 +1133,7 @@ def _build_graph_from_context(context: NetworkEditorContext, payload: NetworkEdi
             "operator": node.operator,
             "target_value": node.target_value,
             "is_active": node.is_active and ref.is_active,
-            "is_leaf": bool(node.feature_key and node.target_value),
+            "is_leaf": is_atomic_state(node),
             "leaf_state_ids": leaf_ids,
             "leaf_count": len(leaf_ids),
             "path_ids": [*_state_path(parent, state_by_id), node.id],
@@ -1271,28 +1144,6 @@ def _build_graph_from_context(context: NetworkEditorContext, payload: NetworkEdi
         })
 
     activity_nodes = []
-    for node in context.activity_nodes:
-        if not payload.include_inactive and not node.is_active:
-            continue
-        activity_nodes.append({
-            "id": _activity_graph_id(node.id),
-            "activity_node_id": node.id,
-            "atomic_activity_id": None,
-            "parent_id": node.parent_id,
-            "parent_graph_id": _activity_graph_id(node.parent_id) if node.parent_id else None,
-            "child_activity_node_ids": [child.id for child in activity_children.get(node.id, [])],
-            "level": node.level,
-            "code": node.code,
-            "name": node.name,
-            "description": node.description,
-            "activity_type": "virtual" if node.level in (1, 2) else "executable",
-            "activity_category": node.activity_category,
-            "solver_participation": node.level == 3,
-            "is_active": node.is_active,
-            "path_ids": _activity_path(node, activity_by_id),
-            "metadata_json": node.metadata_json,
-        })
-
     for activity in context.atomic_activities:
         if not payload.include_inactive and not activity.is_active:
             continue
@@ -1301,41 +1152,52 @@ def _build_graph_from_context(context: NetworkEditorContext, payload: NetworkEdi
             if payload.include_inactive or ref.is_active
         ]
         scoped_refs = [ref for ref in refs if ref.activity_node_id in selected_activity_ids]
-        primary_ref = scoped_refs[0] if scoped_refs else (refs[0] if refs else None)
-        metadata_json = (
-            primary_ref.metadata_json
-            if primary_ref is not None and primary_ref.metadata_json is not None
-            else activity.metadata_json
-        )
-        activity_nodes.append({
-            "id": _atomic_graph_id(activity.id),
-            "activity_node_id": None,
-            "atomic_activity_id": activity.id,
-            "parent_id": None,
-            "parent_graph_id": _activity_graph_id(primary_ref.activity_node_id) if primary_ref else None,
-            "parent_activity_node_ids": [ref.activity_node_id for ref in refs],
-            "package_ref_ids": [ref.id for ref in refs],
-            "reference_id": primary_ref.id if primary_ref else None,
-            "reference_ids": [ref.id for ref in refs],
-            "level": 3,
-            "code": activity.code,
-            "name": activity.name,
-            "description": activity.description,
-            "activity_type": "executable",
-            "activity_category": activity.activity_category,
-            "solver_participation": True,
-            "is_active": activity.is_active,
-            "path_ids": [
-                _activity_path(ref.activity_node, activity_by_id) for ref in refs if ref.activity_node
-            ],
-            "metadata_json": metadata_json,
-            "atomic_metadata_json": activity.metadata_json,
-        })
+        display_refs = scoped_refs if payload.activity_scope_node_ids else refs
+        display_instances: list[ActivityPackageAtomicRef | None] = display_refs or [None]
+        for ref in display_instances:
+            activity_nodes.append({
+                "id": (
+                    activity_reference_graph_id(activity.id, ref.id)
+                    if ref is not None
+                    else _atomic_graph_id(activity.id)
+                ),
+                "canonical_id": _atomic_graph_id(activity.id),
+                "activity_node_id": None,
+                "atomic_activity_id": activity.id,
+                "parent_id": None,
+                "parent_graph_id": _activity_graph_id(ref.activity_node_id) if ref else None,
+                "parent_activity_node_ids": [ref.activity_node_id] if ref else [],
+                "package_ref_ids": [ref.id] if ref else [],
+                "reference_id": ref.id if ref else None,
+                "reference_ids": [ref.id] if ref else [],
+                "level": 3,
+                "code": activity.code,
+                "name": activity.name,
+                "description": activity.description,
+                "activity_type": "atomic_activity",
+                "activity_category": activity.activity_category,
+                "solver_participation": True,
+                "is_active": activity.is_active and (ref.is_active if ref else True),
+                "path_ids": (
+                    _activity_path(ref.activity_node, activity_by_id)
+                    if ref is not None and ref.activity_node is not None
+                    else []
+                ),
+                "metadata_json": (
+                    ref.metadata_json
+                    if ref is not None and ref.metadata_json is not None
+                    else activity.metadata_json
+                ),
+                "atomic_metadata_json": activity.metadata_json,
+                "is_reference_instance": ref is not None,
+            })
 
     bindings = []
     edges = []
     for binding in context.bindings:
         if not payload.include_inactive and not binding.is_active:
+            continue
+        if binding.atomic_activity_id is None or binding.binding_role not in {"input", "output"}:
             continue
         status = _coverage_status(binding, state_by_id, state_display_children)
         bindings.append({
@@ -1360,18 +1222,34 @@ def _build_graph_from_context(context: NetworkEditorContext, payload: NetworkEdi
         context,
         include_inactive=payload.include_inactive,
     )
-    if payload.view_mode == "solver_ready":
-        edges = _project_solver_ready_edges(
-            context,
-            include_inactive=payload.include_inactive,
-            legacy_edges=legacy_edges,
-        )
-    else:
-        edges.extend(legacy_edges)
+    edges.extend(legacy_edges)
 
-    if not payload.activity_scope_node_ids and payload.activity_depth <= 0:
+    display_ids_by_canonical: dict[str, list[str]] = defaultdict(list)
+    for node in activity_nodes:
+        display_ids_by_canonical[node["canonical_id"]].append(node["id"])
+    display_edges: list[dict[str, Any]] = []
+    for edge in edges:
+        source_ids = display_ids_by_canonical.get(edge["source_id"], [edge["source_id"]])
+        target_ids = display_ids_by_canonical.get(edge["target_id"], [edge["target_id"]])
+        for source_id in source_ids:
+            for target_id in target_ids:
+                next_edge = dict(edge)
+                if source_id != edge["source_id"]:
+                    next_edge["canonical_source_id"] = edge["source_id"]
+                    next_edge["source_id"] = source_id
+                if target_id != edge["target_id"]:
+                    next_edge["canonical_target_id"] = edge["target_id"]
+                    next_edge["target_id"] = target_id
+                if source_id != edge["source_id"] or target_id != edge["target_id"]:
+                    next_edge["id"] = f"{edge['id']}:display:{source_id}:{target_id}"
+                display_edges.append(next_edge)
+    edges = display_edges
+
+    if payload.atomic_activity_scope_ids:
+        selected_atomic_ids = set(payload.atomic_activity_scope_ids)
+    elif not payload.activity_scope_node_ids:
         selected_atomic_ids = {activity.id for activity in context.atomic_activities}
-    elif payload.activity_depth <= 0:
+    else:
         selected_atomic_ids = set()
         for activity_node_id in payload.activity_scope_node_ids:
             selected_atomic_ids.update(
@@ -1382,25 +1260,24 @@ def _build_graph_from_context(context: NetworkEditorContext, payload: NetworkEdi
                     include_inactive=payload.include_inactive,
                 )
             )
-    else:
-        selected_atomic_ids = set()
-        for ref in context.package_refs:
-            package_depth = selected_activity_depths.get(ref.activity_node_id)
-            if package_depth is None:
-                continue
-            if package_depth + 1 > payload.activity_depth:
-                continue
-            if not payload.include_inactive and not ref.is_active:
-                continue
-            package_node = activity_by_id.get(ref.activity_node_id)
-            package_is_top_level = package_node is not None and package_node.parent_id is None
-            if package_depth == 1 and package_is_top_level and payload.activity_depth < 3:
-                continue
-            selected_atomic_ids.add(ref.atomic_activity_id)
 
     graph = {
         "machine_type_id": context.machine_type_id,
-        "view_mode": payload.view_mode,
+        "view_mode": STATE_TRANSITION_VIEW,
+        "diagnostics": (
+            [{
+                "code": "LEGACY_VIEW_MODE_NORMALIZED",
+                "severity": "warning",
+                "message": (
+                    f"view_mode={payload.view_mode} is deprecated and was normalized "
+                    f"to {STATE_TRANSITION_VIEW}."
+                ),
+                "requested_view_mode": payload.view_mode,
+                "effective_view_mode": STATE_TRANSITION_VIEW,
+            }]
+            if payload.view_mode != STATE_TRANSITION_VIEW
+            else []
+        ),
         "state_nodes": state_nodes,
         "activity_nodes": activity_nodes,
         "bindings": bindings,
@@ -1413,7 +1290,7 @@ def _build_graph_from_context(context: NetworkEditorContext, payload: NetworkEdi
         selected_state_root_ids=payload.state_root_ids,
         selected_activity_ids=selected_activity_ids,
         selected_atomic_ids=selected_atomic_ids,
-        view_mode=payload.view_mode,
+        view_mode=STATE_TRANSITION_VIEW,
     )
     graph["summary"] = _build_graph_summary(graph)
     return graph
@@ -1533,21 +1410,6 @@ def _edge_activity_id(edge: dict[str, Any]) -> str | None:
     return None
 
 
-def _activity_descendant_graph_ids(
-    activity_node_id: int,
-    activity_children: dict[int | None, list[ActivityNode]],
-    package_refs: list[ActivityPackageAtomicRef],
-    *,
-    include_inactive: bool,
-) -> set[str]:
-    activity_ids = _activity_descendant_ids(activity_node_id, activity_children)
-    result = {_activity_graph_id(item_id) for item_id in activity_ids}
-    for ref in package_refs:
-        if ref.activity_node_id in activity_ids and (include_inactive or ref.is_active):
-            result.add(_atomic_graph_id(ref.atomic_activity_id))
-    return result
-
-
 def _validate_projected_graph(
     context: NetworkEditorContext,
     graph: dict[str, Any],
@@ -1558,8 +1420,10 @@ def _validate_projected_graph(
     modeling_issues: list[dict[str, Any]] = []
     solver_ready_issues: list[dict[str, Any]] = []
     state_by_id = {node["state_node_id"]: node for node in graph["state_nodes"]}
-    activity_by_graph_id = {node["id"]: node for node in graph["activity_nodes"]}
-    activity_children = _children_by_parent(context.activity_nodes)
+    activity_by_graph_id: dict[str, dict[str, Any]] = {}
+    for node in graph["activity_nodes"]:
+        activity_by_graph_id[node["id"]] = node
+        activity_by_graph_id[node.get("canonical_id") or node["id"]] = node
     goal_state_ids: set[int] = set()
     for state_id in target_state_node_ids or []:
         goal_state_ids.add(state_id)
@@ -1595,18 +1459,27 @@ def _validate_projected_graph(
             if source_state_id is not None:
                 connected_state_ids.add(source_state_id)
             input_state_graph_ids.add(edge.get("canonical_source_id") or edge["source_id"])
-            input_activity_ids.add(edge["target_id"])
+            input_activity_ids.add(edge.get("canonical_target_id") or edge["target_id"])
         elif edge["type"] == "ACTIVITY_TO_STATE":
             target_state_id = _state_node_id_from_graph_id(edge.get("canonical_target_id") or edge["target_id"])
             if target_state_id is not None:
                 connected_state_ids.add(target_state_id)
-            output_activity_ids.add(edge["source_id"])
+            source_activity_id = edge.get("canonical_source_id") or edge["source_id"]
+            output_activity_ids.add(source_activity_id)
             output_state_graph_id = edge.get("canonical_target_id") or edge["target_id"]
-            output_activity_ids_by_state[output_state_graph_id].add(edge["source_id"])
+            output_activity_ids_by_state[output_state_graph_id].add(source_activity_id)
             if edge.get("binding_role") == "output":
-                output_providers_by_state[output_state_graph_id].add(edge["source_id"])
+                output_providers_by_state[output_state_graph_id].add(source_activity_id)
 
-    dependency_cycle = _find_dependency_cycle(graph["edges"])
+    canonical_edges = [
+        {
+            **edge,
+            "source_id": edge.get("canonical_source_id") or edge["source_id"],
+            "target_id": edge.get("canonical_target_id") or edge["target_id"],
+        }
+        for edge in graph["edges"]
+    ]
+    dependency_cycle = _find_dependency_cycle(canonical_edges)
     if dependency_cycle:
         related_state_ids = [
             state_id for state_id in (_state_node_id_from_graph_id(node_id) for node_id in dependency_cycle)
@@ -1888,8 +1761,12 @@ def _validate_projected_graph(
                 )
             )
 
+    validated_activity_ids: set[str] = set()
     for node in graph["activity_nodes"]:
-        activity_id = node["id"]
+        activity_id = node.get("canonical_id") or node["id"]
+        if activity_id in validated_activity_ids:
+            continue
+        validated_activity_ids.add(activity_id)
         if not node["is_active"]:
             continue
         has_input = activity_id in input_activity_ids
@@ -1926,31 +1803,7 @@ def _validate_projected_graph(
                     suggested_action="Add an output/declared output state binding.",
                 )
             )
-        if node["activity_type"] == "virtual" and node.get("activity_node_id"):
-            descendant_graph_ids = _activity_descendant_graph_ids(
-                node["activity_node_id"],
-                activity_children,
-                context.package_refs,
-                include_inactive=include_inactive,
-            )
-            executable_descendants = [
-                descendant_id for descendant_id in descendant_graph_ids
-                if descendant_id != activity_id
-                and activity_by_graph_id.get(descendant_id, {}).get("activity_type") == "executable"
-            ]
-            if not executable_descendants:
-                modeling_issues.append(
-                    _make_issue(
-                        "VIRTUAL_ACTIVITY_NOT_DECOMPOSED",
-                        "warning",
-                        "implementation",
-                        f"Virtual activity {node['code']} has no executable descendants in this graph",
-                        related_activity_ids=[activity_id],
-                        details={"activity_node_id": node["activity_node_id"]},
-                        suggested_action="Add a child package with atomic activity refs before solver-ready export.",
-                    )
-                )
-        if node["activity_type"] == "executable":
+        if node.get("atomic_activity_id") is not None:
             if not node.get("solver_participation"):
                 solver_ready_issues.append(
                     _make_issue(
@@ -2032,18 +1885,6 @@ def _validate_projected_graph(
                         suggested_action="Select the exact op_rule_id on this executable activity's input/output bindings.",
                     )
                 )
-        elif node.get("solver_participation"):
-            solver_ready_issues.append(
-                _make_issue(
-                    "ACTIVITY_SOLVER_PARTICIPATION_MISMATCH",
-                    "error",
-                    "solver_ready",
-                    f"Virtual activity {node['code']} is incorrectly marked for solver export",
-                    related_activity_ids=[activity_id],
-                    suggested_action="Repair activity type metadata so virtual activities remain display-only.",
-                )
-            )
-
     return modeling_issues, solver_ready_issues
 
 
@@ -2092,6 +1933,7 @@ async def validate_network_editor_model(
             LayeredExpansionRequest(
                 target_state_node_ids=payload.state_root_ids,
                 activity_scope_node_ids=payload.activity_scope_node_ids,
+                atomic_activity_scope_ids=payload.atomic_activity_scope_ids,
                 include_inactive=payload.include_inactive,
             ),
         )
@@ -2164,7 +2006,7 @@ def _activity_graph_ids_from_bindings(bindings: list[dict[str, Any]]) -> list[st
     return graph_ids
 
 
-def _owner_virtual_activity_ids_for_atomic(
+def _owner_activity_package_ids_for_atomic(
     atomic_activity_id: int,
     context: NetworkEditorContext,
     *,
@@ -2187,7 +2029,7 @@ def _owner_virtual_activity_ids_for_atomic(
     return owner_ids
 
 
-def _owner_virtual_activities_for_graph_id(
+def _owner_activity_packages_for_graph_id(
     activity_graph_id: str,
     context: NetworkEditorContext,
     *,
@@ -2195,16 +2037,18 @@ def _owner_virtual_activities_for_graph_id(
 ) -> list[dict[str, Any]]:
     activity_by_id = context.activity_by_id
     owner_ids: list[int] = []
-    if activity_graph_id.startswith("atomic_activity:"):
-        atomic_id = int(activity_graph_id.split(":", 1)[1])
-        owner_ids = _owner_virtual_activity_ids_for_atomic(
-            atomic_id,
+    try:
+        identity = parse_graph_id(activity_graph_id)
+    except ValueError:
+        return []
+    if identity.entity_kind == "atomic_activity":
+        owner_ids = _owner_activity_package_ids_for_atomic(
+            identity.canonical_id,
             context,
             include_inactive=include_inactive,
         )
-    elif activity_graph_id.startswith("activity_node:"):
-        activity_id = int(activity_graph_id.split(":", 1)[1])
-        current = activity_by_id.get(activity_id)
+    elif identity.entity_kind == "activity_node":
+        current = activity_by_id.get(identity.canonical_id)
         while current is not None:
             if (
                 current.level in (1, 2)
@@ -2302,7 +2146,7 @@ async def analyze_network_editor_impact(
 
     base = {
         "machine_type_id": machine_type_id,
-        "view_mode": payload.view_mode,
+        "view_mode": STATE_TRANSITION_VIEW,
         "selection_type": "state" if payload.state_node_id else "activity",
         "selection_id": (
             _state_graph_id(payload.state_node_id)
@@ -2319,9 +2163,9 @@ async def analyze_network_editor_impact(
         "direct_precondition_states": [],
         "inherited_precondition_states": [],
         "output_states": [],
-        "owner_virtual_activities": [],
+        "owner_activity_packages": [],
         "affected_parent_states": [],
-        "affected_virtual_activities": [],
+        "affected_activity_packages": [],
         "affected_executable_activities": [],
         "package_bindings": [],
         "bindings": [],
@@ -2347,22 +2191,22 @@ async def analyze_network_editor_impact(
         ]
         affected_activity_ids = list(dict.fromkeys(upstream_activity_ids + downstream_activity_ids + related_activity_ids))
         affected_activity_nodes = _activity_summaries_for_graph_ids(affected_activity_ids, graph_activity_by_id)
-        affected_virtual = [
+        affected_packages = [
             item for item in affected_activity_nodes
-            if item.get("activity_type") == "virtual"
+            if item.get("activity_type") == "activity_package"
         ]
         affected_executable = [
             item for item in affected_activity_nodes
-            if item.get("activity_type") == "executable"
+            if item.get("atomic_activity_id") is not None
         ]
         for item in list(affected_executable):
-            for owner in _owner_virtual_activities_for_graph_id(
+            for owner in _owner_activity_packages_for_graph_id(
                 item["id"],
                 context,
                 include_inactive=payload.include_inactive,
             ):
-                if owner and owner.get("id") not in {existing.get("id") for existing in affected_virtual}:
-                    affected_virtual.append(owner)
+                if owner and owner.get("id") not in {existing.get("id") for existing in affected_packages}:
+                    affected_packages.append(owner)
 
         reference_parent_ids = [
             ref.parent_state_node_id for ref in context.state_refs
@@ -2388,7 +2232,7 @@ async def analyze_network_editor_impact(
                 "package_binding_count": len(package_bindings),
                 "leaf_state_count": len(leaf_ids),
                 "reference_parent_count": len(reference_parent_ids),
-                "affected_virtual_activity_count": len(_unique_dicts(affected_virtual)),
+                "affected_activity_package_count": len(_unique_dicts(affected_packages)),
                 "affected_executable_activity_count": len(_unique_dicts(affected_executable)),
                 "issue_count": len(related_issues),
             },
@@ -2403,7 +2247,7 @@ async def analyze_network_editor_impact(
             "reference_parent_states": _state_summaries_for_ids(reference_parent_ids, state_by_id),
             "upstream_activities": _activity_summaries_for_graph_ids(upstream_activity_ids, graph_activity_by_id),
             "downstream_activities": _activity_summaries_for_graph_ids(downstream_activity_ids, graph_activity_by_id),
-            "affected_virtual_activities": _unique_dicts(affected_virtual),
+            "affected_activity_packages": _unique_dicts(affected_packages),
             "affected_executable_activities": _unique_dicts(affected_executable),
             "package_bindings": package_bindings,
             "bindings": [_binding_summary(binding) for binding in related_bindings],
@@ -2446,14 +2290,18 @@ async def analyze_network_editor_impact(
             and edge["target_id"] != activity_graph_id
         )
 
+    selected_identity = parse_graph_id(activity_graph_id)
     activity_bindings = [
         binding for binding in graph["bindings"]
-        if activity_graph_id == (
-            _atomic_graph_id(binding["atomic_activity_id"])
-            if binding.get("atomic_activity_id") is not None else _activity_graph_id(binding["activity_node_id"])
+        if (
+            selected_identity.entity_kind == "atomic_activity"
+            and binding.get("atomic_activity_id") == selected_identity.canonical_id
+        ) or (
+            selected_identity.entity_kind == "activity_node"
+            and binding.get("activity_node_id") == selected_identity.canonical_id
         )
     ]
-    owner_virtuals = _owner_virtual_activities_for_graph_id(
+    owner_packages = _owner_activity_packages_for_graph_id(
         activity_graph_id,
         context,
         include_inactive=payload.include_inactive,
@@ -2470,7 +2318,7 @@ async def analyze_network_editor_impact(
             "direct_precondition_count": len(set(direct_state_ids)),
             "inherited_precondition_count": len(set(inherited_state_ids)),
             "output_state_count": len(set(output_state_ids)),
-            "owner_virtual_activity_count": len(owner_virtuals),
+            "owner_activity_package_count": len(owner_packages),
             "downstream_activity_count": len(set(downstream_activity_ids)),
             "affected_parent_state_count": len(affected_parent_states),
             "binding_count": len(activity_bindings),
@@ -2479,7 +2327,7 @@ async def analyze_network_editor_impact(
         "direct_precondition_states": _state_summaries_for_graph_ids(direct_state_ids, graph_state_by_id),
         "inherited_precondition_states": _state_summaries_for_graph_ids(inherited_state_ids, graph_state_by_id),
         "output_states": _state_summaries_for_graph_ids(output_state_ids, graph_state_by_id),
-        "owner_virtual_activities": _unique_dicts(owner_virtuals),
+        "owner_activity_packages": _unique_dicts(owner_packages),
         "affected_parent_states": affected_parent_states,
         "downstream_activities": _activity_summaries_for_graph_ids(downstream_activity_ids, graph_activity_by_id),
         "package_bindings": [
@@ -2572,140 +2420,17 @@ def _state_aggregation_rules(
     return rules
 
 
-def _virtual_activity_groups(
-    context: NetworkEditorContext,
-    payload: NetworkEditorRequest,
-    graph: dict[str, Any],
-    selected_atomic_ids: set[int],
-) -> list[dict[str, Any]]:
-    activity_by_id = context.activity_by_id
-    activity_children = _children_by_parent(context.activity_nodes)
-    group_ids: set[int] = {
-        node["activity_node_id"]
-        for node in graph["activity_nodes"]
-        if node.get("activity_node_id") is not None and node["activity_type"] == "virtual"
-    }
-
-    selected_activity_ids = _selected_descendant_depths(
-        payload.activity_scope_node_ids,
-        activity_children,
-        {node.id for node in context.activity_nodes},
-        max_depth=payload.activity_depth,
-    )
-    for activity_id in selected_activity_ids:
-        activity = activity_by_id.get(activity_id)
-        if activity and activity.level in (1, 2):
-            group_ids.add(activity_id)
-
-    for atomic_id in selected_atomic_ids:
-        group_ids.update(
-            _owner_virtual_activity_ids_for_atomic(
-                atomic_id,
-                context,
-                include_inactive=payload.include_inactive,
-            )
-        )
-
-    groups: list[dict[str, Any]] = []
-    for activity_id in sorted(group_ids):
-        activity = activity_by_id.get(activity_id)
-        if activity is None or activity.level not in (1, 2):
-            continue
-        if not payload.include_inactive and not activity.is_active:
-            continue
-        children = [
-            child for child in activity_children.get(activity.id, [])
-            if payload.include_inactive or child.is_active
-        ]
-        descendant_atomic_ids = sorted(
-            atomic_id
-            for atomic_id in _atomic_ids_under_activity(
-                activity.id,
-                activity_children,
-                context.package_refs,
-                include_inactive=payload.include_inactive,
-            )
-            if payload.include_inactive or (
-                context.atomic_by_id.get(atomic_id) is not None and context.atomic_by_id[atomic_id].is_active
-            )
-        )
-        groups.append({
-            "activity_node_id": activity.id,
-            "activity_node_code": activity.code,
-            "activity_node_name": activity.name,
-            "level": activity.level,
-            "parent_activity_node_id": activity.parent_id,
-            "child_activity_node_ids": [child.id for child in children],
-            "descendant_atomic_activity_ids": descendant_atomic_ids,
-            "solver_participation": False,
-            "reason": "virtual_activity_group_metadata",
-        })
-    return groups
-
-
-def _default_solve_activity_scope_ids(
-    context: NetworkEditorContext,
-    payload: NetworkEditorRequest,
-) -> list[int]:
-    if payload.activity_scope_node_ids:
-        return payload.activity_scope_node_ids
-
-    activity_children = _children_by_parent(context.activity_nodes)
-
-    def has_executable_descendant(activity: ActivityNode) -> bool:
-        atomic_ids = _atomic_ids_under_activity(
-            activity.id,
-            activity_children,
-            context.package_refs,
-            include_inactive=payload.include_inactive,
-        )
-        if any(
-            context.atomic_by_id.get(atomic_id) is not None
-            and (payload.include_inactive or context.atomic_by_id[atomic_id].is_active)
-            for atomic_id in atomic_ids
-        ):
-            return True
-
-        descendant_ids = _activity_descendant_ids(activity.id, activity_children)
-        return any(
-            rule.activity_node_id in descendant_ids
-            and (payload.include_inactive or rule.is_active)
-            for rule in context.op_rules
-        )
-
-    scopes = [
-        node.id
-        for node in context.activity_nodes
-        if node.level == 1
-        and (payload.include_inactive or node.is_active)
-        and has_executable_descendant(node)
-    ]
-    if scopes:
-        return sorted(scopes)
-
-    return sorted(
-        node.id
-        for node in context.activity_nodes
-        if node.parent_id is None
-        and (payload.include_inactive or node.is_active)
-        and has_executable_descendant(node)
-    )
-
-
 def _solve_request_template(
     *,
     machine_type_id: int,
-    context: NetworkEditorContext,
     payload: NetworkEditorRequest,
+    atomic_activity_scope_ids: list[int],
     model_status: str = "ready",
     blocking_issue_count: int = 0,
 ) -> dict[str, Any]:
-    activity_scope_node_ids = _default_solve_activity_scope_ids(context, payload)
     required_runtime_fields = ["machine_id", "current_state_id"]
     if not payload.state_root_ids:
         required_runtime_fields.append("target_state_node_ids")
-    if not activity_scope_node_ids:
-        required_runtime_fields.append("activity_scope_node_ids")
 
     return {
         "endpoint": "POST /api/v1/solve/layered",
@@ -2718,7 +2443,7 @@ def _solve_request_template(
             "machine_id": None,
             "current_state_id": None,
             "target_state_node_ids": payload.state_root_ids,
-            "activity_scope_node_ids": activity_scope_node_ids,
+            "atomic_activity_scope_ids": atomic_activity_scope_ids,
             "include_inactive": payload.include_inactive,
             "objective": "minimize_makespan",
             "objectives": None,
@@ -2728,8 +2453,8 @@ def _solve_request_template(
             "context": {
                 "mode": "network_editor_solver_precheck",
                 "machine_type_id": machine_type_id,
-                "view_mode": payload.view_mode,
-                "activity_scope_inferred": not bool(payload.activity_scope_node_ids) and bool(activity_scope_node_ids),
+                "view_mode": STATE_TRANSITION_VIEW,
+                "activity_scope_inferred": not bool(payload.atomic_activity_scope_ids),
             },
         },
     }
@@ -2738,16 +2463,12 @@ def _solve_request_template(
 def _solver_precheck_summary(
     *,
     executable_activities: list[dict[str, Any]],
-    excluded_virtual_activities: list[dict[str, Any]],
-    virtual_activity_groups: list[dict[str, Any]],
     state_aggregation_rules: list[dict[str, Any]],
     blocking_issues: list[dict[str, Any]],
     layered_health: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "executable_activity_count": len(executable_activities),
-        "excluded_virtual_activity_count": len(excluded_virtual_activities),
-        "virtual_activity_group_count": len(virtual_activity_groups),
         "state_aggregation_rule_count": len(state_aggregation_rules),
         "inherited_precondition_count": sum(
             len(item["inherited_preconditions"]) for item in executable_activities
@@ -2776,24 +2497,31 @@ async def precheck_network_editor_solver(
 ) -> dict[str, Any]:
     context = await _load_context(session, machine_type_id)
     graph = _build_graph_from_context(context, payload)
-    validation = await validate_network_editor_model(session, machine_type_id, payload)
-    layered_health = await check_layered_health(
+    effective_model = await resolve_effective_model(
         session,
         machine_type_id,
         LayeredExpansionRequest(
             target_state_node_ids=payload.state_root_ids,
             activity_scope_node_ids=payload.activity_scope_node_ids,
+            atomic_activity_scope_ids=payload.atomic_activity_scope_ids,
             include_inactive=payload.include_inactive,
         ),
     )
+    layered_health = effective_model["health"]
+    solver_ready_issues = _health_diagnostics_to_issues(
+        layered_health["diagnostics"],
+        context,
+    )
+    _, scheduling_rule_issues = await validate_machine_type_scheduling_rules(
+        machine_type_id,
+        session,
+    )
+    solver_ready_issues.extend(scheduling_rule_issues)
 
     state_by_id = context.state_by_id
     rules_by_atomic = _rules_by_atomic(context, include_inactive=payload.include_inactive)
     bindings_by_atomic = _bindings_by_atomic(context, include_inactive=payload.include_inactive)
-    selected_atomic_ids = {
-        int(node["atomic_activity_id"]) for node in graph["activity_nodes"]
-        if node.get("atomic_activity_id") is not None and node["solver_participation"]
-    }
+    selected_atomic_ids = set(effective_model["canonical_atomic_activity_ids"])
 
     executable_activities: list[dict[str, Any]] = []
     for atomic_id in sorted(selected_atomic_ids):
@@ -2850,25 +2578,15 @@ async def precheck_network_editor_solver(
             ],
         })
 
-    virtual_activity_groups = _virtual_activity_groups(context, payload, graph, selected_atomic_ids)
-    excluded_virtual_activities = [
-        {
-            **group,
-            "reason": "virtual_activity",
-        }
-        for group in virtual_activity_groups
-    ]
     state_aggregation_rules = _state_aggregation_rules(context, payload, graph, selected_atomic_ids)
 
     blocking_issues = [
-        issue for issue in validation["solver_ready_issues"]
+        issue for issue in solver_ready_issues
         if issue["severity"] == "error"
     ]
     status = "blocked" if blocking_issues else "ready"
     summary = _solver_precheck_summary(
         executable_activities=executable_activities,
-        excluded_virtual_activities=excluded_virtual_activities,
-        virtual_activity_groups=virtual_activity_groups,
         state_aggregation_rules=state_aggregation_rules,
         blocking_issues=blocking_issues,
         layered_health=layered_health,
@@ -2878,19 +2596,17 @@ async def precheck_network_editor_solver(
         "status": status,
         "summary": summary,
         "executable_activities": executable_activities,
-        "excluded_virtual_activities": excluded_virtual_activities,
-        "virtual_activity_groups": virtual_activity_groups,
         "state_aggregation_rules": state_aggregation_rules,
         "blocking_issues": blocking_issues,
         "request_preview": {
             "target_state_node_ids": payload.state_root_ids,
-            "activity_scope_node_ids": payload.activity_scope_node_ids,
+            "atomic_activity_scope_ids": sorted(selected_atomic_ids),
             "include_inactive": payload.include_inactive,
         },
         "solve_request_template": _solve_request_template(
             machine_type_id=machine_type_id,
-            context=context,
             payload=payload,
+            atomic_activity_scope_ids=sorted(selected_atomic_ids),
             model_status=status,
             blocking_issue_count=len(blocking_issues),
         ),
@@ -2899,6 +2615,8 @@ async def precheck_network_editor_solver(
         "effective_rules": layered_health["effective_rules"],
         "layered_health_summary": layered_health["summary"],
         "layered_health_diagnostics": layered_health["diagnostics"],
+        "effective_model_version": effective_model["version"],
+        "effective_model_summary": effective_model["summary"],
     }
 
 

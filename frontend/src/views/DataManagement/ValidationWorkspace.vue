@@ -95,6 +95,7 @@ import { ElMessage } from 'element-plus'
 import {
   checkLayeredHealth,
   getActivityNodes,
+  getActivityPackageAtomicRefs,
   getMachineTypes,
   getStateNodes,
   previewLayeredExpansion,
@@ -105,6 +106,7 @@ const machineTypes = ref([])
 const machineTypeId = ref(null)
 const stateNodes = ref([])
 const activityNodes = ref([])
+const activityRefs = ref([])
 const running = ref(false)
 const expansionResult = ref(null)
 const healthResult = ref(null)
@@ -123,9 +125,27 @@ const activityTreeOptions = computed(() =>
 
 const canRun = computed(() =>
   machineTypeId.value &&
-  form.value.target_state_node_ids.length > 0 &&
-  form.value.activity_scope_node_ids.length > 0
+  form.value.target_state_node_ids.length > 0
 )
+const atomicActivityScopeIds = computed(() => {
+  if (!form.value.activity_scope_node_ids.length) return []
+  const selectedPackageIds = new Set(form.value.activity_scope_node_ids.map(Number))
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const node of activityNodes.value) {
+      if (node.parent_id && selectedPackageIds.has(Number(node.parent_id)) && !selectedPackageIds.has(Number(node.id))) {
+        selectedPackageIds.add(Number(node.id))
+        changed = true
+      }
+    }
+  }
+  return [...new Set(
+    activityRefs.value
+      .filter((ref) => ref.is_active && selectedPackageIds.has(Number(ref.activity_node_id)))
+      .map((ref) => Number(ref.atomic_activity_id)),
+  )].sort((left, right) => left - right)
+})
 
 async function loadOptions() {
   expansionResult.value = null
@@ -135,6 +155,7 @@ async function loadOptions() {
   if (!machineTypeId.value) {
     stateNodes.value = []
     activityNodes.value = []
+    activityRefs.value = []
     return
   }
   try {
@@ -144,6 +165,13 @@ async function loadOptions() {
     ])
     stateNodes.value = states
     activityNodes.value = activities
+    activityRefs.value = (
+      await Promise.all(
+        activities
+          .filter((node) => node.level === 2)
+          .map((node) => getActivityPackageAtomicRefs(node.id)),
+      )
+    ).flat()
   } catch {
     stateNodes.value = []
     activityNodes.value = []
@@ -151,12 +179,12 @@ async function loadOptions() {
 }
 
 async function runValidation() {
-  if (!canRun.value) return ElMessage.warning('请先选择目标状态和活动范围')
+  if (!canRun.value) return ElMessage.warning('请先选择目标状态')
   running.value = true
   try {
     const payload = {
       target_state_node_ids: form.value.target_state_node_ids,
-      activity_scope_node_ids: form.value.activity_scope_node_ids,
+      atomic_activity_scope_ids: atomicActivityScopeIds.value,
       include_inactive: form.value.include_inactive,
     }
     const [expansion, health] = await Promise.all([

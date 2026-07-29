@@ -540,9 +540,14 @@ class ActivityPackageAtomicRefCreate(BaseModel):
 
 
 class ActivityPackageAtomicRefUpdate(BaseModel):
-    """Schema for updating an activity-package atomic activity reference."""
+    """Schema for updating reference-local fields without changing its body."""
 
-    atomic_activity_id: Optional[int] = Field(None, gt=0, description="Atomic activity ID")
+    atomic_activity_id: Optional[int] = Field(
+        None,
+        gt=0,
+        description="Deprecated compatibility field; changing it is rejected",
+        json_schema_extra={"deprecated": True},
+    )
     sort_order: int = Field(default=0, description="Display order inside package")
     is_active: bool = Field(default=True, description="Whether this package reference is active")
     metadata_json: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
@@ -616,7 +621,7 @@ class StateNodeResponse(BaseSchema):
 
 
 class StateNodeReferenceCreate(BaseModel):
-    """Schema for adding an additional display parent to a state node."""
+    """Schema for adding a state body membership reference to a package."""
 
     parent_state_node_id: int = Field(..., gt=0, description="Additional parent state node ID")
     sort_order: int = Field(default=0, description="Display order under the reference parent")
@@ -625,8 +630,10 @@ class StateNodeReferenceCreate(BaseModel):
 
 
 class StateNodeReferenceUpdate(BaseModel):
-    """Schema for updating a state reference display instance."""
+    """Schema for updating reference-local display fields."""
 
+    state_node_id: Optional[int] = Field(None, gt=0, json_schema_extra={"deprecated": True})
+    parent_state_node_id: Optional[int] = Field(None, gt=0, json_schema_extra={"deprecated": True})
     sort_order: int = Field(default=0, description="Display order under the reference parent")
     is_active: bool = Field(default=True, description="Whether this reference is active")
     metadata_json: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
@@ -652,7 +659,7 @@ class ActivityStateBindingCreate(BaseModel):
     """Schema for creating a network-editor state/activity binding."""
 
     machine_type_id: int = Field(..., gt=0, description="Machine type ID")
-    activity_node_id: Optional[int] = Field(None, gt=0, description="Virtual activity node ID")
+    activity_node_id: Optional[int] = Field(None, gt=0, description="Historical activity-package node ID")
     atomic_activity_id: Optional[int] = Field(None, gt=0, description="Executable atomic activity ID")
     op_rule_id: Optional[int] = Field(None, gt=0, description="Linked executable rule ID")
     state_node_id: int = Field(..., gt=0, description="Bound state node ID")
@@ -667,7 +674,7 @@ class ActivityStateBindingUpdate(BaseModel):
     """Schema for updating a network-editor state/activity binding."""
 
     machine_type_id: int = Field(..., gt=0, description="Machine type ID")
-    activity_node_id: Optional[int] = Field(None, gt=0, description="Virtual activity node ID")
+    activity_node_id: Optional[int] = Field(None, gt=0, description="Historical activity-package node ID")
     atomic_activity_id: Optional[int] = Field(None, gt=0, description="Executable atomic activity ID")
     op_rule_id: Optional[int] = Field(None, gt=0, description="Linked executable rule ID")
     state_node_id: int = Field(..., gt=0, description="Bound state node ID")
@@ -769,7 +776,11 @@ class LayeredExpansionRequest(BaseModel):
     target_state_node_ids: list[int] = Field(default_factory=list, description="Selected state node IDs")
     activity_scope_node_ids: list[int] = Field(
         default_factory=list,
-        description="Selected activity node IDs; empty means all active atomic activities",
+        description="Deprecated package scopes; resolved once to canonical atomic activities",
+    )
+    atomic_activity_scope_ids: list[int] = Field(
+        default_factory=list,
+        description="Canonical atomic activity IDs; empty means all active atomic activities",
     )
     include_inactive: bool = Field(default=False, description="Include inactive nodes and guards")
 
@@ -963,7 +974,12 @@ class NetworkEditorRequest(BaseModel):
 
     state_root_ids: list[int] = Field(default_factory=list, description="Selected state roots")
     activity_scope_node_ids: list[int] = Field(default_factory=list, description="Selected activity scopes")
-    view_mode: str = Field(default="outline", pattern="^(outline|implementation|solver_ready)$")
+    atomic_activity_scope_ids: list[int] = Field(default_factory=list, description="Canonical atomic activity scope")
+    view_mode: str = Field(
+        default="state_transition",
+        pattern="^(state_transition|outline|implementation|solver_ready)$",
+        description="Single state-transition canvas; legacy values are normalized",
+    )
     include_inactive: bool = Field(default=False, description="Whether inactive nodes are included")
     state_depth: int = Field(default=0, ge=0, le=32, description="Visible state depth from selected roots; 0 means unlimited")
     activity_depth: int = Field(default=0, ge=0, le=32, description="Visible activity depth from selected scopes; 0 means unlimited")
@@ -1027,6 +1043,7 @@ class NetworkEditorGraphResponse(BaseModel):
     machine_type_id: int
     revision: Optional[str] = None
     view_mode: str
+    diagnostics: list[dict[str, Any]] = Field(default_factory=list)
     state_nodes: list[dict[str, Any]] = Field(default_factory=list)
     activity_nodes: list[dict[str, Any]] = Field(default_factory=list)
     bindings: list[dict[str, Any]] = Field(default_factory=list)
@@ -1063,9 +1080,9 @@ class NetworkEditorImpactResponse(BaseModel):
     direct_precondition_states: list[dict[str, Any]] = Field(default_factory=list)
     inherited_precondition_states: list[dict[str, Any]] = Field(default_factory=list)
     output_states: list[dict[str, Any]] = Field(default_factory=list)
-    owner_virtual_activities: list[dict[str, Any]] = Field(default_factory=list)
+    owner_activity_packages: list[dict[str, Any]] = Field(default_factory=list)
     affected_parent_states: list[dict[str, Any]] = Field(default_factory=list)
-    affected_virtual_activities: list[dict[str, Any]] = Field(default_factory=list)
+    affected_activity_packages: list[dict[str, Any]] = Field(default_factory=list)
     affected_executable_activities: list[dict[str, Any]] = Field(default_factory=list)
     package_bindings: list[dict[str, Any]] = Field(default_factory=list)
     bindings: list[dict[str, Any]] = Field(default_factory=list)
@@ -1080,8 +1097,6 @@ class NetworkEditorSolverPrecheckResponse(BaseModel):
     status: str
     summary: dict[str, Any] = Field(default_factory=dict)
     executable_activities: list[dict[str, Any]] = Field(default_factory=list)
-    excluded_virtual_activities: list[dict[str, Any]] = Field(default_factory=list)
-    virtual_activity_groups: list[dict[str, Any]] = Field(default_factory=list)
     state_aggregation_rules: list[dict[str, Any]] = Field(default_factory=list)
     blocking_issues: list[NetworkEditorIssue] = Field(default_factory=list)
     request_preview: dict[str, Any] = Field(default_factory=dict)
@@ -1091,6 +1106,8 @@ class NetworkEditorSolverPrecheckResponse(BaseModel):
     effective_rules: list[dict[str, Any]] = Field(default_factory=list)
     layered_health_summary: dict[str, Any] = Field(default_factory=dict)
     layered_health_diagnostics: list[dict[str, Any]] = Field(default_factory=list)
+    effective_model_version: str
+    effective_model_summary: dict[str, Any] = Field(default_factory=dict)
 
 
 class NetworkEditorExportPreviewResponse(NetworkEditorSolverPrecheckResponse):
@@ -1206,7 +1223,11 @@ class LayeredSolveRequest(BaseModel):
     target_state_node_ids: list[int] = Field(default_factory=list, description="Selected layered target state nodes")
     activity_scope_node_ids: list[int] = Field(
         default_factory=list,
-        description="Selected activity scope nodes; empty means all active atomic activities",
+        description="Deprecated package scopes; resolved to canonical atomic activities",
+    )
+    atomic_activity_scope_ids: list[int] = Field(
+        default_factory=list,
+        description="Canonical atomic activity IDs; empty means all active atomic activities",
     )
     include_inactive: bool = Field(default=False, description="Include inactive layered data")
     objective: str = Field(default="minimize_makespan", description="Optimization objective")

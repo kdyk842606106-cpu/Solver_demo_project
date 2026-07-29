@@ -21,6 +21,9 @@ from app.db.models import (
 )
 
 
+ADJUSTMENT_OPTIMIZATION_POLICY = "relative_order_compact_v1"
+
+
 class PlanAdjustmentError(ValueError):
     def __init__(self, code: str, message: str, *, details: dict[str, Any] | None = None):
         super().__init__(message)
@@ -210,6 +213,60 @@ def _schedule_task_map(schedule: ScheduleResult) -> dict[int, dict[str, Any]]:
     }
 
 
+def _compile_base_order_pairs(
+    task_map: dict[int, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Compile meaningful baseline order pairs without inventing parallel order."""
+    groups: dict[str, set[int]] = {}
+
+    def add(source: str, step_order: int) -> None:
+        groups.setdefault(source, set()).add(step_order)
+
+    for step_order, task in task_map.items():
+        for resource in task.get("resources") or []:
+            resource_id = resource.get("resource_id")
+            if resource_id is not None:
+                add(f"resource:{int(resource_id)}", step_order)
+        activity_group_id = task.get("activity_group_id")
+        if activity_group_id is not None:
+            add(f"activity_group:{int(activity_group_id)}", step_order)
+        for group in task.get("state_continuity_groups") or []:
+            group_id = group.get("state_group_id")
+            if group_id is not None:
+                add(f"state_group:{int(group_id)}", step_order)
+        responsible_subsystem = str(task.get("responsible_subsystem") or "").strip()
+        matched_rules = {str(value) for value in task.get("matched_scheduling_rules") or []}
+        if responsible_subsystem and "SUBSYSTEM_CONTINUITY" in matched_rules:
+            add(f"responsible_subsystem:{responsible_subsystem}", step_order)
+
+    sources_by_pair: dict[tuple[int, int], set[str]] = {}
+    for source, step_orders in groups.items():
+        ordered = sorted(
+            step_orders,
+            key=lambda step_order: (
+                int(task_map[step_order]["start_min"]),
+                int(task_map[step_order]["end_min"]),
+                step_order,
+            ),
+        )
+        for index, predecessor in enumerate(ordered):
+            predecessor_end = int(task_map[predecessor]["end_min"])
+            for successor in ordered[index + 1:]:
+                successor_start = int(task_map[successor]["start_min"])
+                if predecessor_end > successor_start:
+                    continue
+                sources_by_pair.setdefault((predecessor, successor), set()).add(source)
+
+    return [
+        {
+            "predecessor_step_order": predecessor,
+            "successor_step_order": successor,
+            "sources": sorted(sources),
+        }
+        for (predecessor, successor), sources in sorted(sources_by_pair.items())
+    ]
+
+
 def _normalize_absolute_time(
     item: dict[str, Any],
     solve_request: SolveRequest,
@@ -326,8 +383,14 @@ def _compile_context(
     if _has_cycle({step.step_order for step in plan.steps}, edges):
         raise PlanAdjustmentError("CONSTRAINT_CYCLE", "Artificial precedence creates a dependency cycle")
     return ({
+        "optimization_policy": ADJUSTMENT_OPTIMIZATION_POLICY,
         "scope_step_orders": [steps_by_id[step_id].step_order for step_id in sorted(scope)],
         "base_starts": base_starts,
+        "base_ends": {
+            step_order: int(task["end_min"])
+            for step_order, task in task_map.items()
+        },
+        "base_order_pairs": _compile_base_order_pairs(task_map),
         "priority_by_step": priority_by_step,
         "constraints": compiled,
     }, steps_by_id)
@@ -441,6 +504,7 @@ async def _clone_plan(
     baseline: CandidatePlan,
     family: PlanFamily,
     effective_constraints: list[dict[str, Any]],
+    optimization_policy: str,
     session: AsyncSession,
 ) -> tuple[SolveRequest, CandidatePlan]:
     source = baseline.solve_request
@@ -495,7 +559,8 @@ async def _clone_plan(
         for source_step in baseline.steps
     }
     candidate.adjustment_snapshot = {
-        "constraints": _rebase_constraint_step_ids(effective_constraints, snapshot_step_id_map)
+        "constraints": _rebase_constraint_step_ids(effective_constraints, snapshot_step_id_map),
+        "optimization_policy": optimization_policy,
     }
     await session.flush()
     return request, candidate
@@ -579,7 +644,13 @@ async def preview_adjustment(
     adjustment.status = "previewing"
     adjustment.candidate_plan_id = None
     await session.flush()
-    request, candidate = await _clone_plan(baseline, family, effective, session)
+    request, candidate = await _clone_plan(
+        baseline,
+        family,
+        effective,
+        context["optimization_policy"],
+        session,
+    )
     result = await solve_schedule(
         candidate.id,
         session,

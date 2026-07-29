@@ -241,7 +241,7 @@ class OpRule(Base):
         Integer, ForeignKey("activity_node.id", ondelete="SET NULL"), nullable=True
     )
     atomic_activity_id: Mapped[Optional[int]] = mapped_column(
-        Integer, ForeignKey("atomic_activity.id", ondelete="SET NULL"), nullable=True
+        Integer, ForeignKey("atomic_activity.id", ondelete="RESTRICT"), nullable=True
     )
     code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -597,13 +597,13 @@ class AtomicActivity(Base):
         "MachineType", back_populates="atomic_activities"
     )
     package_refs: Mapped[list["ActivityPackageAtomicRef"]] = relationship(
-        "ActivityPackageAtomicRef", back_populates="atomic_activity", cascade="all, delete-orphan"
+        "ActivityPackageAtomicRef", back_populates="atomic_activity"
     )
     op_rules: Mapped[list["OpRule"]] = relationship(
         "OpRule", back_populates="atomic_activity"
     )
     activity_state_bindings: Mapped[list["ActivityStateBinding"]] = relationship(
-        "ActivityStateBinding", back_populates="atomic_activity", cascade="all, delete-orphan"
+        "ActivityStateBinding", back_populates="atomic_activity"
     )
 
     def __repr__(self) -> str:
@@ -653,6 +653,10 @@ class StateNode(Base):
     __tablename__ = "state_node"
     __table_args__ = (
         CheckConstraint("level >= 1", name="ck_state_node_level_positive"),
+        CheckConstraint(
+            "state_kind = 'aggregate' OR parent_id IS NULL",
+            name="ck_state_node_atomic_parent_null",
+        ),
         UniqueConstraint("machine_type_id", "code", name="uq_state_node_machine_type_code"),
     )
 
@@ -689,7 +693,6 @@ class StateNode(Base):
     references_as_state: Mapped[list["StateNodeReference"]] = relationship(
         "StateNodeReference",
         back_populates="state_node",
-        cascade="all, delete-orphan",
         foreign_keys="StateNodeReference.state_node_id",
     )
     references_as_parent: Mapped[list["StateNodeReference"]] = relationship(
@@ -699,7 +702,7 @@ class StateNode(Base):
         foreign_keys="StateNodeReference.parent_state_node_id",
     )
     activity_state_bindings: Mapped[list["ActivityStateBinding"]] = relationship(
-        "ActivityStateBinding", back_populates="state_node", cascade="all, delete-orphan"
+        "ActivityStateBinding", back_populates="state_node"
     )
     scope_guard_preconditions: Mapped[list["ScopeGuardPrecond"]] = relationship(
         "ScopeGuardPrecond", back_populates="state_node"
@@ -710,7 +713,7 @@ class StateNode(Base):
 
 
 class StateNodeReference(Base):
-    """Additional display parent for a state node."""
+    """Reusable membership reference from a state package to a state body."""
 
     __tablename__ = "state_node_reference"
     __table_args__ = (
@@ -719,7 +722,7 @@ class StateNodeReference(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     state_node_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("state_node.id", ondelete="CASCADE"), nullable=False
+        Integer, ForeignKey("state_node.id", ondelete="RESTRICT"), nullable=False
     )
     parent_state_node_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("state_node.id", ondelete="CASCADE"), nullable=False
@@ -785,13 +788,13 @@ class ActivityStateBinding(Base):
         Integer, ForeignKey("activity_node.id", ondelete="CASCADE"), nullable=True
     )
     atomic_activity_id: Mapped[Optional[int]] = mapped_column(
-        Integer, ForeignKey("atomic_activity.id", ondelete="CASCADE"), nullable=True
+        Integer, ForeignKey("atomic_activity.id", ondelete="RESTRICT"), nullable=True
     )
     op_rule_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("op_rule.id", ondelete="SET NULL"), nullable=True
     )
     state_node_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("state_node.id", ondelete="CASCADE"), nullable=False
+        Integer, ForeignKey("state_node.id", ondelete="RESTRICT"), nullable=False
     )
     binding_role: Mapped[str] = mapped_column(String(32), nullable=False)
     binding_type: Mapped[str] = mapped_column(String(32), nullable=False)

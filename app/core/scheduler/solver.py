@@ -248,6 +248,7 @@ async def solve_schedule(
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = max_time_seconds
     stability_metadata: list[dict[str, Any]] = []
+    lexicographic_proven = True
 
     if adjustment_context is not None:
         from app.core.scheduler.adjustments import build_stability_stages
@@ -258,17 +259,20 @@ async def solve_schedule(
             expression = stage["expression"]
             if isinstance(expression, int):
                 optimum = expression
+                proven = True
             else:
                 schedule_model.model.minimize(expression)
                 status = await asyncio.to_thread(solver.solve, schedule_model.model)
                 if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
                     break
                 optimum = int(solver.value(expression))
+                proven = status == cp_model.OPTIMAL
                 schedule_model.model.add(expression == optimum)
+            lexicographic_proven = lexicographic_proven and proven
             stability_metadata.append({
                 "type": stage["type"],
                 "optimum": optimum,
-                "is_proven_optimal": status in (cp_model.UNKNOWN, cp_model.OPTIMAL),
+                "is_proven_optimal": proven,
             })
         if status in (cp_model.UNKNOWN, cp_model.OPTIMAL, cp_model.FEASIBLE):
             ObjectiveRegistry.apply_all(
@@ -284,7 +288,11 @@ async def solve_schedule(
     status_name = solver.status_name(status)
 
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        result_status = "optimal" if status == cp_model.OPTIMAL else "feasible"
+        result_status = (
+            "optimal"
+            if status == cp_model.OPTIMAL and lexicographic_proven
+            else "feasible"
+        )
         makespan_val = solver.value(schedule_model.makespan)
 
         # Build predecessor lookup from edges

@@ -103,7 +103,7 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
-  activityScopeNodeIds: {
+  atomicActivityScopeIds: {
     type: Array,
     default: () => [],
   },
@@ -194,7 +194,7 @@ async function submit() {
       ? await postLayeredSolve({
         ...basePayload,
         target_state_node_ids: props.targetStateNodeIds,
-        activity_scope_node_ids: props.activityScopeNodeIds,
+        atomic_activity_scope_ids: props.atomicActivityScopeIds,
       })
       : props.mode === 'maintenance'
         ? await postMaintenanceSolve({

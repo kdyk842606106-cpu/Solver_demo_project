@@ -15,7 +15,7 @@ import re
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import Select, delete, or_, select
+from sqlalchemy import Select, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -110,6 +110,11 @@ from app.db.schemas import (
     LayeredHealthCheckResponse,
 )
 from app.db.session import get_db_session
+from app.core.modeling.semantics import (
+    is_atomic_state,
+    is_legacy_executable_activity,
+    is_state_package,
+)
 from app.services.layered_expansion import expand_layered_context
 from app.services.layered_health import check_layered_health
 from app.services.network_editor import (
@@ -121,6 +126,17 @@ from app.services.network_editor import (
 )
 
 router = APIRouter(tags=["master-data"])
+
+
+def _domain_error(status_code: int, error_code: str, error_message: str, **details: Any) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail={
+            "error_code": error_code,
+            "error_message": error_message,
+            **details,
+        },
+    )
 
 
 def _extract_allowed_values(payload: Any) -> Optional[set[str]]:
@@ -498,6 +514,12 @@ async def _validate_activity_parent(
     *,
     current_id: Optional[int] = None,
 ) -> None:
+    if level == 3:
+        raise _domain_error(
+            422,
+            "LEGACY_EXECUTABLE_CREATE_FORBIDDEN",
+            "ActivityNode(level=3) is read-only legacy data; create an AtomicActivity instead.",
+        )
     if level == 1:
         if parent_id is not None:
             raise HTTPException(status_code=422, detail="Level-1 activity nodes cannot have a parent")
@@ -543,7 +565,7 @@ async def _validate_state_parent(
         raise HTTPException(status_code=422, detail="State parent must belong to the same machine type")
     if parent.level != level - 1:
         raise HTTPException(status_code=422, detail="State parent level must be exactly one level above child")
-    if parent.state_kind != "aggregate" or parent.feature_key or parent.target_value:
+    if not is_state_package(parent) or parent.feature_key or parent.target_value:
         raise HTTPException(status_code=422, detail="State parent must be an aggregate package before adding children")
     if current_id is not None:
         current_parent_id = parent.parent_id
@@ -902,8 +924,8 @@ def _leaf_ids_under_state(
         if active_only and not node.is_active:
             return []
         children = by_parent.get(node_id, [])
-        if not children:
-            return [node_id] if node.feature_key and node.target_value else []
+        if is_atomic_state(node):
+            return [node_id]
         leaf_ids: list[int] = []
         for child in children:
             leaf_ids.extend(walk(child.id))
@@ -919,7 +941,7 @@ def _binding_type_for_state(
 ) -> str:
     children = _state_children_by_parent(nodes, references, active_only=True)
     has_children = bool(children.get(state_node.id))
-    if not has_children and state_node.feature_key and state_node.target_value and state_node.state_kind != "aggregate":
+    if not has_children and is_atomic_state(state_node):
         return "atomic_state"
     return "state_package"
 
@@ -972,7 +994,21 @@ async def _validate_state_reference(
     if state_node.id == parent_state_node.id:
         raise HTTPException(status_code=422, detail="State reference cannot point to itself")
     if state_node.machine_type_id != parent_state_node.machine_type_id:
-        raise HTTPException(status_code=422, detail="State reference parent must belong to the same machine type")
+        raise _domain_error(
+            422,
+            "REFERENCE_CROSS_MACHINE_TYPE",
+            "State package and state body must belong to the same machine type.",
+        )
+    if not is_atomic_state(state_node):
+        raise HTTPException(
+            status_code=422,
+            detail="StateNodeReference membership can only target an atomic state body",
+        )
+    if not is_state_package(parent_state_node):
+        raise HTTPException(
+            status_code=422,
+            detail="StateNodeReference parent must be an aggregate state package",
+        )
     existing = await session.execute(
         select(StateNodeReference.id)
         .where(
@@ -1032,9 +1068,11 @@ async def _resolve_binding_payload(
         activity_node = await _get_activity_node_or_404(payload.activity_node_id, session)
         if activity_node.machine_type_id != payload.machine_type_id:
             raise HTTPException(status_code=422, detail="Activity node must belong to the same machine type as the binding")
-        if activity_node.level not in (1, 2):
-            raise HTTPException(status_code=422, detail="Activity-node bindings can only target level-1 or level-2 virtual activity nodes")
-        raise HTTPException(status_code=422, detail="Virtual activities are management packages and cannot bind states directly")
+        raise _domain_error(
+            410,
+            "ACTIVITY_PACKAGE_BINDING_SUNSET",
+            "Historical activity-package bindings are audit-only; bind the state to an atomic activity.",
+        )
     else:
         atomic_activity = await _get_atomic_activity_or_404(payload.atomic_activity_id or 0, session)
         if atomic_activity.machine_type_id != payload.machine_type_id:
@@ -1890,44 +1928,6 @@ async def _replace_rule_children(
     )
 
 
-async def _validate_scope_guard_payload(
-    session: AsyncSession,
-    activity_node: ActivityNode,
-    payload: ScopeGuardCreate | ScopeGuardUpdate,
-) -> None:
-    if activity_node.level not in (1, 2):
-        raise HTTPException(status_code=422, detail="Scope Guards can only be attached to level-1 or level-2 activity nodes")
-    if not payload.preconditions:
-        raise HTTPException(status_code=422, detail="Scope Guard must contain at least one precondition")
-
-    for item in payload.preconditions:
-        state_node = await _get_state_node_or_404(item.state_node_id, session)
-        if state_node.machine_type_id != activity_node.machine_type_id:
-            raise HTTPException(status_code=422, detail="Scope Guard state references must belong to the same machine type")
-        if activity_node.level == 1 and state_node.level != 1:
-            raise HTTPException(status_code=422, detail="Level-1 activity Scope Guards can only reference level-1 state nodes")
-
-
-async def _replace_scope_guard_preconditions(
-    guard: ScopeGuard,
-    payload: ScopeGuardCreate | ScopeGuardUpdate,
-    session: AsyncSession,
-) -> None:
-    await session.execute(delete(ScopeGuardPrecond).where(ScopeGuardPrecond.scope_guard_id == guard.id))
-    session.add_all(
-        [
-            ScopeGuardPrecond(
-                scope_guard_id=guard.id,
-                state_node_id=item.state_node_id,
-                operator=item.operator,
-                expected_value=item.expected_value,
-                value_list=item.value_list,
-            )
-            for item in payload.preconditions
-        ]
-    )
-
-
 @router.get("/machine-types", response_model=list[MachineTypeDetailResponse])
 async def list_machine_types(db: AsyncSession = Depends(get_db_session)):
     result = await db.execute(
@@ -2307,24 +2307,45 @@ async def update_atomic_activity(
 @router.delete("/atomic-activities/{atomic_activity_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_atomic_activity(atomic_activity_id: int, db: AsyncSession = Depends(get_db_session)):
     obj = await _get_atomic_activity_or_404(atomic_activity_id, db)
-    rule_ids = [rule.id for rule in obj.op_rules]
-    if rule_ids:
-        in_use = await db.execute(
-            select(CandidatePlanStep.id)
-            .where(CandidatePlanStep.op_rule_id.in_(rule_ids))
-            .limit(1)
+    reference_count = int(
+        (await db.execute(
+            select(func.count(ActivityPackageAtomicRef.id)).where(
+                ActivityPackageAtomicRef.atomic_activity_id == atomic_activity_id
+            )
+        )).scalar_one()
+    )
+    rule_count = int(
+        (await db.execute(
+            select(func.count(OpRule.id)).where(OpRule.atomic_activity_id == atomic_activity_id)
+        )).scalar_one()
+    )
+    binding_count = int(
+        (await db.execute(
+            select(func.count(ActivityStateBinding.id)).where(
+                ActivityStateBinding.atomic_activity_id == atomic_activity_id
+            )
+        )).scalar_one()
+    )
+    plan_step_count = int(
+        (await db.execute(
+            select(func.count(CandidatePlanStep.id))
+            .join(OpRule, CandidatePlanStep.op_rule_id == OpRule.id)
+            .where(OpRule.atomic_activity_id == atomic_activity_id)
+        )).scalar_one()
+    )
+    dependencies = {
+        "package_references": reference_count,
+        "rules": rule_count,
+        "state_bindings": binding_count,
+        "plan_steps": plan_step_count,
+    }
+    if any(dependencies.values()):
+        raise _domain_error(
+            409,
+            "BODY_IN_USE",
+            "Atomic activity is still referenced; remove its relationships before deleting the body.",
+            dependencies=dependencies,
         )
-        if in_use.scalar_one_or_none() is not None:
-            raise HTTPException(status_code=409, detail="Atomic activity is used in plans and cannot be deleted")
-
-        await db.execute(delete(OpRulePrecond).where(OpRulePrecond.op_rule_id.in_(rule_ids)))
-        await db.execute(delete(OpRuleEffect).where(OpRuleEffect.op_rule_id.in_(rule_ids)))
-        await db.execute(delete(OpRuleResourceReq).where(OpRuleResourceReq.op_rule_id.in_(rule_ids)))
-        for rule in list(obj.op_rules):
-            await db.delete(rule)
-
-    for ref in list(obj.package_refs):
-        await db.delete(ref)
     await db.delete(obj)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -2357,7 +2378,11 @@ async def create_activity_package_atomic_ref(
     package = await _validate_activity_package_for_ref(db, package_id)
     atomic = await _get_atomic_activity_or_404(payload.atomic_activity_id, db)
     if atomic.machine_type_id != package.machine_type_id:
-        raise HTTPException(status_code=422, detail="Atomic activity must belong to the same machine type as the activity package")
+        raise _domain_error(
+            422,
+            "REFERENCE_CROSS_MACHINE_TYPE",
+            "Activity package and atomic activity body must belong to the same machine type.",
+        )
     existing = await db.execute(
         select(ActivityPackageAtomicRef.id).where(
             ActivityPackageAtomicRef.activity_node_id == package_id,
@@ -2379,27 +2404,26 @@ async def create_activity_package_atomic_ref(
     return _serialize_atomic_ref(obj)
 
 
+@router.put(
+    "/activity-package-atomic-refs/{ref_id}",
+    response_model=ActivityPackageAtomicRefResponse,
+)
 async def update_activity_package_atomic_ref(
     ref_id: int,
     payload: ActivityPackageAtomicRefUpdate,
-    db: AsyncSession,
+    db: AsyncSession = Depends(get_db_session),
 ):
     ref = await _get_atomic_ref_or_404(ref_id, db)
-    package = await _validate_activity_package_for_ref(db, ref.activity_node_id)
-    if payload.atomic_activity_id is not None and payload.atomic_activity_id != ref.atomic_activity_id:
-        atomic = await _get_atomic_activity_or_404(payload.atomic_activity_id, db)
-        if atomic.machine_type_id != package.machine_type_id:
-            raise HTTPException(status_code=422, detail="Atomic activity must belong to the same machine type as the activity package")
-        existing = await db.execute(
-            select(ActivityPackageAtomicRef.id).where(
-                ActivityPackageAtomicRef.activity_node_id == ref.activity_node_id,
-                ActivityPackageAtomicRef.atomic_activity_id == payload.atomic_activity_id,
-                ActivityPackageAtomicRef.id != ref_id,
-            ).limit(1)
+    await _validate_activity_package_for_ref(db, ref.activity_node_id)
+    if (
+        payload.atomic_activity_id is not None
+        and payload.atomic_activity_id != ref.atomic_activity_id
+    ):
+        raise _domain_error(
+            409,
+            "RELATION_ENDPOINT_IMMUTABLE",
+            "Reference endpoints are immutable; remove this reference and create a new one.",
         )
-        if existing.scalar_one_or_none() is not None:
-            raise HTTPException(status_code=409, detail="Atomic activity is already attached to this package")
-        ref.atomic_activity_id = payload.atomic_activity_id
     ref.sort_order = payload.sort_order
     ref.is_active = payload.is_active
     ref.metadata_json = payload.metadata_json
@@ -2439,6 +2463,12 @@ async def create_activity_node(
     machine_type = await _get_machine_type_or_404(machine_type_id, db)
     if payload.machine_type_id != machine_type_id:
         raise HTTPException(status_code=422, detail="Payload machine_type_id must match path machine_type_id")
+    if is_legacy_executable_activity(payload):
+        raise _domain_error(
+            422,
+            "LEGACY_EXECUTABLE_CREATE_FORBIDDEN",
+            "ActivityNode(level=3) has been sunset; create an AtomicActivity and package reference.",
+        )
     code = _clean_optional_code(payload.code)
     if code:
         await _ensure_node_code_unique(db, ActivityNode, machine_type_id, code)
@@ -2461,6 +2491,12 @@ async def update_activity_node(
     db: AsyncSession = Depends(get_db_session),
 ):
     obj = await _get_activity_node_or_404(node_id, db)
+    if is_legacy_executable_activity(obj) or is_legacy_executable_activity(payload):
+        raise _domain_error(
+            422,
+            "LEGACY_EXECUTABLE_READ_ONLY",
+            "Historical ActivityNode(level=3) rows are read-only.",
+        )
     if obj.children and payload.level != obj.level:
         raise HTTPException(status_code=422, detail="Cannot change level while activity node has children")
     code = _clean_optional_code(payload.code)
@@ -2532,7 +2568,15 @@ async def create_state_node(
     else:
         suffix = "sa" if payload.state_kind != "aggregate" else "sp"
         code = await _generate_machine_type_code(db, StateNode, machine_type, suffix)
-    await _validate_state_parent(db, machine_type_id, payload.level, payload.parent_id)
+    if is_atomic_state(payload):
+        if payload.parent_id is not None:
+            raise _domain_error(
+                422,
+                "ATOMIC_STATE_PARENT_FORBIDDEN",
+                "Atomic state bodies cannot have parent_id; create a StateNodeReference membership instead.",
+            )
+    else:
+        await _validate_state_parent(db, machine_type_id, payload.level, payload.parent_id)
     await _validate_state_node_payload(db, machine_type_id, payload)
     payload_data = payload.model_dump()
     payload_data["code"] = code
@@ -2555,13 +2599,21 @@ async def update_state_node(
     code = _clean_optional_code(payload.code)
     if code:
         await _ensure_node_code_unique(db, StateNode, obj.machine_type_id, code, exclude_id=node_id)
-    await _validate_state_parent(
-        db,
-        obj.machine_type_id,
-        payload.level,
-        payload.parent_id,
-        current_id=node_id,
-    )
+    if is_atomic_state(payload):
+        if payload.parent_id is not None:
+            raise _domain_error(
+                422,
+                "ATOMIC_STATE_PARENT_FORBIDDEN",
+                "Atomic state bodies cannot have parent_id; create a StateNodeReference membership instead.",
+            )
+    else:
+        await _validate_state_parent(
+            db,
+            obj.machine_type_id,
+            payload.level,
+            payload.parent_id,
+            current_id=node_id,
+        )
     await _validate_state_node_payload(
         db,
         obj.machine_type_id,
@@ -2589,8 +2641,33 @@ async def update_state_node(
 @router.delete("/state-nodes/{node_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_state_node(node_id: int, db: AsyncSession = Depends(get_db_session)):
     obj = await _get_state_node_or_404(node_id, db)
-    if obj.children or obj.scope_guard_preconditions:
-        raise HTTPException(status_code=409, detail="State node is in use and cannot be deleted")
+    reference_count = int(
+        (await db.execute(
+            select(func.count(StateNodeReference.id)).where(
+                StateNodeReference.state_node_id == node_id
+            )
+        )).scalar_one()
+    )
+    binding_count = int(
+        (await db.execute(
+            select(func.count(ActivityStateBinding.id)).where(
+                ActivityStateBinding.state_node_id == node_id
+            )
+        )).scalar_one()
+    )
+    dependencies = {
+        "child_packages": len(obj.children),
+        "package_references": reference_count,
+        "state_bindings": binding_count,
+        "scope_guard_preconditions": len(obj.scope_guard_preconditions),
+    }
+    if any(dependencies.values()):
+        raise _domain_error(
+            409,
+            "BODY_IN_USE",
+            "State body is still referenced; remove its relationships before deleting the body.",
+            dependencies=dependencies,
+        )
     await db.delete(obj)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -2651,6 +2728,18 @@ async def update_state_node_reference(
     db: AsyncSession = Depends(get_db_session),
 ):
     ref = await _get_state_node_reference_or_404(ref_id, db)
+    if (
+        payload.state_node_id is not None
+        and payload.state_node_id != ref.state_node_id
+    ) or (
+        payload.parent_state_node_id is not None
+        and payload.parent_state_node_id != ref.parent_state_node_id
+    ):
+        raise _domain_error(
+            409,
+            "RELATION_ENDPOINT_IMMUTABLE",
+            "Reference endpoints are immutable; remove this reference and create a new one.",
+        )
     ref.sort_order = payload.sort_order
     ref.is_active = payload.is_active
     ref.metadata_json = payload.metadata_json
@@ -2733,12 +2822,25 @@ async def update_activity_state_binding(
     binding = await _get_activity_state_binding_or_404(binding_id, db)
     if payload.machine_type_id != binding.machine_type_id:
         raise HTTPException(status_code=422, detail="Activity-state binding machine_type_id cannot be changed")
-    old_op_rule_id = binding.op_rule_id
-    old_binding_role = binding.binding_role
-    old_managed_keys = _binding_managed_rule_fact_keys(binding, old_binding_role)
     activity_node, atomic_activity, op_rule, _, binding_type, covered_leaf_ids, coverage_status = (
         await _resolve_binding_payload(db, payload)
     )
+    endpoint_changed = (
+        (activity_node.id if activity_node else None) != binding.activity_node_id
+        or (atomic_activity.id if atomic_activity else None) != binding.atomic_activity_id
+        or (op_rule.id if op_rule else None) != binding.op_rule_id
+        or payload.state_node_id != binding.state_node_id
+        or payload.binding_role != binding.binding_role
+    )
+    if endpoint_changed:
+        raise _domain_error(
+            409,
+            "RELATION_ENDPOINT_IMMUTABLE",
+            "Binding endpoints and role are immutable; delete the old binding and create a new one.",
+        )
+    old_op_rule_id = binding.op_rule_id
+    old_binding_role = binding.binding_role
+    old_managed_keys = _binding_managed_rule_fact_keys(binding, old_binding_role)
     binding.machine_type_id = payload.machine_type_id
     binding.activity_node_id = activity_node.id if activity_node else None
     binding.atomic_activity_id = atomic_activity.id if atomic_activity else None
@@ -2824,6 +2926,19 @@ async def refresh_activity_state_binding_coverage(
 
 @router.get("/activity-nodes/{activity_node_id}/scope-guards", response_model=list[ScopeGuardResponse])
 async def list_scope_guards(activity_node_id: int, db: AsyncSession = Depends(get_db_session)):
+    raise _domain_error(
+        410,
+        "SCOPE_GUARD_SUNSET",
+        "Scope Guard is available only through the read-only audit endpoint.",
+        audit_endpoint=f"/api/v1/audit/activity-nodes/{activity_node_id}/scope-guards",
+    )
+
+
+@router.get(
+    "/audit/activity-nodes/{activity_node_id}/scope-guards",
+    response_model=list[ScopeGuardResponse],
+)
+async def audit_scope_guards(activity_node_id: int, db: AsyncSession = Depends(get_db_session)):
     await _get_activity_node_or_404(activity_node_id, db)
     result = await db.execute(
         select(ScopeGuard)
@@ -2844,23 +2959,11 @@ async def create_scope_guard(
     payload: ScopeGuardCreate,
     db: AsyncSession = Depends(get_db_session),
 ):
-    activity_node = await _get_activity_node_or_404(activity_node_id, db)
-    if payload.activity_node_id != activity_node_id:
-        raise HTTPException(status_code=422, detail="Payload activity_node_id must match path activity_node_id")
-    await _validate_scope_guard_payload(db, activity_node, payload)
-    guard = ScopeGuard(
-        activity_node_id=activity_node_id,
-        name=payload.name,
-        description=payload.description,
-        is_active=payload.is_active,
-        metadata_json=payload.metadata_json,
+    raise _domain_error(
+        410,
+        "SCOPE_GUARD_SUNSET",
+        "Scope Guard has been sunset; model admission conditions as atomic-activity input bindings.",
     )
-    db.add(guard)
-    await db.flush()
-    await _replace_scope_guard_preconditions(guard, payload, db)
-    await db.flush()
-    guard = await _get_scope_guard_or_404(guard.id, db)
-    return _serialize_scope_guard(guard)
 
 
 @router.put("/scope-guards/{guard_id}", response_model=ScopeGuardResponse)
@@ -2869,23 +2972,20 @@ async def update_scope_guard(
     payload: ScopeGuardUpdate,
     db: AsyncSession = Depends(get_db_session),
 ):
-    guard = await _get_scope_guard_or_404(guard_id, db)
-    await _validate_scope_guard_payload(db, guard.activity_node, payload)
-    guard.name = payload.name
-    guard.description = payload.description
-    guard.is_active = payload.is_active
-    guard.metadata_json = payload.metadata_json
-    await _replace_scope_guard_preconditions(guard, payload, db)
-    await db.flush()
-    guard = await _get_scope_guard_or_404(guard.id, db)
-    return _serialize_scope_guard(guard)
+    raise _domain_error(
+        410,
+        "SCOPE_GUARD_SUNSET",
+        "Scope Guard has been sunset; existing rows are audit-only.",
+    )
 
 
 @router.delete("/scope-guards/{guard_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_scope_guard(guard_id: int, db: AsyncSession = Depends(get_db_session)):
-    guard = await _get_scope_guard_or_404(guard_id, db)
-    await db.delete(guard)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    raise _domain_error(
+        410,
+        "SCOPE_GUARD_SUNSET",
+        "Scope Guard has been sunset; existing rows are audit-only.",
+    )
 
 
 @router.post(

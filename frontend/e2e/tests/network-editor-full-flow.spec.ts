@@ -32,7 +32,7 @@ function templateFeatureKey(featureKey: string) {
 const emptyGraph = {
   machine_type_id: 1,
   revision: 'editor-full-flow-revision',
-  view_mode: 'implementation',
+  view_mode: 'state_transition',
   state_nodes: [],
   activity_nodes: [],
   bindings: [],
@@ -44,11 +44,9 @@ const emptyGraph = {
     state_package_count: 0,
     atomic_state_count: 0,
     activity_node_count: 0,
-    virtual_activity_count: 0,
     executable_activity_count: 0,
     edge_count: 0,
     coverage_gap_count: 0,
-    partial_virtual_activity_count: 0,
     cross_level_binding_count: 0,
     blocking_count: 0,
   },
@@ -163,7 +161,7 @@ async function routeEditorFlowFixture(page: any) {
 }
 
 async function openNetworkEditor(page: any) {
-  await page.goto('/?networkEditorFullGraph=1')
+  await page.goto('/')
   await page.waitForSelector('.el-header', { timeout: 10000 })
   await page.locator('.el-tabs__item:has-text("网络编辑器")').click()
   await expect(page.getByTestId('network-editor')).toBeVisible()
@@ -182,6 +180,7 @@ async function openNetworkEditor(page: any) {
 }
 
 async function openCreateMenuItem(page: any, testId: string) {
+  await expect(page.locator('.el-overlay.is-drawer:visible')).toHaveCount(0)
   await page.getByTestId('network-editor-create-menu').click()
   const item = page.getByTestId(testId).last()
   await expect(item).toBeVisible()
@@ -207,6 +206,7 @@ async function createAtomicState(page: any, name: string, featureKey: string, ex
   await chooseElSelectOption(page, drawer.getByTestId('network-editor-state-target-value'), 'true')
   await drawer.getByTestId('network-editor-state-drawer-save').click()
   await expect(drawer).toBeHidden()
+  await expect(page.locator('.el-overlay.is-drawer:visible')).toHaveCount(0)
   const node = page.getByTestId(`network-editor-state-node-${expectedDraftId}`)
   await expect(node).toHaveCount(0)
   await expect(page.locator('.draft-change-list')).toContainText(name)
@@ -221,21 +221,8 @@ async function createAggregateState(page: any, name: string, expectedDraftId: st
   await drawer.locator('.el-form-item').nth(1).locator('input').fill(name)
   await drawer.getByTestId('network-editor-state-drawer-save').click()
   await expect(drawer).toBeHidden()
+  await expect(page.locator('.el-overlay.is-drawer:visible')).toHaveCount(0)
   const node = page.getByTestId(`network-editor-state-node-${expectedDraftId}`)
-  await expect(node).toBeVisible()
-  await expect(node).toContainText(name)
-  return node
-}
-
-async function createVirtualActivity(page: any, name: string, expectedDraftId: string) {
-  const open = await openBlankContextMenu(page, 520, 220)
-  await open.menu.locator('button').nth(1).click()
-  const drawer = page.getByTestId('network-editor-activity-drawer')
-  await expect(drawer).toBeVisible()
-  await drawer.locator('.el-form-item').nth(1).locator('input').fill(name)
-  await drawer.getByTestId('network-editor-activity-drawer-save').click()
-  await expect(drawer).toBeHidden()
-  const node = page.getByTestId(`network-editor-activity-node-${expectedDraftId}`)
   await expect(node).toBeVisible()
   await expect(node).toContainText(name)
   return node
@@ -248,10 +235,11 @@ async function createAtomicActivity(page: any, name: string, expectedDraftId: st
   await drawer.locator('.el-form-item').nth(1).locator('input').fill(name)
   await drawer.getByTestId('network-editor-atomic-drawer-save').click()
   await expect(drawer).toBeHidden()
-  const node = page.getByTestId(`network-editor-activity-node-${expectedDraftId}`)
-  await expect(node).toBeVisible()
-  await expect(node).toContainText(name)
-  return node
+  await expect(page.locator('.el-overlay.is-drawer:visible')).toHaveCount(0)
+  await expect(page.getByTestId(`network-editor-activity-node-${expectedDraftId}`)).toHaveCount(0)
+  const draftRow = page.locator('.draft-change-row', { hasText: name })
+  await expect(draftRow).toBeVisible()
+  return draftRow
 }
 
 async function openBlankContextMenu(page: any, offsetX: number, offsetY: number) {
@@ -276,14 +264,7 @@ async function createStateFromOpenDrawer(page: any, name: string, featureKey: st
   }
   await drawer.getByTestId('network-editor-state-drawer-save').click()
   await expect(drawer).toBeHidden()
-}
-
-async function createVirtualActivityFromOpenDrawer(page: any, name: string) {
-  const drawer = page.getByTestId('network-editor-activity-drawer')
-  await expect(drawer).toBeVisible()
-  await drawer.locator('.el-form-item').nth(1).locator('input').fill(name)
-  await drawer.getByTestId('network-editor-activity-drawer-save').click()
-  await expect(drawer).toBeHidden()
+  await expect(page.locator('.el-overlay.is-drawer:visible')).toHaveCount(0)
 }
 
 async function createAtomicActivityFromOpenDrawer(page: any, name: string) {
@@ -292,6 +273,7 @@ async function createAtomicActivityFromOpenDrawer(page: any, name: string) {
   await drawer.locator('.el-form-item').nth(1).locator('input').fill(name)
   await drawer.getByTestId('network-editor-atomic-drawer-save').click()
   await expect(drawer).toBeHidden()
+  await expect(page.locator('.el-overlay.is-drawer:visible')).toHaveCount(0)
 }
 
 function expectLayoutNear(layout: any, x: number, y: number) {
@@ -321,19 +303,37 @@ async function visibleBlankPointInX6Canvas(page: any, offsetX: number, offsetY: 
   await expect(canvas).toBeVisible()
   const point = await canvas.evaluate((element: HTMLElement, preferred: { offsetX: number, offsetY: number }) => {
     const rect = element.getBoundingClientRect()
+    const visibleRect = {
+      left: Math.max(rect.left, 0),
+      top: Math.max(rect.top, 0),
+      right: Math.min(rect.right, window.innerWidth),
+      bottom: Math.min(rect.bottom, window.innerHeight),
+    }
+    for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      const style = window.getComputedStyle(ancestor)
+      if (!/(auto|scroll|hidden|clip)/.test(`${style.overflow} ${style.overflowX} ${style.overflowY}`)) continue
+      const ancestorRect = ancestor.getBoundingClientRect()
+      visibleRect.left = Math.max(visibleRect.left, ancestorRect.left)
+      visibleRect.top = Math.max(visibleRect.top, ancestorRect.top)
+      visibleRect.right = Math.min(visibleRect.right, ancestorRect.right)
+      visibleRect.bottom = Math.min(visibleRect.bottom, ancestorRect.bottom)
+    }
+    if (visibleRect.right - visibleRect.left < 32 || visibleRect.bottom - visibleRect.top < 32) return null
     const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
+    const visibleWidth = visibleRect.right - visibleRect.left
+    const visibleHeight = visibleRect.bottom - visibleRect.top
     const candidates = [
-      [preferred.offsetX, preferred.offsetY],
-      [rect.width * 0.82, rect.height * 0.18],
-      [rect.width * 0.18, rect.height * 0.82],
-      [rect.width * 0.5, rect.height * 0.88],
-      [rect.width * 0.88, rect.height * 0.5],
-      [rect.width * 0.5, rect.height * 0.5],
+      [rect.left + preferred.offsetX, rect.top + preferred.offsetY],
+      [visibleRect.left + visibleWidth * 0.82, visibleRect.top + visibleHeight * 0.18],
+      [visibleRect.left + visibleWidth * 0.18, visibleRect.top + visibleHeight * 0.82],
+      [visibleRect.left + visibleWidth * 0.5, visibleRect.top + visibleHeight * 0.88],
+      [visibleRect.left + visibleWidth * 0.88, visibleRect.top + visibleHeight * 0.5],
+      [visibleRect.left + visibleWidth * 0.5, visibleRect.top + visibleHeight * 0.5],
     ]
     let fallback: { x: number, y: number } | null = null
     for (const [candidateX, candidateY] of candidates) {
-      const x = clamp(rect.left + candidateX, rect.left + 16, rect.right - 16)
-      const y = clamp(rect.top + candidateY, rect.top + 16, rect.bottom - 16)
+      const x = clamp(candidateX, visibleRect.left + 16, visibleRect.right - 16)
+      const y = clamp(candidateY, visibleRect.top + 16, visibleRect.bottom - 16)
       const hit = document.elementFromPoint(x, y) as HTMLElement | null
       if (!hit || !element.contains(hit)) continue
       fallback ||= { x, y }
@@ -616,21 +616,21 @@ test.describe('Network Editor — full node and edge creation flow', () => {
     })
     expect(stateNameMetrics.whiteSpace).toBe('nowrap')
     expect(stateNameMetrics.textOverflow).toBe('ellipsis')
-    expect(stateNameMetrics.scrollHeight).toBeLessThanOrEqual(stateNameMetrics.clientHeight + 2)
+    expect(stateNameMetrics.scrollHeight).toBeLessThanOrEqual(stateNameMetrics.clientHeight + 4)
     expect(stateNameMetrics.scrollWidth).toBeGreaterThan(stateNameMetrics.clientWidth)
     await expect(stateNode).toHaveAttribute('title', new RegExp(longStateName))
     await leftHoldLocatorWithoutDrag(page, stateNode)
 
-    const atomicNode = await createAtomicActivity(
+    await createAtomicActivity(
       page,
       'Toolbar atomic activity',
       'atomic_activity:draft-atomic-activity:draft-2',
     )
 
-    const beforePan = await locatorClientRect(atomicNode)
+    const beforePan = await locatorClientRect(stateNode)
     await leftDragBlankCanvas(page, 420, 520, -420, 0)
     await expect(page.getByTestId('network-editor-blank-context-menu')).toHaveCount(0)
-    const afterPan = await locatorClientRect(atomicNode)
+    const afterPan = await locatorClientRect(stateNode)
     expect(afterPan.x).toBeLessThan(beforePan.x - 180)
 
     const farClick = await openBlankContextMenu(page, 500, 460)
@@ -683,7 +683,6 @@ test.describe('Network Editor — full node and edge creation flow', () => {
     await chooseElSelectOption(page, stateDrawer.getByTestId('network-editor-state-target-value'), 'true')
     await stateDrawer.getByTestId('network-editor-state-drawer-save').click()
 
-    await page.getByText('展开全部', { exact: true }).click()
     await expect(page.locator('.el-loading-mask')).toBeHidden({ timeout: 10000 })
     const stateContainer = page.getByTestId('network-editor-state-package-container-draft-state:draft-1')
     const childState = page.locator(

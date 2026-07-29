@@ -64,3 +64,9 @@
 - 甘特纯组件现在按框选区域与任务条实际像素矩形计算交集；任一班次片段相交即命中任务，同一任务自动去重，并继续通过既有 `brush-select` 事件同步到统一 `scope_step_ids`。
 - 新增真实 Chromium 拖拽回归：启用右上角矩形框选工具，跨甘特任务条拖框后，“已选择 N 个活动”更新为全部命中任务数。
 - 验证：框选专项连续 3 次 passed；Vite production build passed；Solve 其余 13 条 passed。既有“引用原子状态树”用例在整组运行时发生一次 `/solve/layered` 请求等待超时，单独重跑 passed，与本次甘特代码路径无关。
+
+## Follow-up 2026-07-17：甘特任务标签简化
+
+- 甘特图左侧任务标签默认仅显示活动名称，不再显示步骤编号或活动编码；名称缺失时保留稳定降级显示。
+- 分组、状态泳道和计划对比视图统一优先使用活动名称；任务排序、求解数据和后端契约不变。
+- 验证：Vite production build passed with the existing chunk-size warning；ANCHOR 检查无违反。
