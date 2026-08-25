@@ -408,6 +408,11 @@ Write-Host ("StartMode:   {0}" -f $StartMode)
 
 Write-Section 'Loading environment'
 Import-ProjectEnv $envFile
+if (-not [string]::IsNullOrWhiteSpace($ExpectedCommit)) {
+    # Start-Process inherits the current process environment. Publishing the
+    # expected commit here lets the running API prove which checkout it serves.
+    $env:APP_COMMIT = $ExpectedCommit
+}
 Write-Host ("DB_HOST={0}" -f $env:DB_HOST)
 Write-Host ("DB_PORT={0}" -f $env:DB_PORT)
 Write-Host ("DB_NAME={0}" -f $env:DB_NAME)

@@ -15,6 +15,7 @@ def test_backend_restart_only_claims_processes_from_this_checkout():
     assert "if (Test-ProjectProcess $pidValue $Root)" in script
     assert "Ignoring stale backend PID file owned by another process" in script
     assert "$normalizedCommand.Contains('uvicorn')" not in script
+    assert "$env:APP_COMMIT = $ExpectedCommit" in script
 
 
 def test_frontend_restart_only_claims_processes_from_this_checkout():
