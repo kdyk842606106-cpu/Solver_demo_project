@@ -3,6 +3,7 @@
 **评审日期：** 2026-08-25  
 **开发分支：** `codex/planner-exploration-ui-v1`  
 **基线提交：** `9214a41329c8398f8e7ea3f7d92d18e989f5980f`  
+**实现提交：** `eeaa414c`  
 **隔离工作树：** `D:\Solver_demo_project_planner_exploration`  
 **数据库版本：** `015_planner_scenario`  
 **契约版本：** `planner-shared-scenario/v1`
