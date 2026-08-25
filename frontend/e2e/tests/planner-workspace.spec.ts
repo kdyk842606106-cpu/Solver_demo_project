@@ -56,7 +56,14 @@ function result(engine: string) {
     status: 'OK',
     scenario_hash: 'same-hash',
     elapsed_seconds: 0.02,
-    paths: [{ validator_status: 'VALID', metrics: { makespan: 5, execution_count: 2 }, executions: [{ activity_name: '准备', start_time: 0, end_time: 2 }, { activity_name: '执行', start_time: 2, end_time: 5 }] }],
+    paths: [{
+      validator_status: 'VALID',
+      metrics: { makespan: 5, execution_count: 2, critical_path_length: 5, resource_peak: [] },
+      executions: [
+        { activity_id: activityA, instance_id: `${activityA}#1`, activity_name: '准备', start_time: 0, end_time: 2, before_state_ids: ['state:seed'], after_state_ids: [stateA] },
+        { activity_id: activityB, instance_id: `${activityB}#1`, activity_name: '执行', start_time: 2, end_time: 5, before_state_ids: [stateA], after_state_ids: ['state:b-output'] },
+      ],
+    }],
   }
 }
 
@@ -79,11 +86,11 @@ test('activity-only canvas uses package containers and no visible state nodes', 
   await page.getByText('SCN-DEMO · Planner 演示场景', { exact: true }).click()
   await page.getByRole('tab', { name: '活动网络' }).click()
 
-  const canvas = page.getByTestId('planner-activity-canvas')
-  await expect(canvas.locator('[data-node-kind="activity"]')).toHaveCount(2)
-  await expect(canvas.locator('[data-container-kind="activity-package"]')).toHaveCount(2)
-  await expect(canvas.locator('[data-node-kind="state"], [data-node-kind="state_package"]')).toHaveCount(0)
-  await expect(canvas.locator('svg[aria-label="活动依赖线"] path').last()).toBeVisible()
+  const canvas = page.getByTestId('planner-activity-x6-canvas')
+  await expect(canvas.locator('.x6-network-node.x6-activity-node')).toHaveCount(2)
+  await expect(canvas.locator('.x6-network-container.x6-activity-container')).toHaveCount(2)
+  await expect(canvas.locator('.x6-state-node, .x6-state-container')).toHaveCount(0)
+  await expect(canvas.getByTestId('network-editor-flow-edge-line')).toHaveCount(1)
   await expect(page.getByText('知识版本')).toHaveCount(0)
 })
 
@@ -95,13 +102,13 @@ test('activity connection is staged as one draft without exposing state nodes', 
   await page.getByRole('tab', { name: '活动网络' }).click()
   await page.getByRole('button', { name: '连接活动' }).click()
 
-  const nodes = page.getByTestId('planner-activity-canvas').locator('[data-node-kind="activity"]')
+  const nodes = page.getByTestId('planner-activity-x6-canvas').locator('.x6-network-node.x6-activity-node')
   await nodes.nth(1).click()
   await nodes.nth(0).click()
 
   await expect(page.getByText('当前有 1 项未提交变更')).toBeVisible()
   await expect(page.getByRole('button', { name: '统一提交（1）' })).toBeVisible()
-  await expect(page.getByTestId('planner-activity-canvas').locator('[data-node-kind="state"], [data-node-kind="state_package"]')).toHaveCount(0)
+  await expect(page.getByTestId('planner-activity-x6-canvas').locator('.x6-state-node, .x6-state-container')).toHaveCount(0)
 })
 
 test('all engines display one shared snapshot and valid replay results', async ({ page }) => {
@@ -110,8 +117,11 @@ test('all engines display one shared snapshot and valid replay results', async (
   await expect(page.getByText('Planner 已连接')).toBeVisible()
   await page.getByRole('button', { name: '开始求解' }).click()
   await expect(page.getByText('隔离且一致')).toBeVisible()
-  await expect(page.locator('.engine-name').getByText('旧引擎', { exact: true })).toBeVisible()
-  await expect(page.locator('.engine-name').getByText('Anytime A*', { exact: true })).toBeVisible()
-  await expect(page.locator('.engine-name').getByText('遗传算法 GA', { exact: true })).toBeVisible()
-  await expect(page.locator('.validator .el-tag').getByText('VALID', { exact: true })).toHaveCount(3)
+  await expect(page.locator('.comparison-card').getByText('旧引擎', { exact: true })).toBeVisible()
+  await expect(page.getByText('引擎结果对比')).toBeVisible()
+  await expect(page.getByRole('tab', { name: '甘特图' })).toBeVisible()
+  await expect(page.getByTestId('gantt-chart-canvas').locator('canvas')).toBeVisible()
+  await page.getByRole('tab', { name: '活动网络图' }).click()
+  await expect(page.locator('.network-board canvas')).toBeVisible()
+  await expect(page.getByText('VALID', { exact: true })).toHaveCount(4)
 })

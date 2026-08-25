@@ -9,9 +9,9 @@
 - 活动、种子状态、资源、事件、活动包及成员技术 ID 全部由后端创建；
 - 活动创建时自动创建一个主完成状态，活动包创建时自动创建同 UUID 后缀的隐藏状态包；
 - 活动包固定两级，活动可在多个二级包中复用，镜像状态成员同步复用；
-- 网络编辑器只显示活动节点，活动包为容器，状态/状态包不进入画布 DOM；
+- 网络编辑器复用原 `NetworkEditorX6Canvas` 的缩放、拖动、容器和连线呈现；适配器只投影活动节点，活动包为容器，状态/状态包不进入画布 DOM；
 - 拖动、活动连线和移除依赖先进入页面草稿，一次事务统一提交；
-- `LEGACY`、`ASTAR`、`GA` 和 `ALL` 使用同一场景快照，结果统一交给 Planner Validator 重放；
+- `LEGACY`、`ASTAR`、`GA` 和 `ALL` 使用同一场景快照，结果统一交给 Planner Validator 重放；求解结果复用原甘特图、活动网络图、执行明细和指标视图；
 - JSON、中文 Excel 以及旧分层数据迁移均经过同一个规范化和校验入口。
 
 ## 2. 运行配置
@@ -22,10 +22,12 @@
 PLANNER_PROJECT_PATH=D:\planner
 ```
 
-数据库升级到 `015_planner_scenario` 后新增：
+数据库升级到 `016_planner_compat_merge` 后新增：
 
 - `planner_scenario`：权威场景 JSON、内部并发序号和下一展示编号；
 - `planner_run`：求解请求、不可变快照哈希和统一结果。
+
+`015_knowledge_repository` 在本分支中仅作为无操作兼容标记，用来识别曾经运行过旧知识库版本的数据库；不会创建、读取或删除知识库结构。
 
 ## 3. 用户工作流
 
@@ -52,4 +54,3 @@ PLANNER_PROJECT_PATH=D:\planner
 - [共享场景 V1 契约](./PLANNER_SHARED_SCENARIO_V1.md)
 - [部署与回退说明](./PLANNER_DEPLOYMENT_ROLLBACK.md)
 - [阶段门禁验收报告](./PLANNER_GATE_ACCEPTANCE_REPORT.md)
-

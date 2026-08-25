@@ -126,6 +126,10 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
+  showEditActions: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 const emit = defineEmits([
@@ -2224,10 +2228,10 @@ function renderNodeHtml(data) {
   const toggle = data.canToggle
     ? `<span class="node-action" role="button" tabindex="0" data-action="toggle">${escapeHtml(data.actionLabel)}</span>`
     : ''
-  const edit = data.canMutate
+  const edit = data.canMutate && props.showEditActions
     ? '<span class="node-action" role="button" tabindex="0" data-action="edit">编辑</span>'
     : ''
-  const canCreateInside = data.canMutate && (
+  const canCreateInside = data.canMutate && props.showEditActions && (
     data.kind === 'state'
       ? data.canToggle
       : data.isPackage && Number(data.node?.level || 0) === 2
@@ -2276,7 +2280,7 @@ function renderContainerTitleHtml(data) {
   const titleCopyAttrs = data.canMutate
     ? `class="container-title-copy container-move-handle" data-testid="${escapeAttr(data.moveTestId)}" title="Drag container"`
     : 'class="container-title-copy"'
-  const canCreateInside = data.canMutate && (
+  const canCreateInside = data.canMutate && props.showEditActions && (
     data.kind === 'state' ||
     (data.kind === 'activity' && Number(data.node?.level || 0) === 2)
   )
@@ -2395,7 +2399,17 @@ function handleNodeMouseLeave() {
 function handleHtmlActionClick(event) {
   if (event?.[NODE_ACTION_EVENT_HANDLED]) return
   const actionElement = event?.target?.closest?.('[data-action]')
-  if (!actionElement || !hostRef.value?.contains(actionElement)) return
+  if (!actionElement) {
+    const nodeElement = nodeElementFromEvent(event)
+    if (!nodeElement || !hostRef.value?.contains(nodeElement)) return
+    const nodeCell = cellFromEventTarget(nodeElement)
+    const data = nodeCell?.getData?.() || {}
+    if (!data.node || !data.kind || data.role !== 'node') return
+    markNodeActionEventHandled(event)
+    emit(data.kind === 'state' ? 'select-state' : 'select-activity', { node: data.node, event })
+    return
+  }
+  if (!hostRef.value?.contains(actionElement)) return
   const cell = cellFromEventTarget(actionElement)
   if (!cell) return
   const data = cell.getData() || {}
@@ -3229,6 +3243,7 @@ function isExpandedNode(node, kind) {
 }
 
 function nodeMeta(node, kind) {
+  if (node?.display_meta) return node.display_meta
   if (kind === 'state') {
     const parts = [`${node.leaf_count || 1} leaves`]
     if (node.reference_ids?.length) parts.push(`${node.reference_ids.length} refs`)

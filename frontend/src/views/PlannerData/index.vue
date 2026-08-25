@@ -80,7 +80,7 @@
         </el-tab-pane>
 
         <el-tab-pane label="活动网络" name="network">
-          <PlannerActivityCanvas
+          <PlannerX6ActivityCanvas
             :graph="graph"
             :editable="editing"
             @select-activity="selectActivity"
@@ -131,7 +131,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import PlannerActivityCanvas from './PlannerActivityCanvas.vue'
+import PlannerX6ActivityCanvas from './PlannerX6ActivityCanvas.vue'
 import { commitPlannerDraft, createPlannerScenario, exportPlannerScenario, getPlannerGraph, getPlannerScenario, importPlannerExcel, importPlannerScenario, listPlannerScenarios, plannerExcelExportUrl, validatePlannerScenario } from '../../api/planner'
 
 const scenarios = ref([]), scenarioId = ref(''), current = ref({ revision: 0, scenario: {} }), graph = ref({ containers: [], nodes: [], edges: [] })
@@ -169,7 +169,33 @@ function queueTargetPackages() { const old = drafts.value.findIndex((item) => it
 function pendingPreconditions(activity) { return drafts.value.findLast((item) => item.operation === 'update_activity' && item.object_id === activity.id && item.payload.preconditions)?.payload.preconditions || activity.preconditions || [] }
 function queueConnection({ sourceActivityId, targetActivityId }) { const source = (scenario.value.activities || []).find((item) => item.id === sourceActivityId); const target = (scenario.value.activities || []).find((item) => item.id === targetActivityId); if (!source || !target) return; const preconditions = [...pendingPreconditions(target)]; if (preconditions.some((item) => item.state_id === source.output_state_id)) return ElMessage.warning('这条活动依赖已经存在'); preconditions.push({ state_id: source.output_state_id, relation_role: 'transition' }); replaceDraft((item) => item.operation === 'update_activity' && item.object_id === target.id && item.payload.preconditions, { operation: 'update_activity', object_id: target.id, payload: { preconditions } }, `连接 ${source.name} → ${target.name}`) }
 function queueRemoveConnection(edge) { const targetRef = (graph.value.nodes || []).find((item) => item.id === edge.target); const target = (scenario.value.activities || []).find((item) => item.id === targetRef?.canonical_activity_id); if (!target) return; const preconditions = pendingPreconditions(target).filter((item) => !(item.state_id === edge.state_id && item.relation_role === edge.relation_role)); replaceDraft((item) => item.operation === 'update_activity' && item.object_id === target.id && item.payload.preconditions, { operation: 'update_activity', object_id: target.id, payload: { preconditions } }, `移除指向 ${target.name} 的依赖`) }
-function queueLayout(layout) { const existing = drafts.value.find((item) => item.operation === 'update_layout'); const activityRefs = [...(existing?.payload.activity_refs || []).filter((item) => item.id !== layout.id), layout]; replaceDraft((item) => item.operation === 'update_layout', { operation: 'update_layout', payload: { activity_refs: activityRefs, package_containers: existing?.payload.package_containers || [] } }, '调整活动布局') }
+function queueLayout(layout) {
+  const existing = drafts.value.find((item) => item.operation === 'update_layout')
+  const isPackage = layout.kind === 'package'
+  const key = isPackage ? 'package_containers' : 'activity_refs'
+  const previous = (existing?.payload[key] || []).find((item) => item.id === layout.id) || {}
+  const next = { ...previous, id: layout.id }
+  if (layout.x != null && layout.y != null) {
+    next.x = layout.x
+    next.y = layout.y
+  }
+  if (isPackage && layout.width != null && layout.height != null) {
+    next.width = layout.width
+    next.height = layout.height
+  }
+  const values = [...(existing?.payload[key] || []).filter((item) => item.id !== layout.id), next]
+  replaceDraft(
+    (item) => item.operation === 'update_layout',
+    {
+      operation: 'update_layout',
+      payload: {
+        activity_refs: key === 'activity_refs' ? values : (existing?.payload.activity_refs || []),
+        package_containers: key === 'package_containers' ? values : (existing?.payload.package_containers || []),
+      },
+    },
+    isPackage ? '调整活动包布局' : '调整活动布局',
+  )
+}
 function queueClone(row) { const ref = `draft:activity:${Date.now()}`; addDraft({ operation: 'create_activity', client_ref: ref, payload: { name: `${row.name}副本`, duration: row.duration, preconditions: row.preconditions, additional_output_state_ids: row.additional_output_state_ids, resource_reqs: row.resource_reqs, event_reqs: row.event_reqs, max_instances: row.max_instances, is_milestone: row.is_milestone } }, `复制 ${row.name}`) }
 async function queueDeletePackage(row) { await ElMessageBox.confirm(`删除活动包“${row.name}”？活动本体不会删除。`, '确认'); addDraft({ operation: 'delete_package', object_id: row.id }, `删除包 ${row.name}`) }
 async function queueDeleteActivity(row) { await ElMessageBox.confirm(`删除活动“${row.name}”？被其他活动依赖时提交会被阻止。`, '确认'); addDraft({ operation: 'delete_activity', object_id: row.id }, `删除活动 ${row.name}`) }
