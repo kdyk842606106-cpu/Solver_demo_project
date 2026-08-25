@@ -72,6 +72,9 @@ def patch_sqlite_types(force: bool = False):
         models.PlanAdjustment.__table__.c.diagnostics,
         models.WorkCalendarRevision.__table__.c.weekly_windows,
         models.WorkCalendarRevision.__table__.c.date_exceptions,
+        models.PlannerScenarioRecord.__table__.c.scenario_json,
+        models.PlannerRunRecord.__table__.c.request_json,
+        models.PlannerRunRecord.__table__.c.result_json,
     ]
     for column in json_columns:
         column.type = JSON()

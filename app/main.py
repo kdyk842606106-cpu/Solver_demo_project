@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.db.session import async_engine
-from app.api.v1 import adjustments, calendars, imports, master_data, plans, solve, state, system
+from app.api.v1 import adjustments, calendars, imports, master_data, planner_migrations, planner_runs, planner_scenarios, plans, solve, state, system
 from app.services.plan_adjustment import PlanAdjustmentError
 from app.services.system_status import get_release_info
 
@@ -117,6 +117,9 @@ app.include_router(imports.router, prefix="/api/v1")
 app.include_router(system.router, prefix="/api/v1")
 app.include_router(calendars.router, prefix="/api/v1")
 app.include_router(adjustments.router, prefix="/api/v1")
+app.include_router(planner_scenarios.router, prefix="/api/v1")
+app.include_router(planner_runs.router, prefix="/api/v1")
+app.include_router(planner_migrations.router, prefix="/api/v1")
 app.mount(
     "/assets",
     StaticFiles(directory=FRONTEND_DIST / "assets", check_dir=False),

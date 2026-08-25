@@ -1,0 +1,34 @@
+import api from './index'
+
+export const listPlannerScenarios = () => api.get('/planner-scenarios')
+export const createPlannerScenario = (payload) => api.post('/planner-scenarios', payload)
+export const getPlannerScenario = (id) => api.get(`/planner-scenarios/${encodeURIComponent(id)}`)
+export const commitPlannerDraft = (id, payload) => api.post(`/planner-scenarios/${encodeURIComponent(id)}/draft-commit`, payload)
+export const updatePlannerScenario = (id, payload) => api.patch(`/planner-scenarios/${encodeURIComponent(id)}`, payload)
+export const createPlannerActivity = (id, payload) => api.post(`/planner-scenarios/${encodeURIComponent(id)}/activities`, payload)
+export const updatePlannerActivity = (id, activityId, payload) => api.patch(`/planner-scenarios/${encodeURIComponent(id)}/activities/${encodeURIComponent(activityId)}`, payload)
+export const clonePlannerActivity = (id, activityId) => api.post(`/planner-scenarios/${encodeURIComponent(id)}/activities/${encodeURIComponent(activityId)}/clone`)
+export const deletePlannerActivity = (id, activityId) => api.delete(`/planner-scenarios/${encodeURIComponent(id)}/activities/${encodeURIComponent(activityId)}`)
+export const createPlannerPackage = (id, payload) => api.post(`/planner-scenarios/${encodeURIComponent(id)}/activity-packages`, payload)
+export const updatePlannerPackage = (id, packageId, payload) => api.patch(`/planner-scenarios/${encodeURIComponent(id)}/activity-packages/${encodeURIComponent(packageId)}`, payload)
+export const deletePlannerPackage = (id, packageId) => api.delete(`/planner-scenarios/${encodeURIComponent(id)}/activity-packages/${encodeURIComponent(packageId)}`)
+export const addPlannerPackageMember = (id, packageId, payload) => api.post(`/planner-scenarios/${encodeURIComponent(id)}/activity-packages/${encodeURIComponent(packageId)}/members`, payload)
+export const removePlannerPackageMember = (id, membershipId) => api.delete(`/planner-scenarios/${encodeURIComponent(id)}/activity-package-members/${encodeURIComponent(membershipId)}`)
+export const createPlannerSeedState = (id, payload) => api.post(`/planner-scenarios/${encodeURIComponent(id)}/seed-states`, payload)
+export const createPlannerResource = (id, payload) => api.post(`/planner-scenarios/${encodeURIComponent(id)}/resources`, payload)
+export const createPlannerEvent = (id, payload) => api.post(`/planner-scenarios/${encodeURIComponent(id)}/external-events`, payload)
+export const getPlannerGraph = (id) => api.get(`/planner-scenarios/${encodeURIComponent(id)}/graph`)
+export const updatePlannerGraphLayout = (id, payload) => api.patch(`/planner-scenarios/${encodeURIComponent(id)}/graph/layout`, payload)
+export const validatePlannerScenario = (id) => api.post(`/planner-scenarios/${encodeURIComponent(id)}/validate`)
+export const exportPlannerScenario = (id) => api.get(`/planner-scenarios/${encodeURIComponent(id)}/export`)
+export const importPlannerScenario = (payload) => api.post('/planner-scenarios/import', payload)
+export const plannerExcelTemplateUrl = '/api/v1/planner-scenarios/excel-template'
+export const plannerExcelExportUrl = (id) => `/api/v1/planner-scenarios/${encodeURIComponent(id)}/export.xlsx`
+export const importPlannerExcel = (file) => {
+  const form = new FormData()
+  form.append('file', file)
+  return api.post('/planner-scenarios/import.xlsx', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+}
+export const getPlannerCapabilities = () => api.get('/planner-runs/capabilities')
+export const createPlannerRun = (payload) => api.post('/planner-runs', payload)
+export const listPlannerRuns = (scenarioId) => api.get('/planner-runs', { params: scenarioId ? { scenario_id: scenarioId } : {} })

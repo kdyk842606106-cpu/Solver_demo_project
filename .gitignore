@@ -46,6 +46,7 @@ frontend/e2e/.venv-*/
 htmlcov/
 .tox/
 .playwright-mcp/
+frontend/test-results*/
 
 # MyPy
 .mypy_cache/

@@ -1243,3 +1243,57 @@ class PlanAdjustment(Base):
             name="ck_plan_adjustment_status",
         ),
     )
+
+
+# ============================================================
+# Planner 共享场景（独立于旧机台知识模型）
+# ============================================================
+
+
+class PlannerScenarioRecord(Base):
+    """Planner 场景的权威持久化快照。
+
+    场景内活动、状态、活动包及镜像状态包使用字符串 UUID 身份，完整
+    业务契约保存在 ``scenario_json``。旧分层知识表只用于兼容读取，不
+    再作为本工作区的权威写模型。
+    """
+
+    __tablename__ = "planner_scenario"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    display_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    next_activity_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    next_package_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    scenario_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class PlannerRunRecord(Base):
+    """Immutable-input Planner/legacy comparison run and normalized result."""
+
+    __tablename__ = "planner_run"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    scenario_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("planner_scenario.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    scenario_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    engine: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="running")
+    request_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    result_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("engine IN ('LEGACY', 'ASTAR', 'GA', 'ALL')", name="ck_planner_run_engine"),
+    )

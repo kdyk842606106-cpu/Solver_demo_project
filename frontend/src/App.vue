@@ -23,11 +23,11 @@
         >
           <el-menu-item index="data">
             <el-icon><Grid /></el-icon>
-            <span>数据管理</span>
+            <span>Planner 数据</span>
           </el-menu-item>
           <el-menu-item index="solve">
             <el-icon><Cpu /></el-icon>
-            <span>求解</span>
+            <span>多引擎求解</span>
           </el-menu-item>
         </el-menu>
       </nav>
@@ -43,8 +43,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { Grid, Cpu } from '@element-plus/icons-vue'
-import DataManagement from './views/DataManagement/index.vue'
-import SolvePage from './views/SolvePage/index.vue'
+import DataManagement from './views/PlannerData/index.vue'
+import SolvePage from './views/PlannerSolve/index.vue'
 import { getHealth } from './api/system'
 
 const currentView = ref('data')
