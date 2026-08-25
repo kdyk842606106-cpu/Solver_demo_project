@@ -98,6 +98,8 @@ npm run preview:api -- --backend http://127.0.0.1:8012 --port 8013
 
 如果你使用本地 PostgreSQL（不通过 Docker），请使用 [`start.local.bat`](./start.local.bat)：
 
+该入口会先校验当前分支提交，替换已占用 8000/5173 的旧 Solver 进程，再启动本工作树的后端与前端，避免浏览器继续显示其他工作树的页面。
+
 - 不检查/启动 Docker
 - 直接检查本地 PostgreSQL 连通性
 - 执行迁移 + 加载种子 + 启动前后端

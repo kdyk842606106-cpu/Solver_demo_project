@@ -1,6 +1,7 @@
 param(
     [string]$ProjectRoot,
-    [int]$FrontendPort = 5173
+    [int]$FrontendPort = 5173,
+    [switch]$ForceKillPortProcess
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,10 +55,16 @@ function Test-FrontendProcess([int]$ProcessId, [string]$Root) {
     return $normalizedCommand.Contains($normalizedRoot)
 }
 
-function Stop-FrontendPort([string]$Root, [int]$Port) {
+function Stop-FrontendPort([string]$Root, [int]$Port, [switch]$Force) {
     $portPids = Get-ListeningProcessIds $Port
     foreach ($portPid in $portPids) {
         if (-not (Test-FrontendProcess $portPid $Root)) {
+            if ($Force) {
+                Write-Host ("Stopping existing process PID {0} on frontend port {1} (forced switch)" -f $portPid, $Port)
+                Stop-Process -Id $portPid -Force
+                continue
+            }
+
             $commandLine = Get-ProcessCommandLine $portPid
             throw (
                 "Port {0} is owned by PID {1}, but it does not look like this frontend. " +
@@ -126,7 +133,7 @@ Write-Host ("ProjectRoot:  {0}" -f $ProjectRoot)
 Write-Host ("FrontendPort: {0}" -f $FrontendPort)
 
 Write-Section 'Stopping previous frontend'
-Stop-FrontendPort -Root $ProjectRoot -Port $FrontendPort
+Stop-FrontendPort -Root $ProjectRoot -Port $FrontendPort -Force:$ForceKillPortProcess
 
 Write-Section 'Starting frontend'
 $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'

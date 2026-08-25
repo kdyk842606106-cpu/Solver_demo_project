@@ -25,7 +25,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0deploy\scripts\start_intranet_frontend.ps1" -ProjectRoot "%CD%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0deploy\scripts\start_intranet_frontend.ps1" -ProjectRoot "%CD%" -ForceKillPortProcess
 if errorlevel 1 (
     echo [ERROR] Frontend restart failed.
     pause
