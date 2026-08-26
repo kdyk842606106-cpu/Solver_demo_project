@@ -14,7 +14,7 @@ from app.services.planner_scenarios import PlannerScenarioError, normalize_impor
 SHEETS = {
     "场景": ["场景名称", "执行模式", "起始时间", "最大活动实例数", "时间预算秒", "转换预算"],
     "活动包": ["包引用", "名称", "父包引用", "排序"],
-    "活动": ["活动引用", "名称", "工期", "最大实例数", "是否目标活动"],
+    "活动": ["活动引用", "名称", "工期", "最大实例数"],
     "包成员": ["包引用", "活动引用", "排序"],
     "种子状态": ["状态引用", "名称", "初始激活", "目标必需", "目标禁止"],
     "活动前置": ["活动引用", "状态引用", "关系角色"],
@@ -38,7 +38,7 @@ def template_workbook() -> bytes:
     workbook["活动包"].append(["P001", "一级包", "", 10])
     workbook["活动包"].append(["P002", "二级包", "P001", 10])
     workbook["种子状态"].append(["S001", "开始", "是", "否", "否"])
-    workbook["活动"].append(["A001", "示例活动", 10, "", "否"])
+    workbook["活动"].append(["A001", "示例活动", 10, ""])
     workbook["包成员"].append(["P002", "A001", 10])
     workbook["活动前置"].append(["A001", "S001", "transition"])
     return _bytes(workbook)
@@ -70,7 +70,7 @@ def export_workbook(scenario: dict[str, Any]) -> bytes:
     for item in scenario.get("activity_packages", []):
         workbook["活动包"].append([package_refs[item["id"]], item["name"], package_refs.get(item.get("parent_id"), ""), item.get("sort_order", 0)])
     for item in scenario.get("activities", []):
-        workbook["活动"].append([activity_refs[item["id"]], item["name"], item["duration"], item.get("max_instances"), _yn(item["id"] in scenario.get("target_activity_ids", []))])
+        workbook["活动"].append([activity_refs[item["id"]], item["name"], item["duration"], item.get("max_instances")])
         for relation in item.get("preconditions", []):
             workbook["活动前置"].append([activity_refs[item["id"]], state_refs.get(relation["state_id"], relation["state_id"]), relation.get("relation_role", "required")])
         for resource_id, quantity in item.get("resource_reqs", {}).items():
@@ -87,7 +87,6 @@ def export_workbook(scenario: dict[str, Any]) -> bytes:
         workbook["外部事件"].append([event_refs[item["id"]], item.get("name", event_refs[item["id"]]), item["time"]])
         for state_id in item.get("add_state_ids", []): workbook["事件状态"].append([event_refs[item["id"]], "add", state_refs.get(state_id, state_id)])
         for state_id in item.get("remove_state_ids", []): workbook["事件状态"].append([event_refs[item["id"]], "remove", state_refs.get(state_id, state_id)])
-    for value in scenario.get("target_activity_package_ids", []): workbook["包目标范围"].append(["target", package_refs[value]])
     for value in scenario.get("activity_package_scope_ids", []): workbook["包目标范围"].append(["scope", package_refs[value]])
     return _bytes(workbook)
 

@@ -11,10 +11,10 @@
 ## 2. 升级
 
 ```powershell
-python -m alembic upgrade 015_planner_scenario
+python -m alembic upgrade 017_planner_runtime_state_targets
 ```
 
-升级只新增 `planner_scenario` 和 `planner_run`，不修改旧业务表。随后设置：
+015 新增 `planner_scenario` 和 `planner_run`；017 不新增表或业务字段，只把历史场景中的目标活动/目标包转换为建议目标状态，并保留降级审计信息。随后设置：
 
 ```env
 PLANNER_PROJECT_PATH=D:\planner
@@ -36,6 +36,14 @@ PLANNER_PROJECT_PATH=D:\planner
 
 若新页面或求解桥故障，先回退应用代码到发布前提交。因为旧表未改，旧系统可继续读取原数据；已创建的 Planner 场景保留在新表中，待修复后继续使用。
 
+只回退本轮运行目标语义时执行：
+
+```powershell
+python -m alembic downgrade 016_planner_compat_merge
+```
+
+017 的降级会从 `provenance.runtime_state_target_migration_v1` 恢复原目标活动、目标包和原目标状态。
+
 若必须回退数据库结构，在确认不再需要新场景和运行记录、并完成导出/备份后执行：
 
 ```powershell
@@ -51,4 +59,3 @@ python -m alembic downgrade 014_body_reference_unification
 - 场景提交 422：按稳定 `error_code` 和 `issues.object_id` 定位业务对象；
 - 单引擎失败：查看该引擎诊断，其他已验证结果仍会保留；
 - 镜像不一致：以活动包侧为权威重新导出，不允许手工修改状态包。
-

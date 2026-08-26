@@ -32,10 +32,29 @@
         <el-form-item label="随机种子">
           <el-input-number v-model="form.seed" style="width:100%" />
         </el-form-item>
+        <el-form-item label="当前状态" class="state-control">
+          <el-select v-model="form.current_state_ids" multiple filterable collapse-tags :max-collapse-tags="4" placeholder="选择本次求解的当前事实" data-testid="current-state-select" style="width:100%">
+            <el-option v-for="item in stateOptions" :key="item.id" :value="item.id" :label="item.label" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="目标状态" class="state-control">
+          <el-select v-model="form.target_state_ids" multiple filterable collapse-tags :max-collapse-tags="4" placeholder="选择本次求解要实现的事实" data-testid="target-state-select" style="width:100%">
+            <el-option v-for="item in stateOptions" :key="item.id" :value="item.id" :label="item.label" :disabled="item.forbidden" />
+          </el-select>
+        </el-form-item>
       </el-form>
+      <el-alert v-if="invalidSuggestedStateLabels.length" type="error" :closable="false" show-icon class="selection-alert" :title="`建议状态已失效：${invalidSuggestedStateLabels.join('、')}`" />
+      <el-alert v-else-if="selectedForbiddenTargetLabels.length" type="error" :closable="false" show-icon class="selection-alert" :title="`禁止状态不能作为目标：${selectedForbiddenTargetLabels.join('、')}`" />
+      <div class="selection-summary">
+        <span>当前状态 <strong>{{ stateCounts.current }}</strong></span>
+        <span>目标状态 <strong>{{ stateCounts.target }}</strong></span>
+        <span>已满足目标 <strong>{{ stateCounts.satisfied }}</strong></span>
+        <span>尚需实现 <strong>{{ stateCounts.outstanding }}</strong></span>
+        <el-button link type="primary" :disabled="!form.scenario_id" @click="restoreSuggestions">恢复建议值</el-button>
+      </div>
       <div class="run-actions">
         <div><span>资源模型</span><strong>容量汇总（不分配具体资源实例）</strong></div>
-        <el-button type="primary" size="large" :disabled="!form.scenario_id || !capabilities.planner_available" :loading="running" @click="solve">开始求解</el-button>
+        <el-button type="primary" size="large" :disabled="!canSolve" :loading="running" @click="solve">开始求解</el-button>
       </div>
     </section>
 
@@ -45,7 +64,9 @@
         <div><span>运行状态</span><strong>{{ run.status }}</strong></div>
         <div><span>场景快照</span><code>{{ run.scenario_hash?.slice(0, 16) }}</code></div>
         <div><span>输入共享</span><strong>{{ run.result?.engines_share_mutable_state === false ? '隔离且一致' : '-' }}</strong></div>
-        <div><span>场景版本</span><strong>r{{ scenarioDetails.revision || '-' }}</strong></div>
+        <div><span>当前 / 目标</span><strong>{{ run.request?.current_state_ids?.length || 0 }} / {{ run.request?.target_state_ids?.length || 0 }}</strong></div>
+        <div><span>已满足 / 待实现</span><strong>{{ runStateCounts.satisfied }} / {{ runStateCounts.outstanding }}</strong></div>
+        <div><span>场景版本</span><strong>r{{ run.request?.expected_revision || '-' }}</strong></div>
       </section>
 
       <section class="comparison-card">
@@ -124,8 +145,28 @@ const running = ref(false)
 const run = ref(null)
 const activeEngine = ref('ASTAR')
 const activeResultTab = ref('gantt')
-const form = reactive({ scenario_id: '', engine: 'ALL', seed: 42, budget: { time_limit_seconds: 5, transition_limit: 20000, max_solutions: 10 } })
+const suggestedStates = reactive({ current: [], target: [] })
+const form = reactive({ scenario_id: '', expected_revision: 0, current_state_ids: [], target_state_ids: [], engine: 'ALL', seed: 42, budget: { time_limit_seconds: 5, transition_limit: 20000, max_solutions: 10 } })
 const results = computed(() => run.value?.result?.results || {})
+const stateOptions = computed(() => {
+  const states = scenarioDetails.value.scenario?.states || []
+  const totals = states.reduce((counts, item) => ({ ...counts, [item.name]: (counts[item.name] || 0) + 1 }), {})
+  const seen = {}
+  const forbidden = new Set(scenarioDetails.value.scenario?.forbidden_state_ids || [])
+  return states.map((item) => {
+    seen[item.name] = (seen[item.name] || 0) + 1
+    return { id: item.id, label: totals[item.name] > 1 ? `${item.name}（${seen[item.name]}）` : item.name, forbidden: forbidden.has(item.id) }
+  })
+})
+const knownStateIds = computed(() => new Set(stateOptions.value.map((item) => item.id)))
+const invalidSuggestedStateLabels = computed(() => [...new Set([...form.current_state_ids, ...form.target_state_ids].filter((id) => !knownStateIds.value.has(id)))])
+const selectedForbiddenTargetLabels = computed(() => {
+  const selected = new Set(form.target_state_ids)
+  return stateOptions.value.filter((item) => item.forbidden && selected.has(item.id)).map((item) => item.label)
+})
+const stateCounts = computed(() => selectionCounts(form.current_state_ids, form.target_state_ids))
+const runStateCounts = computed(() => selectionCounts(run.value?.request?.current_state_ids || [], run.value?.request?.target_state_ids || []))
+const canSolve = computed(() => Boolean(form.scenario_id && capabilities.value.planner_available && form.current_state_ids.length && form.target_state_ids.length && !invalidSuggestedStateLabels.value.length && !selectedForbiddenTargetLabels.value.length))
 
 const presentations = computed(() => Object.fromEntries(Object.entries(results.value).map(([engine, result]) => {
   const path = result.paths?.[0] || null
@@ -161,14 +202,35 @@ async function loadScenario() {
     return
   }
   scenarioDetails.value = await getPlannerScenario(form.scenario_id)
+  form.expected_revision = scenarioDetails.value.revision
+  suggestedStates.current = [...(scenarioDetails.value.scenario?.initial_state_ids || [])]
+  suggestedStates.target = [...(scenarioDetails.value.scenario?.goal_state_ids || [])]
+  restoreSuggestions()
   const budget = scenarioDetails.value.scenario?.default_budget
   if (budget) Object.assign(form.budget, budget)
 }
 
+function restoreSuggestions() {
+  form.current_state_ids = [...suggestedStates.current]
+  form.target_state_ids = [...suggestedStates.target]
+}
+
 async function solve() {
+  if (!form.current_state_ids.length) return ElMessage.warning('请至少选择一个当前状态')
+  if (!form.target_state_ids.length) return ElMessage.warning('请至少选择一个目标状态')
+  if (invalidSuggestedStateLabels.value.length) return ElMessage.error(`存在失效状态：${invalidSuggestedStateLabels.value.join('、')}`)
+  if (selectedForbiddenTargetLabels.value.length) return ElMessage.error(`禁止状态不能作为目标：${selectedForbiddenTargetLabels.value.join('、')}`)
   running.value = true
   try {
-    run.value = await createPlannerRun(form)
+    run.value = await createPlannerRun({
+      scenario_id: form.scenario_id,
+      expected_revision: form.expected_revision,
+      current_state_ids: [...form.current_state_ids],
+      target_state_ids: [...form.target_state_ids],
+      engine: form.engine,
+      seed: form.seed,
+      budget: { ...form.budget },
+    })
     const resultEngines = Object.keys(results.value)
     activeEngine.value = resultEngines.find((engine) => results.value[engine]?.paths?.length) || resultEngines[0] || form.engine
     activeResultTab.value = 'gantt'
@@ -182,6 +244,11 @@ async function solve() {
 }
 
 function engineLabel(engine) { return { LEGACY: '旧引擎', ASTAR: 'Anytime A*', GA: '遗传算法 GA' }[engine] || engine }
+function selectionCounts(current, target) {
+  const currentIds = new Set(current)
+  const satisfied = target.filter((id) => currentIds.has(id)).length
+  return { current: current.length, target: target.length, satisfied, outstanding: target.length - satisfied }
+}
 function resourceLabel(resources) { return (resources || []).map((item) => `${item.name}×${item.quantity || 1}`).join('、') }
 function formatMetric(value) {
   if (Array.isArray(value)) return value.map((item) => Array.isArray(item) ? item.join('：') : String(item)).join('；') || '-'
@@ -192,5 +259,5 @@ function formatMetric(value) {
 </script>
 
 <style scoped>
-.solve-workspace{display:grid;gap:16px}.solve-hero{display:flex;align-items:center;justify-content:space-between;padding:26px 30px;border-radius:18px;color:#fff;background:linear-gradient(130deg,#172554,#1e3a8a 62%,#0f766e);box-shadow:0 18px 45px rgba(30,58,138,.18)}.solve-hero h1{margin:3px 0 7px;font-size:28px}.solve-hero p{margin:0;color:#bfdbfe}.eyebrow{font-size:11px;letter-spacing:.16em;color:#5eead4!important}.eyebrow.dark{color:#0f766e!important}.control-card,.comparison-card,.result-card{padding:20px 22px;background:#fff;border:1px solid #e2e8f0;border-radius:14px}.control-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:14px}.run-actions,.result-header,.section-title{display:flex;align-items:center;justify-content:space-between;gap:16px}.run-actions{border-top:1px solid #e2e8f0;padding-top:14px}.run-actions div{display:flex;gap:10px;align-items:center}.run-actions span,.run-summary span,.metric-strip span,.section-title p{color:#64748b;font-size:12px}.run-summary{display:flex;gap:32px;flex-wrap:wrap;padding:14px 20px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe}.run-summary div{display:flex;gap:8px;align-items:center}.section-title h2,.result-header h2{margin:0}.section-title p{margin:4px 0 14px}.result-header{margin-bottom:16px}.result-header .eyebrow{margin:0 0 4px}.metric-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}.metric-strip div{padding:12px;border:1px solid #dbeafe;border-radius:10px;background:#f8fbff;text-align:center}.metric-strip span{display:block}.metric-strip strong{font-size:20px;color:#1e3a8a}.result-tabs{min-height:360px}@media(max-width:1050px){.control-grid{grid-template-columns:1fr 1fr}.solve-hero,.result-header{align-items:flex-start;flex-direction:column}.metric-strip{grid-template-columns:1fr 1fr}}@media(max-width:700px){.control-grid,.metric-strip{grid-template-columns:1fr}.run-actions{align-items:flex-start;flex-direction:column}}
+.solve-workspace{display:grid;gap:16px}.solve-hero{display:flex;align-items:center;justify-content:space-between;padding:26px 30px;border-radius:18px;color:#fff;background:linear-gradient(130deg,#172554,#1e3a8a 62%,#0f766e);box-shadow:0 18px 45px rgba(30,58,138,.18)}.solve-hero h1{margin:3px 0 7px;font-size:28px}.solve-hero p{margin:0;color:#bfdbfe}.eyebrow{font-size:11px;letter-spacing:.16em;color:#5eead4!important}.eyebrow.dark{color:#0f766e!important}.control-card,.comparison-card,.result-card{padding:20px 22px;background:#fff;border:1px solid #e2e8f0;border-radius:14px}.control-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:14px}.state-control{grid-column:span 2}.selection-alert{margin-bottom:12px}.selection-summary{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:10px 12px;margin-bottom:12px;border-radius:10px;background:#f8fafc;color:#64748b;font-size:13px}.selection-summary strong{color:#0f766e}.selection-summary .el-button{margin-left:auto}.run-actions,.result-header,.section-title{display:flex;align-items:center;justify-content:space-between;gap:16px}.run-actions{border-top:1px solid #e2e8f0;padding-top:14px}.run-actions div{display:flex;gap:10px;align-items:center}.run-actions span,.run-summary span,.metric-strip span,.section-title p{color:#64748b;font-size:12px}.run-summary{display:flex;gap:32px;flex-wrap:wrap;padding:14px 20px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe}.run-summary div{display:flex;gap:8px;align-items:center}.section-title h2,.result-header h2{margin:0}.section-title p{margin:4px 0 14px}.result-header{margin-bottom:16px}.result-header .eyebrow{margin:0 0 4px}.metric-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}.metric-strip div{padding:12px;border:1px solid #dbeafe;border-radius:10px;background:#f8fbff;text-align:center}.metric-strip span{display:block}.metric-strip strong{font-size:20px;color:#1e3a8a}.result-tabs{min-height:360px}@media(max-width:1050px){.control-grid{grid-template-columns:1fr 1fr}.state-control{grid-column:span 1}.solve-hero,.result-header{align-items:flex-start;flex-direction:column}.metric-strip{grid-template-columns:1fr 1fr}}@media(max-width:700px){.control-grid,.metric-strip{grid-template-columns:1fr}.run-actions{align-items:flex-start;flex-direction:column}.selection-summary .el-button{margin-left:0}}
 </style>

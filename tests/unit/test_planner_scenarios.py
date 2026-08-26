@@ -10,6 +10,7 @@ from app.services.planner_scenarios import (
     create_package,
     expand_packages,
     graph_projection,
+    migrate_target_activities_to_goals,
     new_scenario,
     normalize_import,
     rebuild_mirror,
@@ -65,12 +66,17 @@ def test_packages_have_read_only_one_to_one_state_mirrors_and_reusable_members()
     assert all(item["managed_by"] == "activity_package_mirror" for item in first_state_refs)
 
 
-def test_package_target_expands_all_members_once_and_graph_has_only_activity_nodes():
+def test_package_targets_migrate_to_goal_states_once_and_graph_has_only_activity_nodes():
     scenario, _, _, _, first, second, _ = _modeled_scenario()
+    migrate_target_activities_to_goals(scenario, record_provenance=True)
     expanded = expand_packages(scenario)
     graph = graph_projection(scenario)
 
-    assert expanded["target_activity_ids"] == sorted([first["id"], second["id"]])
+    assert scenario["goal_state_ids"] == sorted([first["output_state_id"], second["output_state_id"]])
+    assert scenario["target_activity_ids"] == []
+    assert scenario["target_activity_package_ids"] == []
+    assert scenario["provenance"]["runtime_state_target_migration_v1"]["original_target_activity_package_ids"]
+    assert expanded["target_activity_ids"] == []
     assert "state_packages" not in expanded
     assert graph["summary"]["state_node_count"] == 0
     assert graph["nodes"]
@@ -79,15 +85,16 @@ def test_package_target_expands_all_members_once_and_graph_has_only_activity_nod
     assert any(item["state_id"] == first["output_state_id"] for item in graph["edges"])
 
 
-def test_invalid_package_levels_and_empty_targets_are_blocked():
+def test_invalid_package_levels_and_empty_target_packages_convert_to_no_goals():
     scenario = new_scenario("错误包")
     root = create_package(scenario, {"name": "一级"}, display_number=1)
     child = create_package(scenario, {"name": "二级", "parent_id": root["id"]}, display_number=2)
     with pytest.raises(PlannerScenarioError, match="Only two"):
         create_package(scenario, {"name": "三级", "parent_id": child["id"]}, display_number=3)
     scenario["target_activity_package_ids"] = [root["id"]]
-    with pytest.raises(PlannerScenarioError, match="no activities"):
-        expand_packages(scenario)
+    migrate_target_activities_to_goals(scenario)
+    assert scenario["goal_state_ids"] == []
+    assert scenario["target_activity_package_ids"] == []
 
 
 def test_import_without_ids_rewrites_references_and_preserved_mirror_is_checked():

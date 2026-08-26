@@ -38,8 +38,8 @@ const scenario = {
     { id: stateA, name: '准备完成', state_kind: 'activity_output' },
     { id: 'state:b-output', name: '执行完成', state_kind: 'activity_output' },
   ],
-  initial_state_ids: ['state:seed'], goal_state_ids: [], forbidden_state_ids: [], target_activity_ids: [],
-  target_activity_package_ids: [rootId], activity_package_scope_ids: [], resources: [], external_events: [],
+  initial_state_ids: ['state:seed'], goal_state_ids: ['state:b-output'], forbidden_state_ids: [], target_activity_ids: [],
+  target_activity_package_ids: [], activity_package_scope_ids: [], resources: [], external_events: [],
   activity_packages: [
     { id: rootId, display_code: 'AP-0001', name: '一级总包', level: 1, parent_id: null, layout: { x: 20, y: 20, width: 1120, height: 520 }, mirrored_state_package_id: 'state-package:22222222-2222-4222-8222-222222222222' },
     { id: childId, display_code: 'AP-0002', name: '二级实施包', level: 2, parent_id: rootId, layout: { x: 50, y: 70, width: 620, height: 390 }, mirrored_state_package_id: 'state-package:33333333-3333-4333-8333-333333333333' },
@@ -76,7 +76,13 @@ const moduleXScenario = {
   start_time: 0,
   max_steps: 12,
   default_budget: { time_limit_seconds: 10, transition_limit: 20000, max_solutions: 20 },
-  states: Object.values(moduleXStates).map((id) => ({ id, name: id })),
+  states: [
+    { id: moduleXStates.powerOff, name: '电源已下电', state_kind: 'seed' },
+    { id: moduleXStates.powerOn, name: '电源已上电', state_kind: 'activity_output' },
+    { id: moduleXStates.installed, name: '模块 X 已安装', state_kind: 'activity_output' },
+    { id: moduleXStates.testedA, name: '功能 A 已调测', state_kind: 'activity_output' },
+    { id: moduleXStates.testedB, name: '功能 B 已调测', state_kind: 'activity_output' },
+  ],
   initial_state_ids: [moduleXStates.powerOff],
   goal_state_ids: [moduleXStates.powerOn, moduleXStates.installed, moduleXStates.testedA, moduleXStates.testedB],
   forbidden_state_ids: [], target_activity_ids: [], target_activity_package_ids: [], activity_package_scope_ids: [],
@@ -143,7 +149,7 @@ test.beforeEach(async ({ page }) => {
       const isModuleX = body.scenario_id === moduleXScenarioId
       const engineResult = isModuleX ? moduleXResult : result
       const hash = isModuleX ? 'module-x-hash' : 'same-hash'
-      return route.fulfill({ status: 201, json: { id: 'planner-run:1', status: 'OK', scenario_hash: hash, result: { engines_share_mutable_state: false, results: { LEGACY: engineResult('LEGACY'), ASTAR: engineResult('ASTAR'), GA: engineResult('GA') } } } })
+      return route.fulfill({ status: 201, json: { id: 'planner-run:1', status: 'OK', scenario_hash: hash, request: body, result: { engines_share_mutable_state: false, results: { LEGACY: engineResult('LEGACY'), ASTAR: engineResult('ASTAR'), GA: engineResult('GA') } } } })
     }
     return route.fulfill({ status: 404, json: { error: `unmocked ${request.method()} ${url}` } })
   })
@@ -255,9 +261,15 @@ test('activity connection is staged as one draft without exposing state nodes', 
 
 test('all engines display one shared snapshot and valid replay results', async ({ page }) => {
   await page.goto('/')
-  await page.getByText('多引擎求解').click()
+  await page.getByText('多引擎求解', { exact: true }).click()
   await expect(page.getByText('Planner 已连接')).toBeVisible()
+  await expect(page.getByTestId('current-state-select').getByText('初始状态', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('target-state-select').getByText('执行完成', { exact: true })).toBeVisible()
+  await expect(page.getByText('目标活动包')).toHaveCount(0)
+  const runRequest = page.waitForRequest((request) => request.url().endsWith('/api/v1/planner-runs') && request.method() === 'POST')
   await page.getByRole('button', { name: '开始求解' }).click()
+  const requestBody = (await runRequest).postDataJSON()
+  expect(requestBody).toMatchObject({ expected_revision: 4, current_state_ids: ['state:seed'], target_state_ids: ['state:b-output'] })
   await expect(page.getByText('隔离且一致')).toBeVisible()
   await expect(page.locator('.comparison-card').getByText('旧引擎', { exact: true })).toBeVisible()
   await expect(page.getByText('引擎结果对比')).toBeVisible()
@@ -273,9 +285,11 @@ test('module X repeated power states render a 90-minute acyclic result', async (
   page.on('pageerror', (error) => pageErrors.push(error))
 
   await page.goto('/')
-  await page.getByText('多引擎求解').click()
+  await page.getByText('多引擎求解', { exact: true }).click()
   await page.locator('.control-card .el-select').first().click()
   await page.getByText('SCN-MODULE-X · 模块X到料延迟提拉测试', { exact: true }).click()
+  await expect(page.getByTestId('current-state-select').getByText('电源已下电', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('target-state-select').getByText('模块 X 已安装', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '开始求解' }).click()
 
   await expect(page.getByText('引擎结果对比')).toBeVisible()

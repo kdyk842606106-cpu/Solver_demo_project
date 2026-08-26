@@ -41,7 +41,7 @@ activity-package:<uuid>  <=>  state-package:<uuid>
 - 一个活动可被多个二级包复用，但活动本体和主完成状态始终只有一份；
 - 状态包标记 `managed_by: activity_package_mirror`，没有独立增删改接口；
 - 包改名、换父级、增删成员时镜像在同一事务中重建；
-- 选择包作为目标时递归展开启用成员，按 canonical 活动 ID 去重，并以 AND 语义要求全部主完成状态达成；
+- 活动包只承担业务分类、成员归属和网络图容器职责，不表示求解目标；
 - 包用于求解范围时只展开为活动 ID，包和状态包都不会成为计划步骤。
 
 ## 4. 画布投影
@@ -57,13 +57,15 @@ activity-package:<uuid>  <=>  state-package:<uuid>
 
 ## 5. 原子草稿
 
-`POST /api/v1/planner-scenarios/{id}/draft-commit` 接收有序操作。页面新对象使用 `draft:*` 临时引用；后端在一个事务内解析为系统 ID。支持建包、建活动、成员调整、前置调整、资源/事件/种子状态、目标和布局。
+`POST /api/v1/planner-scenarios/{id}/draft-commit` 接收有序操作。页面新对象使用 `draft:*` 临时引用；后端在一个事务内解析为系统 ID。支持建包、建活动、成员调整、前置调整、资源/事件/基础状态和布局。新增目标活动或目标活动包返回 `TARGET_ACTIVITY_DEPRECATED`。
 
 任一临时引用无法解析、并发序号冲突或统一校验失败时，请求整体返回 4xx；权威 JSON、展示编号计数器和镜像对象均不写入。
 
 ## 6. 求解快照与结果
 
-求解前先完成包展开与公共子集校验，再对规范化场景计算 SHA-256。`ALL` 模式向三个独立线程传入深拷贝，运行记录证明三者使用同一哈希且不共享可变状态。
+`POST /api/v1/planner-runs` 必须提交 `expected_revision`、非空 `current_state_ids` 和非空 `target_state_ids`。后端复制权威场景，在副本中覆盖当前/目标状态并清空目标活动/目标包，然后校验并计算 SHA-256。`ALL` 模式向三个独立线程传入深拷贝，运行记录证明三者使用同一哈希且不共享可变状态。
+
+运行记录在既有 `planner_run.request_json/result_json` 中保存基础哈希、有效快照、状态选择、引擎、预算、种子和 Validator 结论；列表接口去除完整快照，只在详情返回。状态选择不会回写场景。运行输入错误使用 `CURRENT_STATE_REQUIRED`、`TARGET_STATE_REQUIRED`、`UNKNOWN_CURRENT_STATE`、`UNKNOWN_TARGET_STATE`、`TARGET_STATE_FORBIDDEN` 和 `SCENARIO_REVISION_CONFLICT`。
 
 正式方案必须由 Planner Validator 重放。统一结果至少包含引擎、状态、快照哈希、候选活动执行、指标、诊断及 Validator 状态。活动包、状态包和资源实例不会出现在计划步骤中。
 
@@ -71,6 +73,6 @@ activity-package:<uuid>  <=>  state-package:<uuid>
 
 - 普通 JSON/Excel：临时引用转换为新 UUID，所有状态、包、资源和事件引用同步重写；
 - 完整 JSON 回导：可保留合法身份；若提供状态包，则必须与活动包权威侧完全一致；
+- 旧 JSON/Excel 的目标活动和目标包在导入时递归转换为目标状态并清空旧字段；新导出不再产生目标活动或目标包；
 - Excel：12 张中文业务表，用 `A001/P001/S001/R001/E001` 作为行引用，不作为求解身份；
 - 重复 ID、未知引用、循环包、错误层级、冲突目标、容量超量或不可达目标均返回稳定错误码。
-

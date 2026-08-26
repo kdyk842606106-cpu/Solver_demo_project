@@ -222,6 +222,8 @@ async def commit_draft(scenario_id: str, payload: DraftCommit, db: AsyncSession 
     for item in payload.operations:
         data = resolved(copy.deepcopy(item.payload))
         object_id = resolved(item.object_id) if item.object_id else None
+        if item.operation in {"create_activity", "update_activity", "update_scenario"}:
+            _reject_deprecated_targets(data)
         if item.operation == "create_package":
             created = _domain(create_package, scenario, data, display_number=package_number)
             package_number += 1
@@ -297,6 +299,7 @@ async def patch_scenario(scenario_id: str, payload: ScenarioUpdate, db: AsyncSes
     _check_revision(record, payload.expected_revision)
     scenario = copy.deepcopy(record.scenario_json)
     values = payload.model_dump(exclude_unset=True, exclude={"expected_revision"})
+    _reject_deprecated_targets(values)
     scenario.update(copy.deepcopy(values))
     if "name" in values:
         record.name = values["name"]
@@ -316,7 +319,9 @@ async def remove_scenario(scenario_id: str, db: AsyncSession = Depends(get_db_se
 async def post_activity(scenario_id: str, payload: ActivityCreate, db: AsyncSession = Depends(get_db_session)):
     record = await _record(db, scenario_id, for_update=True)
     scenario = copy.deepcopy(record.scenario_json)
-    activity = _domain(create_activity, scenario, payload.model_dump(), display_number=record.next_activity_number)
+    values = payload.model_dump()
+    _reject_deprecated_targets(values)
+    activity = _domain(create_activity, scenario, values, display_number=record.next_activity_number)
     record.next_activity_number += 1
     _save(record, scenario)
     return {"revision": record.revision, "activity": activity, "scenario_hash": scenario_hash(scenario)}
@@ -328,6 +333,7 @@ async def patch_activity(scenario_id: str, activity_id: str, payload: ActivityUp
     _check_revision(record, payload.expected_revision)
     scenario = copy.deepcopy(record.scenario_json)
     values = payload.model_dump(exclude_unset=True, exclude={"expected_revision"})
+    _reject_deprecated_targets(values)
     activity = _domain(update_activity, scenario, activity_id, values)
     _save(record, scenario)
     return {"revision": record.revision, "activity": activity, "scenario_hash": scenario_hash(scenario)}
@@ -569,6 +575,17 @@ def _domain(function, *args, **kwargs):
         return function(*args, **kwargs)
     except PlannerScenarioError as exc:
         raise _http_domain_error(exc) from exc
+
+
+def _reject_deprecated_targets(values: dict[str, Any]) -> None:
+    if values.get("target_activity_ids") or values.get("target_activity_package_ids") or values.get("is_target") is True:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "TARGET_ACTIVITY_DEPRECATED",
+                "error_message": "Run goals must be selected as target states on the solve page",
+            },
+        )
 
 
 def _http_domain_error(exc: PlannerScenarioError) -> HTTPException:

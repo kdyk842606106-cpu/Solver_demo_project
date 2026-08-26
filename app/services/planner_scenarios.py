@@ -341,13 +341,9 @@ def expand_packages(scenario: dict[str, Any]) -> dict[str, Any]:
             values.update(activity_ids(child_id, (*stack, package_id)))
         return values
 
-    targets = set(expanded.get("target_activity_ids", []))
-    for package_id in expanded.get("target_activity_package_ids", []):
-        package_targets = activity_ids(package_id)
-        if not package_targets:
-            raise PlannerScenarioError("EMPTY_TARGET_PACKAGE", f"Target package has no activities: {package_id}")
-        targets.update(package_targets)
-    expanded["target_activity_ids"] = sorted(targets)
+    # Runtime goals are expressed exclusively as state facts.  Target activity
+    # fields remain empty compatibility placeholders in the v1 wire contract.
+    expanded["target_activity_ids"] = []
 
     scope_package_ids = expanded.get("activity_package_scope_ids", [])
     if scope_package_ids:
@@ -602,11 +598,81 @@ def normalize_import(payload: dict[str, Any], *, preserve_ids: bool) -> dict[str
     """Normalize imported JSON and regenerate every derived mirror object."""
     imported = copy.deepcopy(payload)
     synchronize_activity_milestones(imported)
+    migrate_target_activities_to_goals(imported)
     if not preserve_ids:
         return _regenerate_import_ids(imported)
     _validate_import_ids(imported)
     rebuild_mirror(imported)
     return imported
+
+
+def migrate_target_activities_to_goals(
+    scenario: dict[str, Any], *, record_provenance: bool = False
+) -> dict[str, Any]:
+    """Convert legacy activity/package targets into state-fact goals in place."""
+    target_activity_ids = list(scenario.get("target_activity_ids", []))
+    target_package_ids = list(scenario.get("target_activity_package_ids", []))
+    if not target_activity_ids and not target_package_ids:
+        scenario["target_activity_ids"] = []
+        scenario["target_activity_package_ids"] = []
+        return scenario
+
+    activities = {item.get("id"): item for item in scenario.get("activities", []) if item.get("id")}
+    packages = {item.get("id"): item for item in scenario.get("activity_packages", []) if item.get("id")}
+    members_by_package: dict[str, set[str]] = defaultdict(set)
+    for membership in scenario.get("activity_package_memberships", []):
+        members_by_package[membership.get("package_id")].add(membership.get("activity_id"))
+    children: dict[str, list[str]] = defaultdict(list)
+    for package in packages.values():
+        if package.get("parent_id"):
+            children[package["parent_id"]].append(package["id"])
+
+    def members(package_id: str, stack: tuple[str, ...] = ()) -> set[str]:
+        if package_id in stack:
+            raise PlannerScenarioError("PACKAGE_CYCLE", "Activity-package hierarchy contains a cycle")
+        if package_id not in packages:
+            raise PlannerScenarioError("PACKAGE_NOT_FOUND", f"Unknown package: {package_id}")
+        result = set(members_by_package.get(package_id, set()))
+        for child_id in children.get(package_id, []):
+            result.update(members(child_id, (*stack, package_id)))
+        return result
+
+    unknown_activity_ids = sorted(set(target_activity_ids) - set(activities))
+    if unknown_activity_ids:
+        raise PlannerScenarioError(
+            "ACTIVITY_NOT_FOUND",
+            "Target activity does not exist",
+            details={"activity_ids": unknown_activity_ids},
+        )
+
+    converted_ids = set(target_activity_ids)
+    for package_id in target_package_ids:
+        converted_ids.update(members(package_id))
+    converted_ids = {
+        activity_id for activity_id in converted_ids
+        if activities.get(activity_id, {}).get("is_active", True)
+    }
+    added_goal_state_ids = {
+        activities[activity_id].get("output_state_id")
+        for activity_id in converted_ids
+        if activity_id in activities and activities[activity_id].get("output_state_id")
+    }
+    original_goals = list(scenario.get("goal_state_ids", []))
+    scenario["goal_state_ids"] = sorted(set(original_goals) | added_goal_state_ids)
+    scenario["target_activity_ids"] = []
+    scenario["target_activity_package_ids"] = []
+    if record_provenance:
+        provenance = scenario.get("provenance")
+        if not isinstance(provenance, dict):
+            provenance = {}
+            scenario["provenance"] = provenance
+        provenance.setdefault("runtime_state_target_migration_v1", {
+            "original_goal_state_ids": original_goals,
+            "original_target_activity_ids": target_activity_ids,
+            "original_target_activity_package_ids": target_package_ids,
+            "added_goal_state_ids": sorted(added_goal_state_ids),
+        })
+    return scenario
 
 
 def _regenerate_import_ids(payload: dict[str, Any]) -> dict[str, Any]:
