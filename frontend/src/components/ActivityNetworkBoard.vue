@@ -226,14 +226,26 @@ function getPredecessors(task) {
 function buildGraphModel(tasks) {
   const taskByOrder = new Map(tasks.map((task) => [task.step_order, task]))
   const levelCache = new Map()
+  const visiting = new Set()
+
+  function validPredecessors(task) {
+    return [...new Set(getPredecessors(task))].filter((order) => (
+      order !== task.step_order &&
+      taskByOrder.has(order) &&
+      Number(order) < Number(task.step_order)
+    ))
+  }
 
   function levelOf(task) {
     if (levelCache.has(task.step_order)) return levelCache.get(task.step_order)
-    const predecessorLevels = getPredecessors(task)
+    if (visiting.has(task.step_order)) return 0
+    visiting.add(task.step_order)
+    const predecessorLevels = validPredecessors(task)
       .map((order) => taskByOrder.get(order))
       .filter(Boolean)
       .map((predecessor) => levelOf(predecessor))
     const level = predecessorLevels.length ? Math.max(...predecessorLevels) + 1 : 0
+    visiting.delete(task.step_order)
     levelCache.set(task.step_order, level)
     return level
   }
@@ -267,13 +279,11 @@ function buildGraphModel(tasks) {
 
   const edges = []
   tasks.forEach((task) => {
-    getPredecessors(task).forEach((sourceOrder) => {
-      if (taskByOrder.has(sourceOrder)) {
-        edges.push({
-          sourceOrder,
-          targetOrder: task.step_order,
-        })
-      }
+    validPredecessors(task).forEach((sourceOrder) => {
+      edges.push({
+        sourceOrder,
+        targetOrder: task.step_order,
+      })
     })
   })
 

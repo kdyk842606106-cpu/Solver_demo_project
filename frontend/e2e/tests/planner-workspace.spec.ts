@@ -6,6 +6,23 @@ const childId = 'activity-package:33333333-3333-4333-8333-333333333333'
 const activityA = 'activity:44444444-4444-4444-8444-444444444444'
 const activityB = 'activity:55555555-5555-4555-8555-555555555555'
 const stateA = 'state:44444444-4444-4444-8444-444444444444:output'
+const moduleXScenarioId = 'module-x-scenario'
+
+const moduleXStates = {
+  powerOff: 'state:power-off',
+  powerOn: 'state:power-on',
+  installed: 'state:x-installed',
+  testedA: 'state:a-tested',
+  testedB: 'state:b-tested',
+}
+
+const moduleXActivities = {
+  powerOn: 'activity:power-on',
+  powerOff: 'activity:power-off',
+  install: 'activity:install-x',
+  testA: 'activity:test-a',
+  testB: 'activity:test-b',
+}
 
 const scenario = {
   schema_version: 1,
@@ -50,6 +67,30 @@ const graph = {
   summary: { activity_count: 2, display_node_count: 2, package_count: 2, state_node_count: 0 },
 }
 
+const moduleXScenario = {
+  schema_version: 'planner-shared-scenario/v1',
+  id: moduleXScenarioId,
+  display_code: 'SCN-MODULE-X',
+  name: '模块X到料延迟提拉测试',
+  execution_mode: 'serial',
+  start_time: 0,
+  max_steps: 12,
+  default_budget: { time_limit_seconds: 10, transition_limit: 20000, max_solutions: 20 },
+  states: Object.values(moduleXStates).map((id) => ({ id, name: id })),
+  initial_state_ids: [moduleXStates.powerOff],
+  goal_state_ids: [moduleXStates.powerOn, moduleXStates.installed, moduleXStates.testedA, moduleXStates.testedB],
+  forbidden_state_ids: [], target_activity_ids: [], target_activity_package_ids: [], activity_package_scope_ids: [],
+  resources: [], external_events: [{ id: 'event:x-arrival', name: '模块 X 到料', time: 45 }],
+  activity_packages: [], activity_package_memberships: [], state_packages: [], state_package_memberships: [], provenance: {},
+  activities: [
+    { id: moduleXActivities.powerOn, display_code: 'ACT-0001', name: '上电', duration: 5, preconditions: [{ state_id: moduleXStates.powerOff, relation_role: 'transition' }], output_state_id: moduleXStates.powerOn, additional_output_state_ids: [], resource_reqs: {}, event_reqs: [], max_instances: 2 },
+    { id: moduleXActivities.powerOff, display_code: 'ACT-0002', name: '下电', duration: 5, preconditions: [{ state_id: moduleXStates.powerOn, relation_role: 'transition' }], output_state_id: moduleXStates.powerOff, additional_output_state_ids: [], resource_reqs: {}, event_reqs: [], max_instances: 1 },
+    { id: moduleXActivities.install, display_code: 'ACT-0003', name: '安装模块 X', duration: 10, preconditions: [{ state_id: moduleXStates.powerOff, relation_role: 'required' }], output_state_id: moduleXStates.installed, additional_output_state_ids: [], resource_reqs: {}, event_reqs: ['event:x-arrival'], max_instances: 1 },
+    { id: moduleXActivities.testA, display_code: 'ACT-0004', name: '功能 A 调测', duration: 30, preconditions: [{ state_id: moduleXStates.powerOn, relation_role: 'required' }], output_state_id: moduleXStates.testedA, additional_output_state_ids: [], resource_reqs: {}, event_reqs: [], max_instances: 1 },
+    { id: moduleXActivities.testB, display_code: 'ACT-0005', name: '功能 B 调测', duration: 30, preconditions: [{ state_id: moduleXStates.powerOn, relation_role: 'required' }, { state_id: moduleXStates.installed, relation_role: 'required' }], output_state_id: moduleXStates.testedB, additional_output_state_ids: [], resource_reqs: {}, event_reqs: [], max_instances: 1 },
+  ],
+}
+
 function result(engine: string) {
   return {
     algorithm: engine,
@@ -67,15 +108,43 @@ function result(engine: string) {
   }
 }
 
+function moduleXResult(engine: string) {
+  const executions = [
+    { activity_id: moduleXActivities.powerOn, instance_id: 'power-on#1', activity_name: '上电', start_time: 0, end_time: 5, before_state_ids: [moduleXStates.powerOff], after_state_ids: [moduleXStates.powerOn] },
+    { activity_id: moduleXActivities.testA, instance_id: 'test-a#1', activity_name: '功能 A 调测', start_time: 5, end_time: 35, before_state_ids: [moduleXStates.powerOn], after_state_ids: [moduleXStates.powerOn, moduleXStates.testedA] },
+    { activity_id: moduleXActivities.powerOff, instance_id: 'power-off#1', activity_name: '下电', start_time: 35, end_time: 40, before_state_ids: [moduleXStates.powerOn, moduleXStates.testedA], after_state_ids: [moduleXStates.powerOff, moduleXStates.testedA] },
+    { activity_id: moduleXActivities.install, instance_id: 'install-x#1', activity_name: '安装模块 X', start_time: 45, end_time: 55, before_state_ids: [moduleXStates.powerOff, moduleXStates.testedA], after_state_ids: [moduleXStates.powerOff, moduleXStates.testedA, moduleXStates.installed] },
+    { activity_id: moduleXActivities.powerOn, instance_id: 'power-on#2', activity_name: '上电', start_time: 55, end_time: 60, before_state_ids: [moduleXStates.powerOff, moduleXStates.testedA, moduleXStates.installed], after_state_ids: [moduleXStates.powerOn, moduleXStates.testedA, moduleXStates.installed] },
+    { activity_id: moduleXActivities.testB, instance_id: 'test-b#1', activity_name: '功能 B 调测', start_time: 60, end_time: 90, before_state_ids: [moduleXStates.powerOn, moduleXStates.testedA, moduleXStates.installed], after_state_ids: [moduleXStates.powerOn, moduleXStates.testedA, moduleXStates.installed, moduleXStates.testedB] },
+  ]
+  return {
+    algorithm: engine,
+    status: engine === 'GA' ? 'TIMEOUT_PARTIAL' : 'OK',
+    scenario_hash: 'module-x-hash',
+    elapsed_seconds: 0.02,
+    paths: [{ validator_status: 'VALID', metrics: { makespan: 90, execution_count: 6, critical_path_length: 90, resource_peak: [] }, executions }],
+  }
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route(/\/(health|api\/v1\/)/, async (route, request) => {
     const url = request.url()
     if (url.endsWith('/health')) return route.fulfill({ json: { status: 'healthy', version: 'test' } })
-    if (url.endsWith('/api/v1/planner-scenarios') && request.method() === 'GET') return route.fulfill({ json: [{ id: scenarioId, display_code: 'SCN-DEMO', name: scenario.name, revision: 4, activity_count: 2, package_count: 2 }] })
+    if (url.endsWith('/api/v1/planner-scenarios') && request.method() === 'GET') return route.fulfill({ json: [
+      { id: scenarioId, display_code: 'SCN-DEMO', name: scenario.name, revision: 4, activity_count: 2, package_count: 2 },
+      { id: moduleXScenarioId, display_code: 'SCN-MODULE-X', name: moduleXScenario.name, revision: 1, activity_count: 5, package_count: 0 },
+    ] })
     if (url.includes('/graph')) return route.fulfill({ json: graph })
+    if (url.includes(`/api/v1/planner-scenarios/${moduleXScenarioId}`) && request.method() === 'GET') return route.fulfill({ json: { id: moduleXScenarioId, display_code: 'SCN-MODULE-X', name: moduleXScenario.name, revision: 1, scenario_hash: 'module-x-hash', scenario: moduleXScenario } })
     if (url.includes('/api/v1/planner-scenarios/') && request.method() === 'GET') return route.fulfill({ json: { id: scenarioId, display_code: 'SCN-DEMO', name: scenario.name, revision: 4, scenario_hash: 'same-hash', scenario } })
     if (url.endsWith('/api/v1/planner-runs/capabilities')) return route.fulfill({ json: { planner_available: true, engines: ['LEGACY', 'ASTAR', 'GA', 'ALL'], resource_model: 'aggregate_capacity', resource_instances_supported: false } })
-    if (url.endsWith('/api/v1/planner-runs') && request.method() === 'POST') return route.fulfill({ status: 201, json: { id: 'planner-run:1', status: 'OK', scenario_hash: 'same-hash', result: { engines_share_mutable_state: false, results: { LEGACY: result('LEGACY'), ASTAR: result('ASTAR'), GA: result('GA') } } } })
+    if (url.endsWith('/api/v1/planner-runs') && request.method() === 'POST') {
+      const body = request.postDataJSON()
+      const isModuleX = body.scenario_id === moduleXScenarioId
+      const engineResult = isModuleX ? moduleXResult : result
+      const hash = isModuleX ? 'module-x-hash' : 'same-hash'
+      return route.fulfill({ status: 201, json: { id: 'planner-run:1', status: 'OK', scenario_hash: hash, result: { engines_share_mutable_state: false, results: { LEGACY: engineResult('LEGACY'), ASTAR: engineResult('ASTAR'), GA: engineResult('GA') } } } })
+    }
     return route.fulfill({ status: 404, json: { error: `unmocked ${request.method()} ${url}` } })
   })
 })
@@ -124,4 +193,24 @@ test('all engines display one shared snapshot and valid replay results', async (
   await page.getByRole('tab', { name: '活动网络图' }).click()
   await expect(page.locator('.network-board canvas')).toBeVisible()
   await expect(page.getByText('VALID', { exact: true })).toHaveCount(4)
+})
+
+test('module X repeated power states render a 90-minute acyclic result', async ({ page }) => {
+  const pageErrors: Error[] = []
+  page.on('pageerror', (error) => pageErrors.push(error))
+
+  await page.goto('/')
+  await page.getByText('多引擎求解').click()
+  await page.locator('.control-card .el-select').first().click()
+  await page.getByText('SCN-MODULE-X · 模块X到料延迟提拉测试', { exact: true }).click()
+  await page.getByRole('button', { name: '开始求解' }).click()
+
+  await expect(page.getByText('引擎结果对比')).toBeVisible()
+  await expect(page.locator('.comparison-card').getByText('90', { exact: true })).toHaveCount(3)
+  await expect(page.getByTestId('gantt-chart-canvas').locator('canvas')).toBeVisible()
+  await page.getByRole('tab', { name: '活动网络图' }).click()
+  await expect(page.getByText('6 个活动', { exact: true })).toBeVisible()
+  await expect(page.getByText('6 条依赖', { exact: true })).toBeVisible()
+  await expect(page.locator('.network-board canvas')).toBeVisible()
+  expect(pageErrors).toEqual([])
 })

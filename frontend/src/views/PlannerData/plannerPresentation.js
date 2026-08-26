@@ -87,19 +87,27 @@ export function plannerPathToTasks(path = {}, scenario = {}) {
   const resources = new Map((scenario.resources || []).map((item) => [item.id, item.name]))
   const executions = path.executions || []
   const producerByState = new Map()
-  executions.forEach((execution, index) => {
-    for (const stateId of execution.after_state_ids || []) producerByState.set(stateId, index + 1)
-  })
 
   return executions.map((execution, index) => {
     const activity = activities.get(execution.activity_id) || {}
+    const stepOrder = index + 1
+    const preconditions = activity.preconditions || []
     const predecessors = [...new Set(
-      (execution.before_state_ids || []).map((stateId) => producerByState.get(stateId)).filter(Boolean),
+      preconditions
+        .map((item) => producerByState.get(item.state_id))
+        .filter((order) => Number.isInteger(order) && order < stepOrder),
     )]
     if (!predecessors.length && index > 0 && scenario.execution_mode === 'serial') predecessors.push(index)
+    preconditions
+      .filter((item) => item.relation_role === 'transition')
+      .forEach((item) => producerByState.delete(item.state_id))
+    const outputStateIds = [activity.output_state_id, ...(activity.additional_output_state_ids || [])]
+    outputStateIds
+      .filter(Boolean)
+      .forEach((stateId) => producerByState.set(stateId, stepOrder))
     return {
       step_id: execution.instance_id || `${execution.activity_id}:${index + 1}`,
-      step_order: index + 1,
+      step_order: stepOrder,
       op_code: activity.display_code || `ACT-${String(index + 1).padStart(4, '0')}`,
       op_name: execution.activity_name || activity.name || execution.activity_id,
       op_rule_code: activity.display_code || `ACT-${String(index + 1).padStart(4, '0')}`,
