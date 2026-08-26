@@ -197,6 +197,8 @@ test('activity creation derives its type without a milestone switch', async ({ p
   await expect(dialog.getByText('里程碑', { exact: true })).toHaveCount(0)
   await expect(dialog.getByText('活动类型由前置关系自动识别')).toBeVisible()
   await expect(dialog.getByText('前置状态绑定', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('外部事件绑定', { exact: true })).toBeVisible()
+  await expect(dialog.getByTestId('activity-event-bindings').getByRole('combobox')).toBeDisabled()
   const bindings = dialog.getByTestId('activity-state-bindings')
   await bindings.locator('.state-binding-select').first().click()
   await page.locator('.el-select-dropdown:visible').getByText('初始状态', { exact: true }).click()
@@ -208,6 +210,26 @@ test('activity creation derives its type without a milestone switch', async ({ p
   await expect(bindings.locator('.state-binding-row').nth(1).getByText('准备完成', { exact: true })).toBeVisible()
   await bindings.locator('.state-binding-row').nth(1).getByText('执行后保留', { exact: true }).click()
   await dialog.getByRole('textbox', { name: '活动名称' }).fill('自动识别类型活动')
+  await dialog.getByRole('button', { name: '加入草稿' }).click()
+
+  await expect(page.getByText('当前有 1 项未提交变更')).toBeVisible()
+  await expect(page.getByRole('button', { name: '统一提交（1）' })).toBeVisible()
+})
+
+test('activity creation binds existing external events', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.hero-actions .el-select').click()
+  await page.getByText('SCN-MODULE-X · 模块X到料延迟提拉测试', { exact: true }).click()
+  await page.getByRole('button', { name: '进入编辑' }).click()
+  await page.getByRole('button', { name: '新增活动' }).click()
+
+  const dialog = page.getByRole('dialog', { name: '新增活动' })
+  const eventBindings = dialog.getByTestId('activity-event-bindings')
+  await expect(eventBindings.getByRole('combobox')).toBeEnabled()
+  await eventBindings.click()
+  await page.locator('.el-select-dropdown:visible').getByText('模块 X 到料（T+45）', { exact: true }).click()
+  await expect(eventBindings.getByText('模块 X 到料（T+45）', { exact: true })).toBeVisible()
+  await dialog.getByRole('textbox', { name: '活动名称' }).fill('等待到料活动')
   await dialog.getByRole('button', { name: '加入草稿' }).click()
 
   await expect(page.getByText('当前有 1 项未提交变更')).toBeVisible()

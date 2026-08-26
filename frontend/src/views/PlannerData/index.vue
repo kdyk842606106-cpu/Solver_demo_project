@@ -141,6 +141,22 @@
             <span class="state-binding-help">可绑定多个前置状态；留空表示没有前置状态。</span>
           </div>
         </el-form-item>
+        <el-form-item label="外部事件绑定">
+          <el-select
+            v-model="activityForm.event_reqs"
+            multiple
+            clearable
+            filterable
+            collapse-tags
+            :disabled="!selectableEvents.length"
+            :placeholder="selectableEvents.length ? '选择活动必须等待的外部事件' : '当前场景没有外部事件'"
+            data-testid="activity-event-bindings"
+            style="width:100%"
+          >
+            <el-option v-for="item in selectableEvents" :key="item.id" :value="item.id" :label="`${item.name}（T+${item.time}）`"/>
+          </el-select>
+          <span class="state-binding-help">活动只能在所选事件发生后开始；可绑定多个事件。</span>
+        </el-form-item>
         <el-alert title="活动类型由前置关系自动识别；活动编号、技术 ID、完成状态和镜像状态包均由系统创建。" type="info" :closable="false"/>
       </el-form>
       <template #footer><el-button @click="activityDialog=false">取消</el-button><el-button type="primary" @click="queueActivity">加入草稿</el-button></template>
@@ -164,7 +180,7 @@ const scenarioDialog = ref(false), packageDialog = ref(false), activityDialog = 
 const excelInput = ref(null)
 const scenarioName = ref(''), importText = ref(''), targetPackageIds = ref([])
 const packageForm = reactive({ level: 1, name: '', parent_id: null })
-const activityForm = reactive({ name: '', duration: 1, package_id: null, preconditions: [] })
+const activityForm = reactive({ name: '', duration: 1, package_id: null, preconditions: [], event_reqs: [] })
 const seedForm = reactive({ name: '', initial: true }), resourceForm = reactive({ name: '', capacity: 1 }), eventForm = reactive({ name: '', time: 0, add_state_ids: [] })
 const scenario = computed(() => current.value.scenario || {})
 const shortHash = computed(() => (current.value.scenario_hash || '').slice(0, 12))
@@ -173,6 +189,7 @@ const childPackages = computed(() => (scenario.value.activity_packages || []).fi
 const packageRows = computed(() => [...rootPackages.value, ...childPackages.value])
 const seedStates = computed(() => (scenario.value.states || []).filter((item) => item.state_kind === 'seed'))
 const selectableStates = computed(() => scenario.value.states || [])
+const selectableEvents = computed(() => scenario.value.external_events || [])
 
 onMounted(loadScenarios)
 async function loadScenarios() { scenarios.value = await listPlannerScenarios() }
@@ -188,7 +205,7 @@ async function commitDraft() { saving.value = true; try { await commitPlannerDra
 function openPackageDialog(kind) { packageForm.level = kind === 'root' ? 1 : 2; packageForm.name = ''; packageForm.parent_id = null; packageDialog.value = true }
 function queuePackage() { if (!packageForm.name.trim() || (packageForm.level === 2 && !packageForm.parent_id)) return ElMessage.warning('请填写完整'); addDraft({ operation: 'create_package', client_ref: `draft:package:${Date.now()}`, payload: { name: packageForm.name.trim(), parent_id: packageForm.level === 2 ? packageForm.parent_id : null } }, `新建活动包 ${packageForm.name}`); packageDialog.value = false }
 function emptyActivityPrecondition() { return { state_id: null, relation_role: 'transition' } }
-function openActivityDialog() { Object.assign(activityForm, { name: '', duration: 1, package_id: null, preconditions: [emptyActivityPrecondition()] }); activityDialog.value = true }
+function openActivityDialog() { Object.assign(activityForm, { name: '', duration: 1, package_id: null, preconditions: [emptyActivityPrecondition()], event_reqs: [] }); activityDialog.value = true }
 function addActivityPrecondition() { activityForm.preconditions.push(emptyActivityPrecondition()) }
 function removeActivityPrecondition(index) { activityForm.preconditions.splice(index, 1) }
 function isActivityStateDisabled(stateId, currentIndex) { return activityForm.preconditions.some((item, index) => index !== currentIndex && item.state_id === stateId) }
@@ -199,7 +216,7 @@ function queueActivity() {
     .map((item) => ({ state_id: item.state_id, relation_role: item.relation_role }))
   if (new Set(preconditions.map((item) => item.state_id)).size !== preconditions.length) return ElMessage.warning('同一前置状态只能绑定一次')
   const ref = `draft:activity:${Date.now()}`
-  addDraft({ operation: 'create_activity', client_ref: ref, payload: { name: activityForm.name.trim(), duration: activityForm.duration, preconditions } }, `新建活动 ${activityForm.name}`)
+  addDraft({ operation: 'create_activity', client_ref: ref, payload: { name: activityForm.name.trim(), duration: activityForm.duration, preconditions, event_reqs: [...activityForm.event_reqs] } }, `新建活动 ${activityForm.name}`)
   if (activityForm.package_id) addDraft({ operation: 'add_membership', payload: { package_id: activityForm.package_id, activity_id: ref } }, '加入活动包')
   activityDialog.value = false
 }
