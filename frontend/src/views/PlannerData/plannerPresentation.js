@@ -21,9 +21,11 @@ function layoutMetadata(layout = {}) {
   return metadata
 }
 
-export function plannerGraphToX6(graph = {}) {
+export function plannerGraphToX6(graph = {}, { collapsedPackageIds = [] } = {}) {
   const containers = graph.containers || []
   const packageById = new Map(containers.map((item) => [item.id, item]))
+  const collapsed = new Set((collapsedPackageIds || []).map(String))
+  const endpointRepresentative = new Map()
   const packageNodes = containers.map((item) => {
     const path = packagePath(item.id, packageById)
     return {
@@ -41,10 +43,12 @@ export function plannerGraphToX6(graph = {}) {
       _planner_kind: 'package',
       _planner_id: item.id,
     }
-  })
+  }).filter((item) => !item.parent_activity_node_ids.some((id) => collapsed.has(String(id))))
 
   const activityNodes = (graph.nodes || []).map((item) => {
     const path = item.package_id ? packagePath(item.package_id, packageById) : []
+    const collapsedOwnerId = path.find((id) => collapsed.has(String(id)))
+    endpointRepresentative.set(item.id, collapsedOwnerId || item.id)
     return {
       id: item.id,
       activity_node_id: item.id,
@@ -63,17 +67,40 @@ export function plannerGraphToX6(graph = {}) {
       _planner_kind: 'activity',
       _planner_id: item.id,
       canonical_activity_id: item.canonical_activity_id,
+      _planner_collapsed_owner_id: collapsedOwnerId || null,
     }
-  })
+  }).filter((item) => !item._planner_collapsed_owner_id)
 
-  const edges = (graph.edges || []).map((item) => ({
-    ...item,
-    source_id: item.source,
-    target_id: item.target,
-    type: 'STATE_FLOW',
-    displayLabel: item.relation_role === 'transition' ? '替换前置' : '保留前置',
-    flow: { state: 'backbone', role: item.relation_role || 'required' },
-  }))
+  const edgeGroups = new Map()
+  for (const item of graph.edges || []) {
+    const source = endpointRepresentative.get(item.source)
+    const target = endpointRepresentative.get(item.target)
+    if (!source || !target || source === target) continue
+    const projected = source !== item.source || target !== item.target
+    const key = `${source}\u0000${target}\u0000${item.relation_role || 'required'}`
+    const existing = edgeGroups.get(key)
+    if (existing) {
+      existing.aggregateCount += 1
+      existing.aggregateEdges.push(item)
+      continue
+    }
+    edgeGroups.set(key, {
+      ...item,
+      id: projected ? `collapsed-dependency:${source}:${target}:${item.relation_role || 'required'}` : item.id,
+      source,
+      target,
+      source_id: source,
+      target_id: target,
+      type: 'STATE_FLOW',
+      displayLabel: projected ? '折叠依赖' : (item.relation_role === 'transition' ? '替换前置' : '保留前置'),
+      flow: { state: 'backbone', role: item.relation_role || 'required' },
+      aggregate: projected,
+      projectionProxy: projected,
+      aggregateCount: 1,
+      aggregateEdges: [item],
+    })
+  }
+  const edges = [...edgeGroups.values()]
 
   return {
     activityNodes: [...packageNodes, ...activityNodes],

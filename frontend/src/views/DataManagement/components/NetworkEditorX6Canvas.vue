@@ -1161,23 +1161,24 @@ function buildContainerModel(node, children, kind, shifts = null) {
   const headerSpace = Math.max(CONTAINER_HEADER_SPACE, titleHeight + 30)
   const savedSize = savedContainerSizeFor(node, kind) || {}
   const anchor = shiftedNodePosition(node, kind, shifts || new Map())
-  const anchorsAtCollapsedNode = kind === 'state' && Number(node.level || 1) > 1
-  const x = anchorsAtCollapsedNode
+  const anchorsAtSavedNode = (kind === 'state' && Number(node.level || 1) > 1) ||
+    (kind === 'activity' && node?._planner_kind === 'package')
+  const x = anchorsAtSavedNode
     ? Math.max(8, anchor.x)
     : Math.max(8, bounds.x - CONTAINER_LEFT_RAIL_SPACE)
-  const y = anchorsAtCollapsedNode
+  const y = anchorsAtSavedNode
     ? Math.max(8, anchor.y)
     : Math.max(8, bounds.y - headerSpace)
   const width = Math.max(
     CONTAINER_MIN_WIDTH,
-    anchorsAtCollapsedNode
+    anchorsAtSavedNode
       ? bounds.x + bounds.width - x + CONTAINER_RIGHT_PADDING
       : bounds.width + CONTAINER_LEFT_RAIL_SPACE + CONTAINER_RIGHT_PADDING,
     Number(savedSize.width || 0),
   )
   const height = Math.max(
     CONTAINER_MIN_HEIGHT,
-    anchorsAtCollapsedNode
+    anchorsAtSavedNode
       ? bounds.y + bounds.height - y + CONTAINER_BOTTOM_PADDING
       : bounds.height + headerSpace + CONTAINER_BOTTOM_PADDING,
     Number(savedSize.height || 0),
@@ -1489,6 +1490,9 @@ function createContainerTitleCell(container, kind) {
   const node = container.node
   const isState = kind === 'state'
   const level = Math.max(1, Number(node.level || 1))
+  const titleZIndex = node?._planner_kind === 'package'
+    ? 40 + level
+    : Math.max(40, 80 - level)
   const rootPosition = nodePosition(node, kind)
   const titleX = container.x + 10
   const titleY = container.y + 8
@@ -1503,7 +1507,7 @@ function createContainerTitleCell(container, kind) {
     y: titleY,
     width: Math.max(120, container.width - 20),
     height: container.titleHeight,
-    zIndex: Math.max(40, 80 - level),
+    zIndex: titleZIndex,
     data: {
       kind,
       role: 'container',

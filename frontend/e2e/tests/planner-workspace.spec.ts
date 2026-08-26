@@ -41,8 +41,8 @@ const scenario = {
   initial_state_ids: ['state:seed'], goal_state_ids: [], forbidden_state_ids: [], target_activity_ids: [],
   target_activity_package_ids: [rootId], activity_package_scope_ids: [], resources: [], external_events: [],
   activity_packages: [
-    { id: rootId, display_code: 'AP-0001', name: '一级总包', level: 1, parent_id: null, mirrored_state_package_id: 'state-package:22222222-2222-4222-8222-222222222222' },
-    { id: childId, display_code: 'AP-0002', name: '二级实施包', level: 2, parent_id: rootId, mirrored_state_package_id: 'state-package:33333333-3333-4333-8333-333333333333' },
+    { id: rootId, display_code: 'AP-0001', name: '一级总包', level: 1, parent_id: null, layout: { x: 20, y: 20, width: 1120, height: 520 }, mirrored_state_package_id: 'state-package:22222222-2222-4222-8222-222222222222' },
+    { id: childId, display_code: 'AP-0002', name: '二级实施包', level: 2, parent_id: rootId, layout: { x: 50, y: 70, width: 620, height: 390 }, mirrored_state_package_id: 'state-package:33333333-3333-4333-8333-333333333333' },
   ],
   activities: [
     { id: activityA, display_code: 'ACT-0001', name: '准备', duration: 2, preconditions: [{ state_id: 'state:seed', relation_role: 'transition' }], output_state_id: stateA, output_state_name: '准备完成', additional_output_state_ids: [], resource_reqs: {}, event_reqs: [], is_milestone: false, is_active: true },
@@ -60,8 +60,8 @@ const graph = {
   revision: 4,
   containers: scenario.activity_packages,
   nodes: [
-    { id: 'activity-package-member:a', kind: 'activity', canonical_activity_id: activityA, package_id: childId, display_code: 'ACT-0001', name: '准备', duration: 2, seed_preconditions: ['state:seed'], event_preconditions: [] },
-    { id: 'activity-package-member:b', kind: 'activity', canonical_activity_id: activityB, package_id: childId, display_code: 'ACT-0002', name: '执行', duration: 3, seed_preconditions: [], event_preconditions: [] },
+    { id: 'activity-package-member:a', kind: 'activity', canonical_activity_id: activityA, package_id: childId, display_code: 'ACT-0001', name: '准备', duration: 2, layout: { x: 90, y: 130 }, seed_preconditions: ['state:seed'], event_preconditions: [] },
+    { id: 'activity-package-member:b', kind: 'activity', canonical_activity_id: activityB, package_id: childId, display_code: 'ACT-0002', name: '执行', duration: 3, layout: { x: 300, y: 130 }, seed_preconditions: [], event_preconditions: [] },
   ],
   edges: [{ id: 'dependency:a:b', kind: 'activity_dependency', source: 'activity-package-member:a', target: 'activity-package-member:b', state_id: stateA, relation_role: 'transition' }],
   summary: { activity_count: 2, display_node_count: 2, package_count: 2, state_node_count: 0 },
@@ -161,6 +161,29 @@ test('activity-only canvas uses package containers and no visible state nodes', 
   await expect(canvas.locator('.x6-state-node, .x6-state-container')).toHaveCount(0)
   await expect(canvas.getByTestId('network-editor-flow-edge-line')).toHaveCount(1)
   await expect(page.getByText('知识版本')).toHaveCount(0)
+})
+
+test('activity package containers collapse, expand, and auto-arrange as one layout draft', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.hero-actions .el-select').click()
+  await page.getByText('SCN-DEMO · Planner 演示场景', { exact: true }).click()
+  await page.getByRole('tab', { name: '活动网络' }).click()
+
+  const canvas = page.getByTestId('planner-activity-x6-canvas')
+  const childPackage = canvas.getByTestId(`network-editor-activity-node-${childId}`)
+  await childPackage.locator('[data-action="toggle"]').click()
+  await expect(canvas.locator('.x6-network-node.x6-activity-node')).toHaveCount(1)
+  await expect(canvas.locator('.x6-network-container.x6-activity-container')).toHaveCount(1)
+
+  await canvas.getByTestId(`network-editor-activity-node-${childId}`).locator('[data-action="toggle"]').click()
+  await expect(canvas.locator('.x6-network-node.x6-activity-node')).toHaveCount(2)
+  await expect(canvas.locator('.x6-network-container.x6-activity-container')).toHaveCount(2)
+
+  await page.getByRole('button', { name: '进入编辑' }).click()
+  await page.getByTestId('planner-network-auto-arrange').click()
+  await expect(page.getByText('当前有 1 项未提交变更')).toBeVisible()
+  await expect(page.getByRole('button', { name: '统一提交（1）' })).toBeVisible()
+  await expect(page.getByText('已加入草稿：自动整理活动网络')).toBeVisible()
 })
 
 test('activity connection is staged as one draft without exposing state nodes', async ({ page }) => {

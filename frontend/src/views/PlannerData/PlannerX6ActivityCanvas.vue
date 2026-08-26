@@ -8,6 +8,15 @@
         <el-tag size="small" type="info">状态与状态包已隐藏</el-tag>
       </div>
       <div class="tools">
+        <el-button
+          size="small"
+          :loading="arranging"
+          :disabled="!editable"
+          data-testid="planner-network-auto-arrange"
+          @click="autoArrange"
+        >
+          自动整理
+        </el-button>
         <el-button-group>
           <el-button size="small" aria-label="缩小画布" @click="changeZoom(-0.1)">−</el-button>
           <el-button size="small" aria-label="重置画布缩放" @click="resetZoom">{{ Math.round(zoom * 100) }}%</el-button>
@@ -48,6 +57,7 @@
         :activity-depth="0"
         :viewport-reset-token="viewportToken"
         @select-activity="handleSelect"
+        @toggle-activity-expansion="togglePackage"
         @layout-change="handleLayout"
         @container-resize="handleResize"
       />
@@ -56,8 +66,10 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import NetworkEditorX6Canvas from '../DataManagement/components/NetworkEditorX6Canvas.vue'
+import { layoutNestedContainerGraph } from '../DataManagement/networkEditorAutoLayout'
 import { plannerGraphToX6 } from './plannerPresentation'
 
 const props = defineProps({
@@ -70,8 +82,51 @@ const viewportToken = ref(0)
 const connecting = ref(false)
 const connectSource = ref(null)
 const selectedGraphId = ref(null)
-const x6 = computed(() => plannerGraphToX6(props.graph))
+const arranging = ref(false)
+const collapsedPackageIds = ref(new Set())
+const layoutOverrides = ref(new Map())
+const baseX6 = computed(() => plannerGraphToX6(props.graph, {
+  collapsedPackageIds: [...collapsedPackageIds.value],
+}))
+const x6 = computed(() => ({
+  ...baseX6.value,
+  activityNodes: baseX6.value.activityNodes.map((node) => {
+    const override = layoutOverrides.value.get(String(node._planner_id))
+    if (!override) return node
+    return {
+      ...node,
+      metadata_json: {
+        ...(node.metadata_json || {}),
+        ...(override.x != null && override.y != null
+          ? { _network_editor_layout: { x: override.x, y: override.y } }
+          : {}),
+        ...(override.width != null && override.height != null
+          ? { _network_editor_container: { width: override.width, height: override.height } }
+          : {}),
+      },
+      _network_editor_has_container_draft: node._planner_kind === 'package',
+    }
+  }),
+}))
 const visibleEdges = computed(() => props.graph.edges || [])
+
+watch(
+  () => props.graph.containers,
+  (containers = []) => {
+    const valid = new Set(containers.map((item) => String(item.id)))
+    collapsedPackageIds.value = new Set(
+      [...collapsedPackageIds.value].filter((id) => valid.has(String(id))),
+    )
+  },
+  { deep: true },
+)
+
+watch(
+  () => props.editable,
+  (editable) => {
+    if (!editable) layoutOverrides.value = new Map()
+  },
+)
 
 function changeZoom(delta) {
   zoom.value = Math.min(1.6, Math.max(0.65, Number((zoom.value + delta).toFixed(2))))
@@ -85,6 +140,70 @@ function resetZoom() {
 function toggleConnect() {
   connecting.value = !connecting.value
   connectSource.value = null
+}
+
+function togglePackage(node) {
+  const id = String(node?._planner_id || node?.id || '')
+  if (!id) return
+  const next = new Set(collapsedPackageIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  collapsedPackageIds.value = next
+  if (selectedGraphId.value && !x6.value.activityNodes.some((item) => item.id === selectedGraphId.value)) {
+    selectedGraphId.value = null
+  }
+  viewportToken.value += 1
+}
+
+async function autoArrange() {
+  if (!props.editable || arranging.value) return
+  arranging.value = true
+  try {
+    const nodes = x6.value.activityNodes
+    const expandedPackageIds = nodes
+      .filter((node) => node.activity_type === 'activity_package' && nodes.some((candidate) => (
+        candidate.id !== node.id && (candidate.parent_activity_node_ids || []).includes(node.activity_node_id)
+      )))
+      .map((node) => String(node.id))
+    const plan = await layoutNestedContainerGraph({
+      activityNodes: nodes,
+      edges: x6.value.edges,
+      expandedActivityContainerIds: expandedPackageIds,
+    })
+    const updates = new Map()
+    for (const node of nodes) {
+      const position = plan.activityPositions?.get(String(node.id))
+      if (!position) continue
+      updates.set(String(node.id), {
+        kind: node._planner_kind,
+        id: node._planner_id,
+        x: Math.round(position.x),
+        y: Math.round(position.y),
+      })
+    }
+    for (const [id, size] of plan.containerSizes || []) {
+      const node = nodes.find((item) => String(item.id) === String(id))
+      if (!node?._planner_id) continue
+      updates.set(String(id), {
+        ...(updates.get(String(id)) || { kind: 'package', id: node._planner_id }),
+        width: Math.round(size.width),
+        height: Math.round(size.height),
+      })
+    }
+    if (!updates.size) {
+      ElMessage.info('当前没有可整理节点')
+      return
+    }
+    const values = [...updates.values()]
+    applyLayoutOverrides(values)
+    emit('layout-change', { reason: 'auto-arrange', updates: values })
+    viewportToken.value += 1
+  } catch (error) {
+    console.warn('Planner activity network auto layout failed.', error)
+    ElMessage.error('自动整理失败')
+  } finally {
+    arranging.value = false
+  }
 }
 
 function handleSelect({ node }) {
@@ -105,7 +224,7 @@ function handleSelect({ node }) {
   connectSource.value = null
 }
 
-function emitLayout(node, position = null, size = null) {
+function layoutPayload(node, position = null, size = null) {
   if (!node?._planner_id) return
   const payload = {
     kind: node._planner_kind,
@@ -116,6 +235,22 @@ function emitLayout(node, position = null, size = null) {
     payload.x = Number(position.x)
     payload.y = Number(position.y)
   }
+  return payload
+}
+
+function applyLayoutOverrides(updates) {
+  const next = new Map(layoutOverrides.value)
+  for (const update of updates || []) {
+    if (!update?.id) continue
+    next.set(String(update.id), { ...(next.get(String(update.id)) || {}), ...update })
+  }
+  layoutOverrides.value = next
+}
+
+function emitLayout(node, position = null, size = null) {
+  const payload = layoutPayload(node, position, size)
+  if (!payload) return
+  applyLayoutOverrides([payload])
   emit('layout-change', payload)
 }
 

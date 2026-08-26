@@ -171,29 +171,34 @@ function queueConnection({ sourceActivityId, targetActivityId }) { const source 
 function queueRemoveConnection(edge) { const targetRef = (graph.value.nodes || []).find((item) => item.id === edge.target); const target = (scenario.value.activities || []).find((item) => item.id === targetRef?.canonical_activity_id); if (!target) return; const preconditions = pendingPreconditions(target).filter((item) => !(item.state_id === edge.state_id && item.relation_role === edge.relation_role)); replaceDraft((item) => item.operation === 'update_activity' && item.object_id === target.id && item.payload.preconditions, { operation: 'update_activity', object_id: target.id, payload: { preconditions } }, `移除指向 ${target.name} 的依赖`) }
 function queueLayout(layout) {
   const existing = drafts.value.find((item) => item.operation === 'update_layout')
-  const isPackage = layout.kind === 'package'
-  const key = isPackage ? 'package_containers' : 'activity_refs'
-  const previous = (existing?.payload[key] || []).find((item) => item.id === layout.id) || {}
-  const next = { ...previous, id: layout.id }
-  if (layout.x != null && layout.y != null) {
-    next.x = layout.x
-    next.y = layout.y
+  const activityRefs = new Map((existing?.payload.activity_refs || []).map((item) => [item.id, item]))
+  const packageContainers = new Map((existing?.payload.package_containers || []).map((item) => [item.id, item]))
+  const updates = layout.updates?.length ? layout.updates : [layout]
+  for (const item of updates) {
+    const target = item.kind === 'package' ? packageContainers : activityRefs
+    const next = { ...(target.get(item.id) || {}), id: item.id }
+    if (item.x != null && item.y != null) {
+      next.x = item.x
+      next.y = item.y
+    }
+    if (item.kind === 'package' && item.width != null && item.height != null) {
+      next.width = item.width
+      next.height = item.height
+    }
+    target.set(item.id, next)
   }
-  if (isPackage && layout.width != null && layout.height != null) {
-    next.width = layout.width
-    next.height = layout.height
-  }
-  const values = [...(existing?.payload[key] || []).filter((item) => item.id !== layout.id), next]
   replaceDraft(
     (item) => item.operation === 'update_layout',
     {
       operation: 'update_layout',
       payload: {
-        activity_refs: key === 'activity_refs' ? values : (existing?.payload.activity_refs || []),
-        package_containers: key === 'package_containers' ? values : (existing?.payload.package_containers || []),
+        activity_refs: [...activityRefs.values()],
+        package_containers: [...packageContainers.values()],
       },
     },
-    isPackage ? '调整活动包布局' : '调整活动布局',
+    layout.reason === 'auto-arrange'
+      ? '自动整理活动网络'
+      : (updates.some((item) => item.kind === 'package') ? '调整活动包布局' : '调整活动布局'),
   )
 }
 function queueClone(row) { const ref = `draft:activity:${Date.now()}`; addDraft({ operation: 'create_activity', client_ref: ref, payload: { name: `${row.name}副本`, duration: row.duration, preconditions: row.preconditions, additional_output_state_ids: row.additional_output_state_ids, resource_reqs: row.resource_reqs, event_reqs: row.event_reqs, max_instances: row.max_instances, is_milestone: row.is_milestone } }, `复制 ${row.name}`) }
