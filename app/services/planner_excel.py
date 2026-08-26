@@ -14,7 +14,7 @@ from app.services.planner_scenarios import PlannerScenarioError, normalize_impor
 SHEETS = {
     "场景": ["场景名称", "执行模式", "起始时间", "最大活动实例数", "时间预算秒", "转换预算"],
     "活动包": ["包引用", "名称", "父包引用", "排序"],
-    "活动": ["活动引用", "名称", "工期", "里程碑", "最大实例数", "是否目标活动"],
+    "活动": ["活动引用", "名称", "工期", "最大实例数", "是否目标活动"],
     "包成员": ["包引用", "活动引用", "排序"],
     "种子状态": ["状态引用", "名称", "初始激活", "目标必需", "目标禁止"],
     "活动前置": ["活动引用", "状态引用", "关系角色"],
@@ -38,7 +38,7 @@ def template_workbook() -> bytes:
     workbook["活动包"].append(["P001", "一级包", "", 10])
     workbook["活动包"].append(["P002", "二级包", "P001", 10])
     workbook["种子状态"].append(["S001", "开始", "是", "否", "否"])
-    workbook["活动"].append(["A001", "示例活动", 10, "否", "", "否"])
+    workbook["活动"].append(["A001", "示例活动", 10, "", "否"])
     workbook["包成员"].append(["P002", "A001", 10])
     workbook["活动前置"].append(["A001", "S001", "transition"])
     return _bytes(workbook)
@@ -70,7 +70,7 @@ def export_workbook(scenario: dict[str, Any]) -> bytes:
     for item in scenario.get("activity_packages", []):
         workbook["活动包"].append([package_refs[item["id"]], item["name"], package_refs.get(item.get("parent_id"), ""), item.get("sort_order", 0)])
     for item in scenario.get("activities", []):
-        workbook["活动"].append([activity_refs[item["id"]], item["name"], item["duration"], _yn(item.get("is_milestone")), item.get("max_instances"), _yn(item["id"] in scenario.get("target_activity_ids", []))])
+        workbook["活动"].append([activity_refs[item["id"]], item["name"], item["duration"], item.get("max_instances"), _yn(item["id"] in scenario.get("target_activity_ids", []))])
         for relation in item.get("preconditions", []):
             workbook["活动前置"].append([activity_refs[item["id"]], state_refs.get(relation["state_id"], relation["state_id"]), relation.get("relation_role", "required")])
         for resource_id, quantity in item.get("resource_reqs", {}).items():
@@ -129,7 +129,7 @@ def import_workbook(content: bytes) -> dict[str, Any]:
         ref = _required(row, "活动引用", "活动")
         if ref in activity_refs: raise PlannerScenarioError("EXCEL_REF_DUPLICATE", f"Duplicate activity ref: {ref}")
         activity_refs.add(ref)
-        activity = {"id": ref, "display_code": ref, "name": _required(row, "名称", ref), "duration": int(row.get("工期") or 0), "preconditions": [], "output_state_id": f"{ref}:OUTPUT", "output_state_name": f"{row.get('名称')}完成", "additional_output_state_ids": [], "resource_reqs": {}, "event_reqs": [], "max_instances": int(row["最大实例数"]) if row.get("最大实例数") not in (None, "") else None, "is_milestone": _bool(row.get("里程碑")), "is_active": True}
+        activity = {"id": ref, "display_code": ref, "name": _required(row, "名称", ref), "duration": int(row.get("工期") or 0), "preconditions": [], "output_state_id": f"{ref}:OUTPUT", "output_state_name": f"{row.get('名称')}完成", "additional_output_state_ids": [], "resource_reqs": {}, "event_reqs": [], "max_instances": int(row["最大实例数"]) if row.get("最大实例数") not in (None, "") else None, "is_active": True}
         payload["activities"].append(activity); activity_by_ref[ref] = activity
         if _bool(row.get("是否目标活动")): payload["target_activity_ids"].append(ref)
     for row in rows["活动前置"]:

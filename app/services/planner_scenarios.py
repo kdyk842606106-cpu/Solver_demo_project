@@ -39,6 +39,16 @@ def paired_id(kind: str, source_id: str) -> str:
     return f"{kind}:{suffix}"
 
 
+def derived_milestone(preconditions: Iterable[dict[str, Any]]) -> bool:
+    """Keep the engine compatibility flag derived from dependency roles."""
+    return not any(item.get("relation_role") == "transition" for item in preconditions)
+
+
+def synchronize_activity_milestones(scenario: dict[str, Any]) -> None:
+    for activity in scenario.get("activities", []):
+        activity["is_milestone"] = derived_milestone(activity.get("preconditions", []))
+
+
 def new_scenario(name: str, *, display_code: str | None = None) -> dict[str, Any]:
     scenario_id = technical_id("scenario")
     return {
@@ -87,7 +97,7 @@ def create_activity(
         "resource_reqs": dict(payload.get("resource_reqs", {})),
         "event_reqs": list(payload.get("event_reqs", [])),
         "max_instances": payload.get("max_instances"),
-        "is_milestone": bool(payload.get("is_milestone", False)),
+        "is_milestone": derived_milestone(payload.get("preconditions", [])),
         "is_active": bool(payload.get("is_active", True)),
     }
     if activity["duration"] <= 0:
@@ -113,10 +123,11 @@ def update_activity(scenario: dict[str, Any], activity_id: str, payload: dict[st
     old_name = activity["name"]
     for field in (
         "name", "duration", "preconditions", "additional_output_state_ids", "resource_reqs",
-        "event_reqs", "max_instances", "is_milestone", "is_active",
+        "event_reqs", "max_instances", "is_active",
     ):
         if field in payload:
             activity[field] = copy.deepcopy(payload[field])
+    activity["is_milestone"] = derived_milestone(activity.get("preconditions", []))
     if int(activity["duration"]) <= 0:
         raise PlannerScenarioError("INVALID_DURATION", "Activity duration must be positive")
     if "output_state_name" in payload:
@@ -310,6 +321,7 @@ def rebuild_mirror(scenario: dict[str, Any]) -> None:
 
 def expand_packages(scenario: dict[str, Any]) -> dict[str, Any]:
     expanded = copy.deepcopy(scenario)
+    synchronize_activity_milestones(expanded)
     packages = {item["id"]: item for item in expanded.get("activity_packages", [])}
     members_by_package: dict[str, set[str]] = defaultdict(set)
     for membership in expanded.get("activity_package_memberships", []):
@@ -361,6 +373,7 @@ def expand_packages(scenario: dict[str, Any]) -> dict[str, Any]:
 
 
 def validate_scenario(scenario: dict[str, Any]) -> list[dict[str, Any]]:
+    synchronize_activity_milestones(scenario)
     issues: list[dict[str, Any]] = []
     # Check the authoritative package side before rebuilding its managed mirror.
     # Rebuilding deliberately skips dangling memberships, so doing this first is
@@ -442,10 +455,6 @@ def validate_scenario(scenario: dict[str, Any]) -> list[dict[str, Any]]:
     for activity in scenario.get("activities", []):
         if int(activity.get("duration", 0)) <= 0:
             issues.append(issue("INVALID_DURATION", "Activity duration must be positive", object_id=activity.get("id")))
-        if not activity.get("is_milestone") and not any(
-            item.get("relation_role") == "transition" for item in activity.get("preconditions", [])
-        ):
-            issues.append(issue("TRANSITION_REQUIRED", "Non-milestone activity requires a transition precondition", object_id=activity.get("id")))
         for relation in activity.get("preconditions", []):
             if relation.get("state_id") not in states:
                 issues.append(issue("UNKNOWN_STATE", "Activity precondition references an unknown state", object_id=activity.get("id"), details={"state_id": relation.get("state_id")}))
@@ -592,6 +601,7 @@ def scenario_hash(scenario: dict[str, Any]) -> str:
 def normalize_import(payload: dict[str, Any], *, preserve_ids: bool) -> dict[str, Any]:
     """Normalize imported JSON and regenerate every derived mirror object."""
     imported = copy.deepcopy(payload)
+    synchronize_activity_milestones(imported)
     if not preserve_ids:
         return _regenerate_import_ids(imported)
     _validate_import_ids(imported)

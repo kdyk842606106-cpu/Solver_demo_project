@@ -1,3 +1,7 @@
+from io import BytesIO
+
+from openpyxl import load_workbook
+
 from app.services.planner_excel import export_workbook, import_workbook, template_workbook
 from app.services.planner_scenarios import (
     add_membership,
@@ -28,10 +32,14 @@ def _scenario():
 
 
 def test_excel_template_and_round_trip_use_temporary_refs_not_solver_ids():
-    assert len(template_workbook()) > 5000
+    template = template_workbook()
+    assert len(template) > 5000
+    workbook = load_workbook(BytesIO(template), data_only=True)
+    assert "里程碑" not in [cell.value for cell in workbook["活动"][1]]
     imported = import_workbook(export_workbook(_scenario()))
     assert validate_scenario(imported) == []
     assert imported["activities"][0]["id"].startswith("activity:")
     assert imported["activity_packages"][0]["id"].startswith("activity-package:")
     assert imported["state_packages"][0]["managed_by"] == "activity_package_mirror"
     assert imported["target_activity_package_ids"]
+    assert imported["activities"][0]["is_milestone"] is False

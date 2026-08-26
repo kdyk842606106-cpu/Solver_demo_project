@@ -186,6 +186,23 @@ test('activity package containers collapse, expand, and auto-arrange as one layo
   await expect(page.getByText('已加入草稿：自动整理活动网络')).toBeVisible()
 })
 
+test('activity creation derives its type without a milestone switch', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.hero-actions .el-select').click()
+  await page.getByText('SCN-DEMO · Planner 演示场景', { exact: true }).click()
+  await page.getByRole('button', { name: '进入编辑' }).click()
+  await page.getByRole('button', { name: '新增活动' }).click()
+
+  const dialog = page.getByRole('dialog', { name: '新增活动' })
+  await expect(dialog.getByText('里程碑', { exact: true })).toHaveCount(0)
+  await expect(dialog.getByText('活动类型由前置关系自动识别')).toBeVisible()
+  await dialog.getByRole('textbox', { name: '活动名称' }).fill('自动识别类型活动')
+  await dialog.getByRole('button', { name: '加入草稿' }).click()
+
+  await expect(page.getByText('当前有 1 项未提交变更')).toBeVisible()
+  await expect(page.getByRole('button', { name: '统一提交（1）' })).toBeVisible()
+})
+
 test('activity connection is staged as one draft without exposing state nodes', async ({ page }) => {
   await page.goto('/')
   await page.locator('.hero-actions .el-select').click()

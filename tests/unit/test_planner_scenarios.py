@@ -123,6 +123,66 @@ def test_activity_identity_rename_clone_and_delete_rules():
     assert cloned["display_code"] == "ACT-0003"
 
 
+def test_activity_milestone_flag_is_derived_from_dependency_roles():
+    scenario = new_scenario("活动类型自动识别")
+    seed_id = "state:seed:derived-type"
+    scenario["states"].append({"id": seed_id, "name": "准备完成", "state_kind": "seed"})
+    scenario["initial_state_ids"].append(seed_id)
+
+    retained = create_activity(
+        scenario,
+        {
+            "name": "保留前置活动",
+            "duration": 2,
+            "preconditions": [{"state_id": seed_id, "relation_role": "required"}],
+            "is_milestone": False,
+        },
+        display_number=1,
+    )
+    transitioned = create_activity(
+        scenario,
+        {
+            "name": "替换前置活动",
+            "duration": 2,
+            "preconditions": [{"state_id": seed_id, "relation_role": "transition"}],
+            "is_milestone": True,
+        },
+        display_number=2,
+    )
+    assert retained["is_milestone"] is True
+    assert transitioned["is_milestone"] is False
+
+    update_activity(
+        scenario,
+        retained["id"],
+        {
+            "preconditions": [{"state_id": seed_id, "relation_role": "transition"}],
+            "is_milestone": True,
+        },
+    )
+    update_activity(
+        scenario,
+        transitioned["id"],
+        {
+            "preconditions": [{"state_id": seed_id, "relation_role": "required"}],
+            "is_milestone": False,
+        },
+    )
+    assert retained["is_milestone"] is False
+    assert transitioned["is_milestone"] is True
+
+    imported = copy.deepcopy(scenario)
+    for activity in imported["activities"]:
+        activity["is_milestone"] = not activity["is_milestone"]
+    normalized = normalize_import(imported, preserve_ids=False)
+    flags = {item["name"]: item["is_milestone"] for item in normalized["activities"]}
+    assert flags == {"保留前置活动": False, "替换前置活动": True}
+
+    validation_copy = copy.deepcopy(imported)
+    assert validate_scenario(validation_copy) == []
+    assert {item["name"]: item["is_milestone"] for item in validation_copy["activities"]} == flags
+
+
 def test_validation_rejects_cycles_dangling_members_and_conflicting_goals():
     scenario, root, child, _, first, _, _ = _modeled_scenario()
     root["parent_id"] = child["id"]
