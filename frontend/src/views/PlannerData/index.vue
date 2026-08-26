@@ -63,9 +63,10 @@
                 <el-table-column prop="display_code" label="编号" width="105" />
                 <el-table-column prop="name" label="活动" min-width="150" />
                 <el-table-column prop="duration" label="工期" width="70" />
+                <el-table-column label="最多执行" width="90"><template #default="{ row }">{{ row.max_instances ?? '不限' }}</template></el-table-column>
                 <el-table-column label="前置" width="70"><template #default="{ row }">{{ row.preconditions?.length || 0 }}</template></el-table-column>
                 <el-table-column label="所属包" min-width="150"><template #default="{ row }">{{ packageNames(row.id) || '未归属' }}</template></el-table-column>
-                <el-table-column label="操作" width="125"><template #default="{ row }"><el-button link :disabled="!editing" @click="queueClone(row)">复制</el-button><el-button link type="danger" :disabled="!editing" @click="queueDeleteActivity(row)">删除</el-button></template></el-table-column>
+                <el-table-column label="操作" width="170"><template #default="{ row }"><el-button link :disabled="!editing" @click="openActivityEdit(row)">编辑</el-button><el-button link :disabled="!editing" @click="queueClone(row)">复制</el-button><el-button link type="danger" :disabled="!editing" @click="queueDeleteActivity(row)">删除</el-button></template></el-table-column>
               </el-table>
             </section>
           </div>
@@ -112,11 +113,17 @@
 
     <el-dialog v-model="scenarioDialog" title="新建 Planner 场景" width="420px"><el-input v-model="scenarioName" placeholder="场景名称"/><template #footer><el-button @click="scenarioDialog=false">取消</el-button><el-button type="primary" @click="saveScenario">创建</el-button></template></el-dialog>
     <el-dialog v-model="packageDialog" :title="packageForm.level === 1 ? '新增一级活动包' : '新增二级活动包'" width="460px"><el-form label-position="top"><el-form-item label="名称"><el-input v-model="packageForm.name"/></el-form-item><el-form-item v-if="packageForm.level===2" label="所属一级包"><el-select v-model="packageForm.parent_id" style="width:100%"><el-option v-for="item in rootPackages" :key="item.id" :value="item.id" :label="item.name"/></el-select></el-form-item></el-form><template #footer><el-button @click="packageDialog=false">取消</el-button><el-button type="primary" @click="queuePackage">加入草稿</el-button></template></el-dialog>
-    <el-dialog v-model="activityDialog" title="新增活动" width="640px">
+    <el-dialog v-model="activityDialog" :title="editingActivityId ? '编辑活动' : '新增活动'" width="640px">
       <el-form label-position="top">
         <el-form-item label="活动名称"><el-input v-model="activityForm.name"/></el-form-item>
         <el-form-item label="工期"><el-input-number v-model="activityForm.duration" :min="1" style="width:100%"/></el-form-item>
-        <el-form-item label="所属二级活动包"><el-select v-model="activityForm.package_id" clearable style="width:100%"><el-option v-for="item in childPackages" :key="item.id" :value="item.id" :label="item.name"/></el-select></el-form-item>
+        <el-form-item v-if="!editingActivityId" label="所属二级活动包"><el-select v-model="activityForm.package_id" clearable style="width:100%"><el-option v-for="item in childPackages" :key="item.id" :value="item.id" :label="item.name"/></el-select></el-form-item>
+        <el-form-item label="最大执行次数">
+          <div class="instance-limit" data-testid="activity-instance-limit">
+            <el-switch v-model="activityForm.limit_instances" active-text="限制次数" inactive-text="不限" />
+            <el-input-number v-if="activityForm.limit_instances" v-model="activityForm.max_instances" :min="1" :step="1" style="width:180px"/>
+          </div>
+        </el-form-item>
         <el-form-item label="前置状态绑定">
           <div class="state-binding-list" data-testid="activity-state-bindings">
             <div v-for="(binding, index) in activityForm.preconditions" :key="index" class="state-binding-row">
@@ -151,7 +158,7 @@
         </el-form-item>
         <el-alert title="活动类型由前置关系自动识别；活动编号和运行所需信息由系统管理。" type="info" :closable="false"/>
       </el-form>
-      <template #footer><el-button @click="activityDialog=false">取消</el-button><el-button type="primary" @click="queueActivity">加入草稿</el-button></template>
+      <template #footer><el-button @click="activityDialog=false">取消</el-button><el-button type="primary" @click="queueActivity">{{ editingActivityId ? '保存到草稿' : '加入草稿' }}</el-button></template>
     </el-dialog>
     <el-dialog v-model="seedDialog" title="新增基础状态" width="420px"><el-form label-position="top"><el-form-item label="名称"><el-input v-model="seedForm.name"/></el-form-item></el-form><template #footer><el-button @click="seedDialog=false">取消</el-button><el-button type="primary" @click="queueSeed">加入草稿</el-button></template></el-dialog>
     <el-dialog v-model="resourceDialog" title="新增容量资源" width="420px"><el-form label-position="top"><el-form-item label="名称"><el-input v-model="resourceForm.name"/></el-form-item><el-form-item label="总容量"><el-input-number v-model="resourceForm.capacity" :min="1" style="width:100%"/></el-form-item></el-form><template #footer><el-button @click="resourceDialog=false">取消</el-button><el-button type="primary" @click="queueResource">加入草稿</el-button></template></el-dialog>
@@ -169,10 +176,11 @@ import { commitPlannerDraft, createPlannerScenario, exportPlannerScenario, getPl
 const scenarios = ref([]), scenarioId = ref(''), current = ref({ revision: 0, scenario: {} }), graph = ref({ containers: [], nodes: [], edges: [] })
 const activeTab = ref('model'), editing = ref(false), drafts = ref([]), saving = ref(false), validation = ref(null)
 const scenarioDialog = ref(false), packageDialog = ref(false), activityDialog = ref(false), seedDialog = ref(false), resourceDialog = ref(false), eventDialog = ref(false), importDialog = ref(false)
+const editingActivityId = ref('')
 const excelInput = ref(null)
 const scenarioName = ref(''), importText = ref('')
 const packageForm = reactive({ level: 1, name: '', parent_id: null })
-const activityForm = reactive({ name: '', duration: 1, package_id: null, preconditions: [], event_reqs: [] })
+const activityForm = reactive({ name: '', duration: 1, package_id: null, preconditions: [], event_reqs: [], limit_instances: false, max_instances: 1 })
 const seedForm = reactive({ name: '' }), resourceForm = reactive({ name: '', capacity: 1 }), eventForm = reactive({ name: '', time: 0, add_state_ids: [] })
 const scenario = computed(() => current.value.scenario || {})
 const shortHash = computed(() => (current.value.scenario_hash || '').slice(0, 12))
@@ -197,7 +205,22 @@ async function commitDraft() { saving.value = true; try { await commitPlannerDra
 function openPackageDialog(kind) { packageForm.level = kind === 'root' ? 1 : 2; packageForm.name = ''; packageForm.parent_id = null; packageDialog.value = true }
 function queuePackage() { if (!packageForm.name.trim() || (packageForm.level === 2 && !packageForm.parent_id)) return ElMessage.warning('请填写完整'); addDraft({ operation: 'create_package', client_ref: `draft:package:${Date.now()}`, payload: { name: packageForm.name.trim(), parent_id: packageForm.level === 2 ? packageForm.parent_id : null } }, `新建活动包 ${packageForm.name}`); packageDialog.value = false }
 function emptyActivityPrecondition() { return { state_id: null, relation_role: 'transition' } }
-function openActivityDialog() { Object.assign(activityForm, { name: '', duration: 1, package_id: null, preconditions: [emptyActivityPrecondition()], event_reqs: [] }); activityDialog.value = true }
+function openActivityDialog() { editingActivityId.value = ''; Object.assign(activityForm, { name: '', duration: 1, package_id: null, preconditions: [emptyActivityPrecondition()], event_reqs: [], limit_instances: false, max_instances: 1 }); activityDialog.value = true }
+function openActivityEdit(row) {
+  const pending = drafts.value.findLast((item) => item.operation === 'update_activity' && item.object_id === row.id)?.payload || {}
+  const activity = { ...row, ...pending }
+  editingActivityId.value = row.id
+  Object.assign(activityForm, {
+    name: activity.name,
+    duration: activity.duration,
+    package_id: null,
+    preconditions: (activity.preconditions || []).length ? activity.preconditions.map((item) => ({ ...item })) : [emptyActivityPrecondition()],
+    event_reqs: [...(activity.event_reqs || [])],
+    limit_instances: activity.max_instances != null,
+    max_instances: activity.max_instances ?? 1,
+  })
+  activityDialog.value = true
+}
 function addActivityPrecondition() { activityForm.preconditions.push(emptyActivityPrecondition()) }
 function removeActivityPrecondition(index) { activityForm.preconditions.splice(index, 1) }
 function isActivityStateDisabled(stateId, currentIndex) { return activityForm.preconditions.some((item, index) => index !== currentIndex && item.state_id === stateId) }
@@ -207,14 +230,27 @@ function queueActivity() {
     .filter((item) => item.state_id)
     .map((item) => ({ state_id: item.state_id, relation_role: item.relation_role }))
   if (new Set(preconditions.map((item) => item.state_id)).size !== preconditions.length) return ElMessage.warning('同一前置状态只能绑定一次')
-  const ref = `draft:activity:${Date.now()}`
-  addDraft({ operation: 'create_activity', client_ref: ref, payload: { name: activityForm.name.trim(), duration: activityForm.duration, preconditions, event_reqs: [...activityForm.event_reqs] } }, `新建活动 ${activityForm.name}`)
-  if (activityForm.package_id) addDraft({ operation: 'add_membership', payload: { package_id: activityForm.package_id, activity_id: ref } }, '加入活动包')
+  if (activityForm.limit_instances && (!Number.isInteger(activityForm.max_instances) || activityForm.max_instances < 1)) return ElMessage.warning('最大执行次数必须是正整数')
+  const payload = { name: activityForm.name.trim(), duration: activityForm.duration, preconditions, event_reqs: [...activityForm.event_reqs], max_instances: activityForm.limit_instances ? activityForm.max_instances : null }
+  if (editingActivityId.value) {
+    upsertActivityUpdate(editingActivityId.value, payload, `编辑活动 ${activityForm.name}`)
+  } else {
+    const ref = `draft:activity:${Date.now()}`
+    addDraft({ operation: 'create_activity', client_ref: ref, payload }, `新建活动 ${activityForm.name}`)
+    if (activityForm.package_id) addDraft({ operation: 'add_membership', payload: { package_id: activityForm.package_id, activity_id: ref } }, '加入活动包')
+  }
   activityDialog.value = false
 }
+function upsertActivityUpdate(activityId, payload, description) {
+  const index = drafts.value.findIndex((item) => item.operation === 'update_activity' && item.object_id === activityId)
+  const operation = { operation: 'update_activity', object_id: activityId, payload: { ...(index >= 0 ? drafts.value[index].payload : {}), ...payload }, description }
+  if (index >= 0) drafts.value.splice(index, 1, operation)
+  else drafts.value.push(operation)
+  ElMessage.success(`已加入草稿：${description}`)
+}
 function pendingPreconditions(activity) { return drafts.value.findLast((item) => item.operation === 'update_activity' && item.object_id === activity.id && item.payload.preconditions)?.payload.preconditions || activity.preconditions || [] }
-function queueConnection({ sourceActivityId, targetActivityId }) { const source = (scenario.value.activities || []).find((item) => item.id === sourceActivityId); const target = (scenario.value.activities || []).find((item) => item.id === targetActivityId); if (!source || !target) return; const preconditions = [...pendingPreconditions(target)]; if (preconditions.some((item) => item.state_id === source.output_state_id)) return ElMessage.warning('这条活动依赖已经存在'); preconditions.push({ state_id: source.output_state_id, relation_role: 'transition' }); replaceDraft((item) => item.operation === 'update_activity' && item.object_id === target.id && item.payload.preconditions, { operation: 'update_activity', object_id: target.id, payload: { preconditions } }, `连接 ${source.name} → ${target.name}`) }
-function queueRemoveConnection(edge) { const targetRef = (graph.value.nodes || []).find((item) => item.id === edge.target); const target = (scenario.value.activities || []).find((item) => item.id === targetRef?.canonical_activity_id); if (!target) return; const preconditions = pendingPreconditions(target).filter((item) => !(item.state_id === edge.state_id && item.relation_role === edge.relation_role)); replaceDraft((item) => item.operation === 'update_activity' && item.object_id === target.id && item.payload.preconditions, { operation: 'update_activity', object_id: target.id, payload: { preconditions } }, `移除指向 ${target.name} 的依赖`) }
+function queueConnection({ sourceActivityId, targetActivityId }) { const source = (scenario.value.activities || []).find((item) => item.id === sourceActivityId); const target = (scenario.value.activities || []).find((item) => item.id === targetActivityId); if (!source || !target) return; const preconditions = [...pendingPreconditions(target)]; if (preconditions.some((item) => item.state_id === source.output_state_id)) return ElMessage.warning('这条活动依赖已经存在'); preconditions.push({ state_id: source.output_state_id, relation_role: 'transition' }); upsertActivityUpdate(target.id, { preconditions }, `连接 ${source.name} → ${target.name}`) }
+function queueRemoveConnection(edge) { const targetRef = (graph.value.nodes || []).find((item) => item.id === edge.target); const target = (scenario.value.activities || []).find((item) => item.id === targetRef?.canonical_activity_id); if (!target) return; const preconditions = pendingPreconditions(target).filter((item) => !(item.state_id === edge.state_id && item.relation_role === edge.relation_role)); upsertActivityUpdate(target.id, { preconditions }, `移除指向 ${target.name} 的依赖`) }
 function queueLayout(layout) {
   const existing = drafts.value.find((item) => item.operation === 'update_layout')
   const activityRefs = new Map((existing?.payload.activity_refs || []).map((item) => [item.id, item]))
@@ -270,6 +306,7 @@ function selectActivity(id) { const item = (scenario.value.activities || []).fin
 .model-grid{display:grid;grid-template-columns:1fr 1.4fr;gap:16px}.panel{padding:18px;border:1px solid #e2e8f0;border-radius:12px;background:#fff}.full-panel{grid-column:1/-1}.panel-title{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:14px}.panel-title h2{margin:0 0 4px;font-size:17px}.panel-title p{margin:0;color:#64748b;font-size:12px}.target-form{margin-top:18px}.muted{color:#64748b}
 .hidden-input{display:none}
 .state-binding-list{display:grid;gap:10px;width:100%}.state-binding-row{display:grid;grid-template-columns:minmax(180px,1fr) auto auto;gap:8px;align-items:center}.state-binding-select{width:100%}.state-binding-help{font-size:12px;color:#64748b}.state-binding-list>[data-testid="add-activity-state-binding"]{justify-self:start}
+.instance-limit{display:flex;align-items:center;gap:18px}
 @media(max-width:1000px){.hero-card{align-items:flex-start;flex-direction:column}.hero-actions{justify-content:flex-start}.model-grid{grid-template-columns:1fr}}
 @media(max-width:680px){.state-binding-row{grid-template-columns:1fr}.state-binding-role{justify-self:start}}
 </style>

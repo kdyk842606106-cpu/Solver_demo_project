@@ -141,6 +141,7 @@ test.beforeEach(async ({ page }) => {
       { id: moduleXScenarioId, display_code: 'SCN-MODULE-X', name: moduleXScenario.name, revision: 1, activity_count: 5, package_count: 0 },
     ] })
     if (url.includes('/graph')) return route.fulfill({ json: graph })
+    if (url.includes('/draft-commit') && request.method() === 'POST') return route.fulfill({ json: { revision: 5, created_refs: {}, scenario, graph } })
     if (url.includes(`/api/v1/planner-scenarios/${moduleXScenarioId}`) && request.method() === 'GET') return route.fulfill({ json: { id: moduleXScenarioId, display_code: 'SCN-MODULE-X', name: moduleXScenario.name, revision: 1, scenario_hash: 'module-x-hash', scenario: moduleXScenario } })
     if (url.includes('/api/v1/planner-scenarios/') && request.method() === 'GET') return route.fulfill({ json: { id: scenarioId, display_code: 'SCN-DEMO', name: scenario.name, revision: 4, scenario_hash: 'same-hash', scenario } })
     if (url.endsWith('/api/v1/planner-runs/capabilities')) return route.fulfill({ json: { planner_available: true, engines: ['LEGACY', 'ASTAR', 'GA', 'ALL'], resource_model: 'aggregate_capacity', resource_instances_supported: false } })
@@ -220,6 +221,29 @@ test('activity creation derives its type without a milestone switch', async ({ p
 
   await expect(page.getByText('当前有 1 项未提交变更')).toBeVisible()
   await expect(page.getByRole('button', { name: '统一提交（1）' })).toBeVisible()
+})
+
+test('existing activity can be edited with a new maximum execution count', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.hero-actions .el-select').click()
+  await page.getByText('SCN-DEMO · Planner 演示场景', { exact: true }).click()
+  await page.getByRole('button', { name: '进入编辑' }).click()
+
+  const activityRow = page.locator('.el-table__body-wrapper tbody tr').filter({ hasText: '准备' }).last()
+  await activityRow.getByRole('button', { name: '编辑', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '编辑活动' })
+  await expect(dialog.getByRole('textbox', { name: '活动名称' })).toHaveValue('准备')
+  const limit = dialog.getByTestId('activity-instance-limit')
+  await limit.locator('.el-switch').click()
+  await limit.getByRole('spinbutton').fill('2')
+  await dialog.getByRole('button', { name: '保存到草稿' }).click()
+
+  await expect(page.getByText('当前有 1 项未提交变更')).toBeVisible()
+  const commitRequest = page.waitForRequest((request) => request.url().includes('/draft-commit') && request.method() === 'POST')
+  await page.getByRole('button', { name: '统一提交（1）' }).click()
+  const body = (await commitRequest).postDataJSON()
+  expect(body.operations).toHaveLength(1)
+  expect(body.operations[0]).toMatchObject({ operation: 'update_activity', object_id: activityA, payload: { name: '准备', duration: 2, max_instances: 2 } })
 })
 
 test('activity creation binds existing external events', async ({ page }) => {

@@ -229,6 +229,25 @@ async def test_draft_commit_resolves_temporary_refs_and_rolls_back_on_error(clie
         "package_count": 2,
         "state_node_count": 0,
     }
+    activity_id = body["created_refs"]["draft:activity"]
+    updated = await client.post(
+        f"/api/v1/planner-scenarios/{scenario_id}/draft-commit",
+        json={
+            "expected_revision": 2,
+            "operations": [
+                {
+                    "operation": "update_activity",
+                    "object_id": activity_id,
+                    "payload": {"name": "执行（已编辑）", "duration": 3, "max_instances": 2},
+                }
+            ],
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    updated_activity = next(item for item in updated.json()["scenario"]["activities"] if item["id"] == activity_id)
+    assert updated_activity["name"] == "执行（已编辑）"
+    assert updated_activity["duration"] == 3
+    assert updated_activity["max_instances"] == 2
     validation = await client.post(f"/api/v1/planner-scenarios/{scenario_id}/validate")
     assert validation.status_code == 200
     assert validation.json()["valid"] is True
