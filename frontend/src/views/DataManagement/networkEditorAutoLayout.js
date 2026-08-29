@@ -156,6 +156,7 @@ export async function layoutNestedContainerGraph({
   edges = [],
   expandedStateContainerIds = [],
   expandedActivityContainerIds = [],
+  activityDirection = 'DOWN',
   baseX = DEFAULT_BASE_X,
   baseY = DEFAULT_BASE_Y,
 } = {}) {
@@ -264,7 +265,7 @@ export async function layoutNestedContainerGraph({
     if (!childIds.length) return { width: CONTAINER_MIN_WIDTH, height: CONTAINER_MIN_HEIGHT }
 
     const containerItem = items.get(containerId)
-    const direction = layoutDirectionForContainer(containerItem)
+    const direction = layoutDirectionForContainer(containerItem, activityDirection)
     const projectedEdges = projectedContainerEdges(containerId, childIds, relationEdges, parentById, items)
     const projectedEdgeById = new Map(projectedEdges.map((edge) => [edge.id, edge]))
     let result = null
@@ -837,8 +838,8 @@ function normalizeNestedLayoutEdges(edges, items) {
   return result
 }
 
-function layoutDirectionForContainer(item) {
-  if (item?.kind === 'activity') return 'DOWN'
+function layoutDirectionForContainer(item, activityDirection = 'DOWN') {
+  if (item?.kind === 'activity') return activityDirection === 'RIGHT' ? 'RIGHT' : 'DOWN'
   return 'RIGHT'
 }
 

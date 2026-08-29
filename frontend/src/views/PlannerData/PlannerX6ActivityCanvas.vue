@@ -169,6 +169,7 @@ async function autoArrange() {
       activityNodes: nodes,
       edges: x6.value.edges,
       expandedActivityContainerIds: expandedPackageIds,
+      activityDirection: 'RIGHT',
     })
     const updates = new Map()
     for (const node of nodes) {

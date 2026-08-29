@@ -102,6 +102,74 @@ async def test_revision_conflict_and_json_round_trip(client):
 
 
 @pytest.mark.asyncio
+async def test_external_event_can_be_edited_directly_and_in_a_draft(client):
+    created = await _create(client, "/api/v1/planner-scenarios", {"name": "事件编辑场景"})
+    scenario_id = created["id"]
+    state_a = await _create(
+        client,
+        f"/api/v1/planner-scenarios/{scenario_id}/seed-states",
+        {"name": "状态 A"},
+    )
+    state_b = await _create(
+        client,
+        f"/api/v1/planner-scenarios/{scenario_id}/seed-states",
+        {"name": "状态 B"},
+    )
+    event = await _create(
+        client,
+        f"/api/v1/planner-scenarios/{scenario_id}/external-events",
+        {"name": "备件到货", "time": 30, "add_state_ids": [state_a["state"]["id"]]},
+    )
+    event_id = event["external_event"]["id"]
+
+    patched = await client.patch(
+        f"/api/v1/planner-scenarios/{scenario_id}/external-events/{event_id}",
+        json={
+            "expected_revision": event["revision"],
+            "name": "备件到货（调整）",
+            "time": 45,
+            "add_state_ids": [state_b["state"]["id"]],
+            "remove_state_ids": [state_a["state"]["id"]],
+        },
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["external_event"] == {
+        "id": event_id,
+        "name": "备件到货（调整）",
+        "time": 45,
+        "add_state_ids": [state_b["state"]["id"]],
+        "remove_state_ids": [state_a["state"]["id"]],
+    }
+
+    drafted = await client.post(
+        f"/api/v1/planner-scenarios/{scenario_id}/draft-commit",
+        json={
+            "expected_revision": patched.json()["revision"],
+            "operations": [
+                {
+                    "operation": "update_event",
+                    "object_id": event_id,
+                    "payload": {"name": "备件已到场", "time": 50},
+                }
+            ],
+        },
+    )
+    assert drafted.status_code == 200, drafted.text
+    updated = next(item for item in drafted.json()["scenario"]["external_events"] if item["id"] == event_id)
+    assert updated["name"] == "备件已到场"
+    assert updated["time"] == 50
+    assert updated["add_state_ids"] == [state_b["state"]["id"]]
+    assert updated["remove_state_ids"] == [state_a["state"]["id"]]
+
+    missing = await client.patch(
+        f"/api/v1/planner-scenarios/{scenario_id}/external-events/event%3Amissing",
+        json={"expected_revision": drafted.json()["revision"], "time": 60},
+    )
+    assert missing.status_code == 404
+    assert missing.json()["error_message"]["error_code"] == "EVENT_NOT_FOUND"
+
+
+@pytest.mark.asyncio
 async def test_runtime_state_selection_returns_stable_validation_errors(client):
     created = await _create(client, "/api/v1/planner-scenarios", {"name": "运行状态校验"})
     scenario_id = created["id"]
@@ -142,6 +210,20 @@ async def test_runtime_state_selection_returns_stable_validation_errors(client):
     conflict = await client.post("/api/v1/planner-runs", json={**base, "expected_revision": current["revision"] - 1})
     assert conflict.status_code == 409
     assert conflict.json()["error_message"]["error_code"] == "SCENARIO_REVISION_CONFLICT"
+
+    unsupported_objective = await client.post(
+        "/api/v1/planner-runs",
+        json={**base, "objectives": [{"type": "minimize_unknown_metric", "weight": 1}]},
+    )
+    assert unsupported_objective.status_code == 422
+    assert unsupported_objective.json()["error_message"]["error_code"] == "PLANNER_OBJECTIVE_UNSUPPORTED"
+
+    invalid_weight = await client.post(
+        "/api/v1/planner-runs",
+        json={**base, "objectives": [{"type": "minimize_makespan", "weight": 0}]},
+    )
+    assert invalid_weight.status_code == 422
+    assert invalid_weight.json()["error_message"]["error_code"] == "PLANNER_OBJECTIVE_WEIGHT_INVALID"
 
     deprecated = await client.post(
         f"/api/v1/planner-scenarios/{scenario_id}/activities",

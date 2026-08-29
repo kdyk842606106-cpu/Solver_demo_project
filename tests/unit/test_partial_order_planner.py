@@ -143,6 +143,44 @@ def test_pop_repeats_numeric_increment_instances():
     assert [node.predecessors for node in result.nodes] == [[], [1]]
 
 
+def test_pop_enforces_numeric_instance_limit_for_each_created_instance():
+    fill = MockRule(
+        id=1,
+        code="OP_FILL",
+        duration_min=5,
+        effects=[MockEffect("water_level", effect_type="increment", delta_value=20)],
+    )
+
+    blocked = partial_order_plan(
+        current_state={"water_level": "0"},
+        target_state={"water_level": "40"},
+        rules=[fill],
+        feature_defs={"water_level": MockFeatureDef("number")},
+        instance_limits={1: 1},
+    )
+    allowed = partial_order_plan(
+        current_state={"water_level": "0"},
+        target_state={"water_level": "40"},
+        rules=[fill],
+        feature_defs={"water_level": MockFeatureDef("number")},
+        instance_limits={1: 2},
+    )
+    unlimited = partial_order_plan(
+        current_state={"water_level": "0"},
+        target_state={"water_level": "40"},
+        rules=[fill],
+        feature_defs={"water_level": MockFeatureDef("number")},
+        instance_limits={1: None},
+    )
+
+    assert blocked.status == "no_solution"
+    assert blocked.diagnostics["provider_rejections"]["instance_limit"] >= 1
+    assert allowed.status == "success"
+    assert len(allowed.nodes) == 2
+    assert unlimited.status == "success"
+    assert len(unlimited.nodes) == 2
+
+
 def test_pop_inserts_numeric_precondition_support_chain():
     fill = MockRule(
         id=1,

@@ -29,6 +29,7 @@ from app.services.planner_scenarios import (
     scenario_hash,
     technical_id,
     update_activity,
+    update_event,
     update_package,
     validate_scenario,
 )
@@ -132,6 +133,14 @@ class EventCreate(StrictModel):
     remove_state_ids: list[str] = Field(default_factory=list)
 
 
+class EventUpdate(StrictModel):
+    expected_revision: int | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    time: int | None = Field(default=None, ge=0)
+    add_state_ids: list[str] | None = None
+    remove_state_ids: list[str] | None = None
+
+
 class ImportRequest(StrictModel):
     scenario: dict[str, Any]
     preserve_ids: bool = False
@@ -155,7 +164,7 @@ class DraftOperation(StrictModel):
     operation: Literal[
         "create_package", "update_package", "delete_package", "create_activity",
         "update_activity", "delete_activity", "add_membership", "remove_membership",
-        "create_seed_state", "create_resource", "create_event", "update_scenario", "update_layout",
+        "create_seed_state", "create_resource", "create_event", "update_event", "update_scenario", "update_layout",
     ]
     client_ref: str | None = None
     object_id: str | None = None
@@ -257,6 +266,8 @@ async def commit_draft(scenario_id: str, payload: DraftCommit, db: AsyncSession 
         elif item.operation == "create_event":
             created = {"id": technical_id("event"), **data}
             scenario.setdefault("external_events", []).append(created)
+        elif item.operation == "update_event":
+            created = _domain(update_event, scenario, object_id, data)
         elif item.operation == "update_scenario":
             scenario.update(data)
             created = scenario
@@ -436,6 +447,22 @@ async def post_event(scenario_id: str, payload: EventCreate, db: AsyncSession = 
     scenario = copy.deepcopy(record.scenario_json)
     event = {"id": technical_id("event"), **payload.model_dump()}
     scenario.setdefault("external_events", []).append(event)
+    _save(record, scenario)
+    return {"revision": record.revision, "external_event": event}
+
+
+@router.patch("/{scenario_id}/external-events/{event_id}")
+async def patch_event(
+    scenario_id: str,
+    event_id: str,
+    payload: EventUpdate,
+    db: AsyncSession = Depends(get_db_session),
+):
+    record = await _record(db, scenario_id, for_update=True)
+    _check_revision(record, payload.expected_revision)
+    scenario = copy.deepcopy(record.scenario_json)
+    data = payload.model_dump(exclude={"expected_revision"}, exclude_none=True)
+    event = _domain(update_event, scenario, event_id, data)
     _save(record, scenario)
     return {"revision": record.revision, "external_event": event}
 

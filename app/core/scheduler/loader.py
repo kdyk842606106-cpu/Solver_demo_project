@@ -43,7 +43,9 @@ class StepData:
     activity_group_id: int | None = None
     activity_group_code: str | None = None
     activity_group_name: str | None = None
+    activity_continuity_groups: list[dict[str, Any]] = field(default_factory=list)
     state_continuity_groups: list[dict[str, Any]] = field(default_factory=list)
+    start_windows: list[tuple[int, int | None]] = field(default_factory=list)
     atomic_activity_id: int | None = None
     responsible_subsystem: str | None = None
     effect_dimension_keys: list[str] = field(default_factory=list)

@@ -151,11 +151,13 @@ class PartialOrderPlanner:
         target_state: StateDict,
         rules: list[OpRule],
         feature_defs: dict[str, StateFeatureDef],
+        instance_limits: dict[int, int | None] | None = None,
     ) -> None:
         self.current_state = dict(current_state)
         self.target_state = dict(target_state)
         self.rules = sorted(rules, key=lambda r: (r.duration_min, r.id or 0))
         self.feature_defs = feature_defs
+        self.instance_limits = dict(instance_limits or {})
         self.evaluator = RuleEvaluator()
         self.instances: dict[str, ActivityInstance] = {}
         self.instance_counts: dict[int, int] = {}
@@ -317,6 +319,11 @@ class PartialOrderPlanner:
         self.stats.provider_branches += len(ranked_rules)
 
         for rule in ranked_rules:
+            rule_id = rule.id or id(rule)
+            limit = self.instance_limits.get(rule_id)
+            if limit is not None and self.instance_counts.get(rule_id, 0) >= limit:
+                self.stats.reject("instance_limit")
+                continue
             if self._is_numeric_provider(rule, fact):
                 provider = self._create_numeric_chain(rule, fact, resolving)
             else:
@@ -383,10 +390,15 @@ class PartialOrderPlanner:
         max_steps = self._numeric_step_limit(current, target, step)
         provider_id: str | None = None
         previous_writer = self._latest_writer_for_feature(fact.feature_key)
+        rule_id = rule.id or id(rule)
+        limit = self.instance_limits.get(rule_id)
 
         for _ in range(max_steps):
             if self._fact_satisfied_by_value(fact, self._format_decimal(current)):
                 break
+            if limit is not None and self.instance_counts.get(rule_id, 0) >= limit:
+                self.stats.reject("instance_limit")
+                return None
             next_value = current + step
             if self._moving_away(current, next_value, target, fact):
                 self.stats.reject("numeric_bound")
@@ -1089,6 +1101,11 @@ class PartialOrderPlanner:
             "threats_resolved": self.stats.threats_resolved,
             "provider_branches": self.stats.provider_branches,
             "provider_rejections": dict(sorted(self.stats.provider_rejections.items())),
+            "instance_limits": {
+                str(rule_id): limit
+                for rule_id, limit in sorted(self.instance_limits.items())
+                if limit is not None
+            },
             "reused_provider_count": self.stats.reused_provider_count,
             "new_instance_count": self.stats.new_instance_count,
             "start_provider_count": self.stats.start_provider_count,
@@ -1125,6 +1142,7 @@ def partial_order_plan(
     target_state: StateDict,
     rules: list[OpRule],
     feature_defs: dict[str, StateFeatureDef],
+    instance_limits: dict[int, int | None] | None = None,
 ) -> PopPlanResult:
     """Plan with instance-level POP and return a RAG-compatible result."""
     try:
@@ -1133,6 +1151,7 @@ def partial_order_plan(
             target_state=target_state,
             rules=rules,
             feature_defs=feature_defs,
+            instance_limits=instance_limits,
         ).plan()
     except Exception as exc:
         return PopPlanResult(

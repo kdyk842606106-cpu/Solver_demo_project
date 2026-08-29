@@ -73,13 +73,25 @@
         </el-tab-pane>
 
         <el-tab-pane label="活动网络" name="network">
-          <PlannerX6ActivityCanvas
+          <PlannerNetworkEditorWorkspace
+            :scenario="scenario"
             :graph="graph"
-            :editable="editing"
-            @select-activity="selectActivity"
+            :editing="editing"
+            :drafts="drafts"
+            :validation="validation"
             @connect-activities="queueConnection"
             @remove-connection="queueRemoveConnection"
             @layout-change="queueLayout"
+            @remove-draft="removeDraft"
+            @run-validation="runValidation"
+            @create-package="openPackageDialog"
+            @create-activity="openActivityDialog"
+            @create-seed="seedDialog = true"
+            @create-resource="resourceDialog = true"
+            @create-event="openEventDialog"
+            @update-activity="queueWorkspaceActivityUpdate"
+            @change-memberships="queueMembershipChanges"
+            @delete-activity="queueDeleteActivity"
           />
         </el-tab-pane>
 
@@ -90,8 +102,14 @@
               <el-table :data="scenario.resources || []" size="small"><el-table-column prop="name" label="资源"/><el-table-column prop="capacity" label="总容量" width="100"/></el-table>
             </section>
             <section class="panel">
-              <header class="panel-title"><div><h2>外部事件</h2><p>按场景相对时间激活或移除状态。</p></div><el-button :disabled="!editing" @click="eventDialog = true">新增事件</el-button></header>
-              <el-table :data="scenario.external_events || []" size="small"><el-table-column prop="name" label="事件"/><el-table-column prop="time" label="发生时间" width="100"/><el-table-column label="增加状态"><template #default="{ row }">{{ stateNames(row.add_state_ids) }}</template></el-table-column></el-table>
+              <header class="panel-title"><div><h2>外部事件</h2><p>按场景相对时间激活或移除状态。</p></div><el-button :disabled="!editing" @click="openEventDialog">新增事件</el-button></header>
+              <el-table :data="scenario.external_events || []" size="small" row-key="id" data-testid="external-events-table">
+                <el-table-column prop="name" label="事件" min-width="130"/>
+                <el-table-column prop="time" label="发生时间" width="100"/>
+                <el-table-column label="增加状态" min-width="130"><template #default="{ row }">{{ stateNames(row.add_state_ids) }}</template></el-table-column>
+                <el-table-column label="移除状态" min-width="130"><template #default="{ row }">{{ stateNames(row.remove_state_ids) }}</template></el-table-column>
+                <el-table-column label="操作" width="80"><template #default="{ row }"><el-button link :disabled="!editing" @click="openEventEdit(row)">编辑</el-button></template></el-table-column>
+              </el-table>
             </section>
             <section class="panel full-panel">
               <header class="panel-title"><div><h2>基础状态</h2><p>管理人工创建、可用于活动前置和求解选择的业务事实。</p></div><el-button :disabled="!editing" @click="seedDialog = true">新增基础状态</el-button></header>
@@ -162,7 +180,23 @@
     </el-dialog>
     <el-dialog v-model="seedDialog" title="新增基础状态" width="420px"><el-form label-position="top"><el-form-item label="名称"><el-input v-model="seedForm.name"/></el-form-item></el-form><template #footer><el-button @click="seedDialog=false">取消</el-button><el-button type="primary" @click="queueSeed">加入草稿</el-button></template></el-dialog>
     <el-dialog v-model="resourceDialog" title="新增容量资源" width="420px"><el-form label-position="top"><el-form-item label="名称"><el-input v-model="resourceForm.name"/></el-form-item><el-form-item label="总容量"><el-input-number v-model="resourceForm.capacity" :min="1" style="width:100%"/></el-form-item></el-form><template #footer><el-button @click="resourceDialog=false">取消</el-button><el-button type="primary" @click="queueResource">加入草稿</el-button></template></el-dialog>
-    <el-dialog v-model="eventDialog" title="新增外部事件" width="480px"><el-form label-position="top"><el-form-item label="名称"><el-input v-model="eventForm.name"/></el-form-item><el-form-item label="发生时间"><el-input-number v-model="eventForm.time" :min="0" style="width:100%"/></el-form-item><el-form-item label="增加状态"><el-select v-model="eventForm.add_state_ids" multiple style="width:100%"><el-option v-for="item in selectableStates" :key="item.id" :value="item.id" :label="item.name"/></el-select></el-form-item></el-form><template #footer><el-button @click="eventDialog=false">取消</el-button><el-button type="primary" @click="queueEvent">加入草稿</el-button></template></el-dialog>
+    <el-dialog v-model="eventDialog" :title="editingEventId ? '编辑外部事件' : '新增外部事件'" width="520px" data-testid="external-event-dialog">
+      <el-form label-position="top">
+        <el-form-item label="名称"><el-input v-model="eventForm.name"/></el-form-item>
+        <el-form-item label="发生时间"><el-input-number v-model="eventForm.time" :min="0" style="width:100%"/></el-form-item>
+        <el-form-item label="增加状态">
+          <el-select v-model="eventForm.add_state_ids" multiple filterable clearable style="width:100%">
+            <el-option v-for="item in selectableStates" :key="item.id" :value="item.id" :label="item.name" :disabled="eventForm.remove_state_ids.includes(item.id)"/>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="移除状态">
+          <el-select v-model="eventForm.remove_state_ids" multiple filterable clearable style="width:100%">
+            <el-option v-for="item in selectableStates" :key="item.id" :value="item.id" :label="item.name" :disabled="eventForm.add_state_ids.includes(item.id)"/>
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer><el-button @click="eventDialog=false">取消</el-button><el-button type="primary" @click="queueEvent">{{ editingEventId ? '保存到草稿' : '加入草稿' }}</el-button></template>
+    </el-dialog>
     <el-dialog v-model="importDialog" title="导入 Planner JSON" width="640px"><el-input v-model="importText" type="textarea" :rows="16" placeholder="粘贴导出的 scenario 对象或完整导出结果"/><template #footer><el-button @click="importDialog=false">取消</el-button><el-button type="primary" @click="doImport">导入并生成新 ID</el-button></template></el-dialog>
   </div>
 </template>
@@ -170,18 +204,18 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import PlannerX6ActivityCanvas from './PlannerX6ActivityCanvas.vue'
+import PlannerNetworkEditorWorkspace from './PlannerNetworkEditorWorkspace.vue'
 import { commitPlannerDraft, createPlannerScenario, exportPlannerScenario, getPlannerGraph, getPlannerScenario, importPlannerExcel, importPlannerScenario, listPlannerScenarios, plannerExcelExportUrl, validatePlannerScenario } from '../../api/planner'
 
 const scenarios = ref([]), scenarioId = ref(''), current = ref({ revision: 0, scenario: {} }), graph = ref({ containers: [], nodes: [], edges: [] })
 const activeTab = ref('model'), editing = ref(false), drafts = ref([]), saving = ref(false), validation = ref(null)
 const scenarioDialog = ref(false), packageDialog = ref(false), activityDialog = ref(false), seedDialog = ref(false), resourceDialog = ref(false), eventDialog = ref(false), importDialog = ref(false)
-const editingActivityId = ref('')
+const editingActivityId = ref(''), editingEventId = ref('')
 const excelInput = ref(null)
 const scenarioName = ref(''), importText = ref('')
 const packageForm = reactive({ level: 1, name: '', parent_id: null })
 const activityForm = reactive({ name: '', duration: 1, package_id: null, preconditions: [], event_reqs: [], limit_instances: false, max_instances: 1 })
-const seedForm = reactive({ name: '' }), resourceForm = reactive({ name: '', capacity: 1 }), eventForm = reactive({ name: '', time: 0, add_state_ids: [] })
+const seedForm = reactive({ name: '' }), resourceForm = reactive({ name: '', capacity: 1 }), eventForm = reactive({ name: '', time: 0, add_state_ids: [], remove_state_ids: [] })
 const scenario = computed(() => current.value.scenario || {})
 const shortHash = computed(() => (current.value.scenario_hash || '').slice(0, 12))
 const rootPackages = computed(() => (scenario.value.activity_packages || []).filter((item) => item.level === 1))
@@ -200,6 +234,21 @@ async function saveScenario() { if (!scenarioName.value.trim()) return; const cr
 function enterEdit() { editing.value = true; drafts.value = [] }
 function cancelEdit() { drafts.value = []; editing.value = false }
 function addDraft(operation, description) { drafts.value.push({ ...operation, description }); ElMessage.success(`已加入草稿：${description}`) }
+function containsDraftRef(value, ref) {
+  if (value === ref) return true
+  if (Array.isArray(value)) return value.some((item) => containsDraftRef(item, ref))
+  if (value && typeof value === 'object') return Object.values(value).some((item) => containsDraftRef(item, ref))
+  return false
+}
+function removeDraft(index) {
+  if (index < 0 || index >= drafts.value.length) return
+  const removed = drafts.value[index]
+  if (!removed.client_ref) {
+    drafts.value.splice(index, 1)
+    return
+  }
+  drafts.value = drafts.value.filter((item, itemIndex) => itemIndex !== index && item.object_id !== removed.client_ref && !containsDraftRef(item.payload, removed.client_ref))
+}
 function replaceDraft(predicate, operation, description) { const index = drafts.value.findIndex(predicate); const item = { ...operation, description }; if (index >= 0) drafts.value.splice(index, 1, item); else drafts.value.push(item); ElMessage.success(`已加入草稿：${description}`) }
 async function commitDraft() { saving.value = true; try { await commitPlannerDraft(scenarioId.value, { expected_revision: current.value.revision, operations: drafts.value.map(({ description, ...item }) => item) }); ElMessage.success('全部草稿已在一个事务中提交'); drafts.value = []; editing.value = false; await loadScenario() } finally { saving.value = false } }
 function openPackageDialog(kind) { packageForm.level = kind === 'root' ? 1 : 2; packageForm.name = ''; packageForm.parent_id = null; packageDialog.value = true }
@@ -220,6 +269,23 @@ function openActivityEdit(row) {
     max_instances: activity.max_instances ?? 1,
   })
   activityDialog.value = true
+}
+function openEventDialog() {
+  editingEventId.value = ''
+  Object.assign(eventForm, { name: '', time: 0, add_state_ids: [], remove_state_ids: [] })
+  eventDialog.value = true
+}
+function openEventEdit(row) {
+  const pending = drafts.value.findLast((item) => item.operation === 'update_event' && item.object_id === row.id)?.payload || {}
+  const event = { ...row, ...pending }
+  editingEventId.value = row.id
+  Object.assign(eventForm, {
+    name: event.name,
+    time: event.time,
+    add_state_ids: [...(event.add_state_ids || [])],
+    remove_state_ids: [...(event.remove_state_ids || [])],
+  })
+  eventDialog.value = true
 }
 function addActivityPrecondition() { activityForm.preconditions.push(emptyActivityPrecondition()) }
 function removeActivityPrecondition(index) { activityForm.preconditions.splice(index, 1) }
@@ -248,9 +314,41 @@ function upsertActivityUpdate(activityId, payload, description) {
   else drafts.value.push(operation)
   ElMessage.success(`已加入草稿：${description}`)
 }
+function queueWorkspaceActivityUpdate({ activityId, payload }) {
+  const activity = (scenario.value.activities || []).find((item) => item.id === activityId)
+  upsertActivityUpdate(activityId, payload, `编辑活动 ${payload.name || activity?.name || ''}`)
+}
+function queueMembershipChanges({ activityId, packageIds }) {
+  const desired = new Set(packageIds || [])
+  const original = (scenario.value.activity_package_memberships || []).filter((item) => item.activity_id === activityId)
+  const removedIds = new Set(drafts.value.filter((item) => item.operation === 'remove_membership').map((item) => item.object_id))
+  const pendingAdds = drafts.value.filter((item) => item.operation === 'add_membership' && item.payload.activity_id === activityId)
+  const current = new Set(original.filter((item) => !removedIds.has(item.id)).map((item) => item.package_id))
+  pendingAdds.forEach((item) => current.add(item.payload.package_id))
+
+  drafts.value = drafts.value.filter((item) => !(
+    item.operation === 'add_membership' &&
+    item.payload.activity_id === activityId &&
+    !desired.has(item.payload.package_id)
+  ))
+  for (const packageId of desired) {
+    if (current.has(packageId)) continue
+    drafts.value.push({ operation: 'add_membership', payload: { package_id: packageId, activity_id: activityId }, description: '加入活动包' })
+  }
+  for (const membership of original) {
+    if (desired.has(membership.package_id) || removedIds.has(membership.id)) continue
+    drafts.value.push({ operation: 'remove_membership', object_id: membership.id, description: '移出活动包' })
+  }
+}
 function pendingPreconditions(activity) { return drafts.value.findLast((item) => item.operation === 'update_activity' && item.object_id === activity.id && item.payload.preconditions)?.payload.preconditions || activity.preconditions || [] }
-function queueConnection({ sourceActivityId, targetActivityId }) { const source = (scenario.value.activities || []).find((item) => item.id === sourceActivityId); const target = (scenario.value.activities || []).find((item) => item.id === targetActivityId); if (!source || !target) return; const preconditions = [...pendingPreconditions(target)]; if (preconditions.some((item) => item.state_id === source.output_state_id)) return ElMessage.warning('这条活动依赖已经存在'); preconditions.push({ state_id: source.output_state_id, relation_role: 'transition' }); upsertActivityUpdate(target.id, { preconditions }, `连接 ${source.name} → ${target.name}`) }
-function queueRemoveConnection(edge) { const targetRef = (graph.value.nodes || []).find((item) => item.id === edge.target); const target = (scenario.value.activities || []).find((item) => item.id === targetRef?.canonical_activity_id); if (!target) return; const preconditions = pendingPreconditions(target).filter((item) => !(item.state_id === edge.state_id && item.relation_role === edge.relation_role)); upsertActivityUpdate(target.id, { preconditions }, `移除指向 ${target.name} 的依赖`) }
+function activityForDraft(activityId) {
+  const persisted = (scenario.value.activities || []).find((item) => item.id === activityId)
+  if (persisted) return persisted
+  const created = drafts.value.find((item) => item.operation === 'create_activity' && item.client_ref === activityId)
+  return created ? { id: activityId, output_state_id: `${activityId}:output`, ...created.payload } : null
+}
+function queueConnection({ sourceActivityId, targetActivityId }) { const source = activityForDraft(sourceActivityId); const target = activityForDraft(targetActivityId); if (!source || !target) return; const preconditions = [...pendingPreconditions(target)]; if (preconditions.some((item) => item.state_id === source.output_state_id)) return ElMessage.warning('这条活动依赖已经存在'); preconditions.push({ state_id: source.output_state_id, relation_role: 'transition' }); upsertActivityUpdate(target.id, { preconditions }, `连接 ${source.name} → ${target.name}`) }
+function queueRemoveConnection(edge) { const targetRef = (graph.value.nodes || []).find((item) => item.id === edge.target); const target = activityForDraft(edge.target_activity_id || targetRef?.canonical_activity_id); if (!target) return; const preconditions = pendingPreconditions(target).filter((item) => !(item.state_id === edge.state_id && item.relation_role === edge.relation_role)); upsertActivityUpdate(target.id, { preconditions }, `移除指向 ${target.name} 的依赖`) }
 function queueLayout(layout) {
   const existing = drafts.value.find((item) => item.operation === 'update_layout')
   const activityRefs = new Map((existing?.payload.activity_refs || []).map((item) => [item.id, item]))
@@ -288,7 +386,22 @@ async function queueDeletePackage(row) { await ElMessageBox.confirm(`删除活�
 async function queueDeleteActivity(row) { await ElMessageBox.confirm(`删除活动“${row.name}”？被其他活动依赖时提交会被阻止。`, '确认'); addDraft({ operation: 'delete_activity', object_id: row.id }, `删除活动 ${row.name}`) }
 function queueSeed() { if (!seedForm.name.trim()) return; addDraft({ operation: 'create_seed_state', payload: { name: seedForm.name.trim() } }, `新增基础状态 ${seedForm.name}`); seedDialog.value = false; seedForm.name = '' }
 function queueResource() { if (!resourceForm.name.trim()) return; addDraft({ operation: 'create_resource', payload: { name: resourceForm.name.trim(), capacity: resourceForm.capacity, is_active: true } }, `新增容量资源 ${resourceForm.name}`); resourceDialog.value = false }
-function queueEvent() { if (!eventForm.name.trim()) return; addDraft({ operation: 'create_event', payload: { name: eventForm.name.trim(), time: eventForm.time, add_state_ids: [...eventForm.add_state_ids], remove_state_ids: [] } }, `新增事件 ${eventForm.name}`); eventDialog.value = false }
+function queueEvent() {
+  if (!eventForm.name.trim()) return ElMessage.warning('请填写事件名称')
+  const overlap = eventForm.add_state_ids.filter((id) => eventForm.remove_state_ids.includes(id))
+  if (overlap.length) return ElMessage.warning('同一状态不能同时增加和移除')
+  const payload = { name: eventForm.name.trim(), time: eventForm.time, add_state_ids: [...eventForm.add_state_ids], remove_state_ids: [...eventForm.remove_state_ids] }
+  if (editingEventId.value) {
+    replaceDraft(
+      (item) => item.operation === 'update_event' && item.object_id === editingEventId.value,
+      { operation: 'update_event', object_id: editingEventId.value, payload },
+      `编辑事件 ${eventForm.name}`,
+    )
+  } else {
+    addDraft({ operation: 'create_event', client_ref: `draft:event:${Date.now()}`, payload }, `新增事件 ${eventForm.name}`)
+  }
+  eventDialog.value = false
+}
 async function runValidation() { validation.value = await validatePlannerScenario(scenarioId.value); validation.value.valid ? ElMessage.success('校验通过') : ElMessage.error(`发现 ${validation.value.issues.length} 个阻断问题`) }
 async function downloadJson() { const data = await exportPlannerScenario(scenarioId.value); const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${scenario.value.display_code || 'planner-scenario'}.json`; anchor.click(); URL.revokeObjectURL(url) }
 function downloadExcel() { window.location.assign(plannerExcelExportUrl(scenarioId.value)) }

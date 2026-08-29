@@ -17,6 +17,7 @@ export const removePlannerPackageMember = (id, membershipId) => api.delete(`/pla
 export const createPlannerSeedState = (id, payload) => api.post(`/planner-scenarios/${encodeURIComponent(id)}/seed-states`, payload)
 export const createPlannerResource = (id, payload) => api.post(`/planner-scenarios/${encodeURIComponent(id)}/resources`, payload)
 export const createPlannerEvent = (id, payload) => api.post(`/planner-scenarios/${encodeURIComponent(id)}/external-events`, payload)
+export const updatePlannerEvent = (id, eventId, payload) => api.patch(`/planner-scenarios/${encodeURIComponent(id)}/external-events/${encodeURIComponent(eventId)}`, payload)
 export const getPlannerGraph = (id) => api.get(`/planner-scenarios/${encodeURIComponent(id)}/graph`)
 export const updatePlannerGraphLayout = (id, payload) => api.patch(`/planner-scenarios/${encodeURIComponent(id)}/graph/layout`, payload)
 export const validatePlannerScenario = (id) => api.post(`/planner-scenarios/${encodeURIComponent(id)}/validate`)

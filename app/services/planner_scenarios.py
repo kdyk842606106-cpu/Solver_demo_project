@@ -144,6 +144,24 @@ def update_activity(scenario: dict[str, Any], activity_id: str, payload: dict[st
     return activity
 
 
+def update_event(scenario: dict[str, Any], event_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    event = require_item(scenario.get("external_events", []), event_id, "EVENT_NOT_FOUND")
+    if "name" in payload:
+        name = str(payload["name"]).strip()
+        if not name:
+            raise PlannerScenarioError("EVENT_NAME_REQUIRED", "External event name is required")
+        event["name"] = name
+    if "time" in payload:
+        time = int(payload["time"])
+        if time < 0:
+            raise PlannerScenarioError("INVALID_EVENT_TIME", "External event time cannot be negative")
+        event["time"] = time
+    for field in ("add_state_ids", "remove_state_ids"):
+        if field in payload:
+            event[field] = list(payload[field])
+    return event
+
+
 def clone_activity(
     scenario: dict[str, Any], activity_id: str, *, display_number: int
 ) -> dict[str, Any]:

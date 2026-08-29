@@ -85,6 +85,68 @@ def _module_x_scenario():
     return scenario
 
 
+def _shared_maintenance_scenario(*, technician_capacity: int):
+    scenario = new_scenario("共享隔离并行维修")
+    scenario["execution_mode"] = "parallel"
+    scenario["resources"] = [{
+        "id": "resource:technician",
+        "name": "维修技师",
+        "capacity": technician_capacity,
+        "is_active": True,
+    }]
+    root = create_package(scenario, {"name": "联合维修"}, display_number=1)
+    package_a = create_package(scenario, {"name": "维修任务 A", "parent_id": root["id"]}, display_number=2)
+    package_b = create_package(scenario, {"name": "维修任务 B", "parent_id": root["id"]}, display_number=3)
+    seed_id = "state:maintenance:ready"
+    scenario["states"].append({"id": seed_id, "name": "设备可维修", "state_kind": "seed"})
+    scenario["initial_state_ids"] = [seed_id]
+
+    isolation = create_activity(
+        scenario,
+        {
+            "name": "停机安全隔离",
+            "duration": 10,
+            "preconditions": [{"state_id": seed_id, "relation_role": "required"}],
+            "resource_reqs": {"resource:technician": 1},
+            "max_instances": 1,
+        },
+        display_number=1,
+    )
+    task_a = create_activity(
+        scenario,
+        {
+            "name": "维修任务 A 实施",
+            "duration": 30,
+            "preconditions": [{"state_id": isolation["output_state_id"], "relation_role": "required"}],
+            "resource_reqs": {"resource:technician": 1},
+            "max_instances": 1,
+        },
+        display_number=2,
+    )
+    task_b = create_activity(
+        scenario,
+        {
+            "name": "维修任务 B 实施",
+            "duration": 20,
+            "preconditions": [{"state_id": isolation["output_state_id"], "relation_role": "required"}],
+            "resource_reqs": {"resource:technician": 1},
+            "max_instances": 1,
+        },
+        display_number=3,
+    )
+    for package_id in (package_a["id"], package_b["id"]):
+        add_membership(scenario, package_id, isolation["id"])
+    add_membership(scenario, package_a["id"], task_a["id"])
+    add_membership(scenario, package_b["id"], task_b["id"])
+    scenario["goal_state_ids"] = [
+        isolation["output_state_id"],
+        task_a["output_state_id"],
+        task_b["output_state_id"],
+    ]
+    rebuild_mirror(scenario)
+    return scenario
+
+
 @pytest.mark.skipif(not planner_available(), reason="external planner checkout is unavailable")
 def test_legacy_astar_and_ga_use_same_snapshot_and_shared_validator():
     scenario, activity = _linear_scenario()
@@ -125,6 +187,154 @@ def test_module_x_astar_pulls_test_a_before_arrival_and_finishes_at_90():
     assert schedule["功能 B 调测"] == (60, 90)
 
 
+@pytest.mark.skipif(not planner_available(), reason="external planner checkout is unavailable")
+def test_module_x_legacy_scheduler_honors_event_not_before():
+    scenario = _module_x_scenario()
+    result = run_engine(
+        scenario,
+        engine="LEGACY",
+        run_id="module-x-legacy-event-test",
+        seed=23,
+        budget_override={"time_limit_seconds": 10},
+    )
+
+    assert result["paths"], result
+    path = result["paths"][0]
+    assert path["validator_status"] == "VALID"
+    install = next(item for item in path["executions"] if item["activity_name"] == "安装模块 X")
+    assert install["start_time"] >= 45
+
+
+@pytest.mark.skipif(not planner_available(), reason="external planner checkout is unavailable")
+def test_legacy_waits_for_event_only_goal_without_creating_activity():
+    scenario = new_scenario("纯事件目标")
+    seed_id = "state:event:seed"
+    goal_id = "state:event:goal"
+    scenario["states"].extend([
+        {"id": seed_id, "name": "初始", "state_kind": "seed"},
+        {"id": goal_id, "name": "到料", "state_kind": "seed"},
+    ])
+    scenario["initial_state_ids"] = [seed_id]
+    scenario["goal_state_ids"] = [goal_id]
+    scenario["external_events"] = [{
+        "id": "event:arrival",
+        "name": "到料事件",
+        "time": 15,
+        "add_state_ids": [goal_id],
+        "remove_state_ids": [],
+    }]
+
+    result = run_engine(scenario, engine="LEGACY", run_id="event-only", seed=1)
+
+    assert result["paths"][0]["validator_status"] == "VALID"
+    assert result["paths"][0]["executions"] == []
+    assert result["paths"][0]["metrics"]["makespan"] == 15
+    assert result["stats"]["scheduler"]["status"] == "NOT_REQUIRED"
+
+
+@pytest.mark.skipif(not planner_available(), reason="external planner checkout is unavailable")
+def test_legacy_uses_event_state_availability_window():
+    scenario = new_scenario("事件状态窗口")
+    scenario["execution_mode"] = "parallel"
+    ready_id = "state:event-window:ready"
+    scenario["states"].append({"id": ready_id, "name": "允许作业", "state_kind": "seed"})
+    scenario["initial_state_ids"] = [ready_id]
+    scenario["external_events"] = [
+        {"id": "event:close", "name": "窗口关闭", "time": 5, "add_state_ids": [], "remove_state_ids": [ready_id]},
+        {"id": "event:reopen", "name": "窗口恢复", "time": 20, "add_state_ids": [ready_id], "remove_state_ids": []},
+    ]
+    activity = create_activity(
+        scenario,
+        {
+            "name": "窗口内维修",
+            "duration": 10,
+            "preconditions": [{"state_id": ready_id, "relation_role": "required"}],
+            "max_instances": 1,
+        },
+        display_number=1,
+    )
+    scenario["goal_state_ids"] = [activity["output_state_id"]]
+
+    result = run_engine(scenario, engine="LEGACY", run_id="event-window", seed=1)
+
+    assert result["paths"][0]["validator_status"] == "VALID"
+    execution = result["paths"][0]["executions"][0]
+    assert (execution["start_time"], execution["end_time"]) == (20, 30)
+
+
+@pytest.mark.skipif(not planner_available(), reason="external planner checkout is unavailable")
+@pytest.mark.parametrize(
+    ("capacity", "expected_makespan", "expected_branch_starts"),
+    [
+        (1, 60, {10, 40}),
+        (2, 40, {10}),
+    ],
+)
+def test_legacy_pathfinder_scheduler_parallelizes_and_resolves_resource_conflicts(
+    capacity,
+    expected_makespan,
+    expected_branch_starts,
+):
+    scenario = _shared_maintenance_scenario(technician_capacity=capacity)
+    result = run_engine(
+        scenario,
+        engine="LEGACY",
+        run_id=f"legacy-shared-capacity-{capacity}",
+        seed=7,
+        objectives=[{"type": "minimize_makespan", "weight": 1.0}],
+    )
+
+    assert result["engine_pipeline"] == "partial_order_pathfinder+cp_sat_scheduler"
+    assert result["paths"], result
+    path = result["paths"][0]
+    assert path["validator_status"] == "VALID"
+    assert path["metrics"]["makespan"] == expected_makespan
+    assert dict(path["metrics"]["resource_peak"])["resource:technician"] == capacity
+    names = [item["activity_name"] for item in path["executions"]]
+    assert names.count("停机安全隔离") == 1
+    branch_starts = {
+        item["start_time"]
+        for item in path["executions"]
+        if item["activity_name"].startswith("维修任务")
+    }
+    assert branch_starts == expected_branch_starts
+    assert result["stats"]["pathfinder"]["selected_instance_count"] == 3
+    assert result["stats"]["scheduler"]["makespan"] == expected_makespan
+    assert result["stats"]["scheduler"]["status"] in {"OPTIMAL", "FEASIBLE"}
+    assert result["stats"]["scheduler"]["critical_path"]
+    assert result["applied_objectives"] == [{"type": "minimize_makespan", "weight": 1.0}]
+
+
+@pytest.mark.skipif(not planner_available(), reason="external planner checkout is unavailable")
+def test_legacy_applies_original_scheduler_package_objectives_without_duplicating_shared_activity():
+    scenario = _shared_maintenance_scenario(technician_capacity=2)
+    objectives = [
+        {"type": "minimize_makespan", "weight": 1.0},
+        {"type": "minimize_activity_group_span", "weight": 0.5},
+        {"type": "minimize_activity_group_gaps", "weight": 0.25},
+        {"type": "minimize_state_group_span", "weight": 0.5},
+        {"type": "minimize_state_group_gaps", "weight": 0.25},
+    ]
+
+    result = run_engine(
+        scenario,
+        engine="LEGACY",
+        run_id="legacy-package-objectives",
+        seed=7,
+        objectives=objectives,
+    )
+
+    assert result["paths"][0]["validator_status"] == "VALID"
+    assert result["applied_objectives"] == objectives
+    assert [item["type"] for item in result["stats"]["scheduler"]["objective_terms"]] == [
+        item["type"] for item in objectives
+    ]
+    assert sum(
+        execution["activity_name"] == "停机安全隔离"
+        for execution in result["paths"][0]["executions"]
+    ) == 1
+
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(not planner_available(), reason="external planner checkout is unavailable")
 async def test_all_engine_api_persists_one_immutable_snapshot(client):
@@ -157,6 +367,11 @@ async def test_all_engine_api_persists_one_immutable_snapshot(client):
     assert set(results) == {"LEGACY", "ASTAR", "GA"}
     assert {item["scenario_hash"] for item in results.values()} == {payload["scenario_hash"]}
     assert all(item["paths"][0]["validator_status"] == "VALID" for item in results.values())
+    assert payload["request"]["objectives"] == [{"type": "minimize_makespan", "weight": 1.0}]
+    assert results["LEGACY"]["engine_pipeline"] == "partial_order_pathfinder+cp_sat_scheduler"
+    assert results["LEGACY"]["applied_objectives"] == payload["request"]["objectives"]
+    assert results["ASTAR"]["applied_objectives"] == [{"type": "engine_native_path_metrics", "weight": 1.0}]
+    assert results["GA"]["applied_objectives"] == [{"type": "engine_native_path_metrics", "weight": 1.0}]
     assert payload["request"]["effective_scenario_snapshot"]["target_activity_ids"] == []
     assert payload["request"]["effective_scenario_snapshot"]["target_activity_package_ids"] == []
 

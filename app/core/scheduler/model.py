@@ -113,8 +113,16 @@ def build_model(
         (s.not_before for s in rag_data.steps if s.not_before is not None),
         default=0,
     )
-    if max_not_before > 0 and calendar_context is None:
-        horizon = max_not_before + horizon
+    max_start_window = max(
+        (
+            int(window_start)
+            for step in rag_data.steps
+            for window_start, _ in (getattr(step, "start_windows", []) or [])
+        ),
+        default=0,
+    )
+    if calendar_context is None:
+        horizon = max(max_not_before, max_start_window) + horizon
 
     task_vars: dict[int, TaskVar] = {}
     activity_groups: dict[int, list[int]] = {}
@@ -196,8 +204,22 @@ def build_model(
             work_intervals=work_intervals,
             segments=segments,
         )
+        seen_activity_groups: set[int] = set()
         if step.activity_group_id is not None:
-            activity_groups.setdefault(step.activity_group_id, []).append(so)
+            seen_activity_groups.add(int(step.activity_group_id))
+            activity_groups.setdefault(int(step.activity_group_id), []).append(so)
+        for group in getattr(step, "activity_continuity_groups", []) or []:
+            group_id = group.get("activity_group_id")
+            if group_id is None:
+                continue
+            try:
+                group_id_int = int(group_id)
+            except (TypeError, ValueError):
+                continue
+            if group_id_int in seen_activity_groups:
+                continue
+            seen_activity_groups.add(group_id_int)
+            activity_groups.setdefault(group_id_int, []).append(so)
         seen_state_groups: set[int] = set()
         for group in getattr(step, "state_continuity_groups", []) or []:
             group_id = group.get("state_group_id")
@@ -250,6 +272,25 @@ def build_model(
     for step in rag_data.steps:
         if step.not_before is not None:
             model.add(task_vars[step.step_order].start >= step.not_before)
+        start_windows = getattr(step, "start_windows", []) or []
+        if start_windows:
+            valid_intervals: list[list[int]] = []
+            latest_start = max(0, horizon - step.duration_min)
+            for window_start, window_end in start_windows:
+                lower = max(0, int(window_start))
+                upper = latest_start if window_end is None else min(
+                    latest_start,
+                    int(window_end) - step.duration_min,
+                )
+                if lower <= upper:
+                    valid_intervals.append([lower, upper])
+            if valid_intervals:
+                model.add_linear_expression_in_domain(
+                    task_vars[step.step_order].start,
+                    cp_model.Domain.from_intervals(valid_intervals),
+                )
+            else:
+                model.add(task_vars[step.step_order].start > horizon)
 
     schedule_model = ScheduleModel(
         model=model,

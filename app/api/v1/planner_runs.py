@@ -21,6 +21,17 @@ from app.services.planner_scenarios import PlannerScenarioError, scenario_hash, 
 
 router = APIRouter(prefix="/planner-runs", tags=["planner-runs"])
 
+SUPPORTED_OBJECTIVES = {
+    "minimize_makespan",
+    "minimize_activity_group_span",
+    "minimize_activity_group_gaps",
+    "minimize_activity_group_interruptions",
+    "minimize_state_group_span",
+    "minimize_state_group_gaps",
+    "minimize_state_group_interruptions",
+}
+DEFAULT_OBJECTIVES = [{"type": "minimize_makespan", "weight": 1.0}]
+
 
 class RunCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -32,6 +43,7 @@ class RunCreate(BaseModel):
     engine: Literal["LEGACY", "ASTAR", "GA", "ALL"] = "ALL"
     seed: int = 42
     budget: dict[str, Any] = Field(default_factory=dict)
+    objectives: list[dict[str, Any]] = Field(default_factory=lambda: [dict(item) for item in DEFAULT_OBJECTIVES])
 
 
 @router.get("/capabilities")
@@ -43,6 +55,10 @@ async def capabilities():
         "resource_model": "aggregate_capacity",
         "resource_instances_supported": False,
         "input_schema": "planner-shared-scenario/v1",
+        "legacy_pipeline": "partial_order_pathfinder+cp_sat_scheduler",
+        "legacy_objectives": sorted(SUPPORTED_OBJECTIVES),
+        "legacy_calendar_supported": False,
+        "legacy_scheduling_rules_supported": False,
     }
 
 
@@ -97,6 +113,8 @@ async def create_run(payload: RunCreate, db: AsyncSession = Depends(get_db_sessi
     scenario["goal_state_ids"] = target_state_ids
     scenario["target_activity_ids"] = []
     scenario["target_activity_package_ids"] = []
+    objectives = _normalize_objectives(payload.objectives)
+    scenario["planner_run_objectives"] = objectives
     issues = validate_scenario(scenario)
     if issues:
         raise HTTPException(status_code=422, detail={
@@ -111,6 +129,7 @@ async def create_run(payload: RunCreate, db: AsyncSession = Depends(get_db_sessi
         **payload.model_dump(),
         "current_state_ids": current_state_ids,
         "target_state_ids": target_state_ids,
+        "objectives": objectives,
         "base_scenario_hash": base_scenario_hash,
         "scenario_hash": snapshot_hash,
         "effective_scenario_snapshot": copy.deepcopy(scenario),
@@ -137,6 +156,7 @@ async def create_run(payload: RunCreate, db: AsyncSession = Depends(get_db_sessi
                     run_id=run_id,
                     seed=payload.seed,
                     budget_override=payload.budget,
+                    objectives=objectives,
                 )
                 for engine in engines
             ],
@@ -198,3 +218,30 @@ def _state_error(code: str, message: str, state_ids: list[str], state_by_id: dic
             for state_id in state_ids
         ],
     })
+
+
+def _normalize_objectives(items: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for index, item in enumerate(items or DEFAULT_OBJECTIVES):
+        objective_type = str(item.get("type") or "").strip()
+        if objective_type not in SUPPORTED_OBJECTIVES:
+            raise HTTPException(status_code=422, detail={
+                "error_code": "PLANNER_OBJECTIVE_UNSUPPORTED",
+                "error_message": f"Unsupported objective: {objective_type}",
+                "objective_index": index,
+            })
+        try:
+            weight = float(item.get("weight", 1.0))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail={
+                "error_code": "PLANNER_OBJECTIVE_WEIGHT_INVALID",
+                "error_message": f"Invalid objective weight at index {index}",
+            }) from exc
+        if weight <= 0:
+            raise HTTPException(status_code=422, detail={
+                "error_code": "PLANNER_OBJECTIVE_WEIGHT_INVALID",
+                "error_message": "Objective weight must be greater than zero",
+                "objective_index": index,
+            })
+        normalized.append({"type": objective_type, "weight": weight})
+    return normalized or [dict(item) for item in DEFAULT_OBJECTIVES]
