@@ -84,6 +84,7 @@ def create_activity(
     activity_uuid = uuid4()
     activity_id = technical_id("activity", activity_uuid)
     name = str(payload["name"]).strip()
+    output_state_name = str(payload.get("output_state_name") or f"{name}完成").strip()
     activity = {
         "id": activity_id,
         "display_code": f"ACT-{display_number:04d}",
@@ -91,8 +92,8 @@ def create_activity(
         "duration": int(payload.get("duration", 1)),
         "preconditions": copy.deepcopy(payload.get("preconditions", [])),
         "output_state_id": technical_id("state", activity_uuid) + ":output",
-        "output_state_name": f"{name}完成",
-        "output_name_customized": False,
+        "output_state_name": output_state_name,
+        "output_name_customized": payload.get("output_state_name") is not None,
         "additional_output_state_ids": list(payload.get("additional_output_state_ids", [])),
         "resource_reqs": dict(payload.get("resource_reqs", {})),
         "event_reqs": list(payload.get("event_reqs", [])),
@@ -172,8 +173,9 @@ def clone_activity(
         if key not in {"id", "display_code", "output_state_id", "output_state_name", "output_name_customized"}
     }
     payload["name"] = f"{source['name']}副本"
+    if source.get("output_name_customized"):
+        payload["output_state_name"] = source["output_state_name"]
     created = create_activity(scenario, payload, display_number=display_number)
-    created["output_state_name"] = f"{created['name']}完成"
     return created
 
 

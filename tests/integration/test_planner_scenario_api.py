@@ -294,7 +294,7 @@ async def test_draft_commit_resolves_temporary_refs_and_rolls_back_on_error(clie
                 {"operation": "create_package", "client_ref": "draft:root", "payload": {"name": "一级包"}},
                 {"operation": "create_package", "client_ref": "draft:child", "payload": {"name": "二级包", "parent_id": "draft:root"}},
                 {"operation": "create_seed_state", "client_ref": "draft:seed", "payload": {"name": "开始", "initial": True}},
-                {"operation": "create_activity", "client_ref": "draft:activity", "payload": {"name": "执行", "duration": 2, "preconditions": [{"state_id": "draft:seed", "relation_role": "transition"}]}},
+                {"operation": "create_activity", "client_ref": "draft:activity", "payload": {"name": "执行", "duration": 2, "output_state_name": "已执行", "preconditions": [{"state_id": "draft:seed", "relation_role": "transition"}]}},
                 {"operation": "add_membership", "client_ref": "draft:membership", "payload": {"package_id": "draft:child", "activity_id": "draft:activity"}},
                 {"operation": "update_layout", "payload": {"activity_refs": [{"id": "draft:membership", "x": 48, "y": 72}], "package_containers": []}},
             ],
@@ -312,6 +312,9 @@ async def test_draft_commit_resolves_temporary_refs_and_rolls_back_on_error(clie
         "state_node_count": 0,
     }
     activity_id = body["created_refs"]["draft:activity"]
+    created_activity = next(item for item in body["scenario"]["activities"] if item["id"] == activity_id)
+    assert created_activity["output_state_name"] == "已执行"
+    assert created_activity["output_name_customized"] is True
     updated = await client.post(
         f"/api/v1/planner-scenarios/{scenario_id}/draft-commit",
         json={

@@ -7,6 +7,7 @@ const activityA = 'activity:44444444-4444-4444-8444-444444444444'
 const activityB = 'activity:55555555-5555-4555-8555-555555555555'
 const stateA = 'state:44444444-4444-4444-8444-444444444444:output'
 const sharedStatePackageId = 'state-package:66666666-6666-4666-8666-666666666666'
+const technicianResourceId = 'resource:technician'
 const moduleXScenarioId = 'module-x-scenario'
 
 const moduleXStates = {
@@ -40,7 +41,8 @@ const scenario = {
     { id: 'state:b-output', name: '执行完成', state_kind: 'activity_output' },
   ],
   initial_state_ids: ['state:seed'], goal_state_ids: ['state:b-output'], forbidden_state_ids: [], target_activity_ids: [],
-  target_activity_package_ids: [], activity_package_scope_ids: [], resources: [], external_events: [],
+  target_activity_package_ids: [], activity_package_scope_ids: [],
+  resources: [{ id: technicianResourceId, name: '技术员', capacity: 3, is_active: true }], external_events: [],
   activity_packages: [
     { id: rootId, display_code: 'AP-0001', name: '一级总包', level: 1, parent_id: null, layout: { x: 20, y: 20, width: 1120, height: 520 }, mirrored_state_package_id: 'state-package:22222222-2222-4222-8222-222222222222' },
     { id: childId, display_code: 'AP-0002', name: '二级实施包', level: 2, parent_id: rootId, layout: { x: 50, y: 70, width: 620, height: 390 }, mirrored_state_package_id: 'state-package:33333333-3333-4333-8333-333333333333' },
@@ -229,7 +231,7 @@ test('activity package containers collapse, expand, and auto-arrange as one layo
   expect(Math.abs(second.y - first.y)).toBeLessThan(100)
 })
 
-test('activity creation derives its type without a milestone switch', async ({ page }) => {
+test('activity creation separates its state transition editor from required preconditions', async ({ page }) => {
   await page.goto('/')
   await page.locator('.hero-actions .el-select').click()
   await page.getByText('SCN-DEMO · Planner 演示场景', { exact: true }).click()
@@ -239,24 +241,82 @@ test('activity creation derives its type without a milestone switch', async ({ p
   const dialog = page.getByRole('dialog', { name: '新增活动' })
   await expect(dialog.getByText('里程碑', { exact: true })).toHaveCount(0)
   await expect(dialog.getByText('活动类型由前置关系自动识别')).toBeVisible()
-  await expect(dialog.getByText('前置状态绑定', { exact: true })).toBeVisible()
+  await expect(dialog.getByRole('tab', { name: '状态转移' })).toBeVisible()
+  await expect(dialog.getByRole('tab', { name: '前置状态' })).toBeVisible()
   await expect(dialog.getByText('外部事件绑定', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('容量资源需求', { exact: true })).toBeVisible()
   await expect(dialog.getByTestId('activity-event-bindings').getByRole('combobox')).toBeDisabled()
-  const bindings = dialog.getByTestId('activity-state-bindings')
-  await bindings.locator('.state-binding-select').first().click()
+  const matrix = dialog.getByTestId('activity-transition-matrix')
+  await expect(matrix.getByText('执行前状态', { exact: true })).toBeVisible()
+  await expect(matrix.getByText('执行后状态', { exact: true })).toBeVisible()
+  await expect(matrix.getByText('当前活动局部转移矩阵')).toHaveCount(0)
+  await matrix.getByTestId('transition-source-select').click()
   await page.locator('.el-select-dropdown:visible').getByText('初始状态', { exact: true }).click()
-  await dialog.getByTestId('add-activity-state-binding').click()
-  await expect(bindings.locator('.state-binding-row')).toHaveCount(2)
-  await bindings.locator('.state-binding-select').nth(1).click()
-  await page.keyboard.press('ArrowDown')
-  await page.keyboard.press('Enter')
-  await expect(bindings.locator('.state-binding-row').nth(1).getByText('准备完成', { exact: true })).toBeVisible()
-  await bindings.locator('.state-binding-row').nth(1).getByText('执行后保留', { exact: true }).click()
+  await matrix.getByTestId('transition-output-name').fill('业务处理完成')
+  await dialog.getByRole('tab', { name: '前置状态' }).click()
+  const bindings = dialog.getByTestId('activity-state-bindings')
+  await bindings.getByText('全部原子状态', { exact: true }).click()
+  await expect(bindings.locator('.atomic-source-row').filter({ hasText: '初始状态' }).getByRole('button')).toBeDisabled()
+  await bindings.locator('.atomic-source-row').filter({ hasText: '准备完成' }).getByRole('button', { name: '添加' }).click()
+  await expect(bindings.locator('.state-binding-row')).toHaveCount(1)
+  const resourceBindings = dialog.getByTestId('activity-resource-bindings')
+  await expect(resourceBindings.getByText('技术员', { exact: true })).toBeVisible()
+  await resourceBindings.getByRole('spinbutton').fill('2')
   await dialog.getByRole('textbox', { name: '活动名称' }).fill('自动识别类型活动')
   await dialog.getByRole('button', { name: '加入草稿' }).click()
 
   await expect(page.getByText('当前有 1 项未提交变更')).toBeVisible()
   await expect(page.getByRole('button', { name: '统一提交（1）' })).toBeVisible()
+  const commitRequest = page.waitForRequest((request) => request.url().includes('/draft-commit') && request.method() === 'POST')
+  await page.getByRole('button', { name: '统一提交（1）' }).click()
+  const body = (await commitRequest).postDataJSON()
+  expect(body.operations[0]).toMatchObject({
+    operation: 'create_activity',
+    payload: {
+      output_state_name: '业务处理完成',
+      resource_reqs: { [technicianResourceId]: 2 },
+      preconditions: [
+        { state_id: 'state:seed', relation_role: 'transition', binding_type: 'atomic_state' },
+        { state_id: stateA, relation_role: 'required', binding_type: 'atomic_state' },
+      ],
+    },
+  })
+})
+
+test('activity preconditions support layered state-package snapshots', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.hero-actions .el-select').click()
+  await page.getByText('SCN-DEMO · Planner 演示场景', { exact: true }).click()
+  await page.getByRole('button', { name: '进入编辑' }).click()
+  await page.getByRole('button', { name: '新增活动' }).click()
+
+  const dialog = page.getByRole('dialog', { name: '新增活动' })
+  await dialog.getByRole('tab', { name: '前置状态' }).click()
+  const bindings = dialog.getByTestId('activity-state-bindings')
+  const packageRow = bindings.locator('.binding-tree-row').filter({ hasText: '二级实施包' })
+  await packageRow.getByRole('button', { name: '绑定整包' }).click()
+  await expect(bindings.getByText('覆盖 2/2 个原子状态')).toBeVisible()
+  await bindings.locator('.selected-tree-row.is-package').click()
+  await bindings.locator('.selected-tree-row.is-package_member').filter({ hasText: '执行完成' }).locator('.el-checkbox').click()
+  await expect(bindings.getByText('部分覆盖', { exact: true })).toBeVisible()
+
+  await dialog.getByRole('textbox', { name: '活动名称' }).fill('状态包前置活动')
+  await dialog.getByRole('button', { name: '加入草稿' }).click()
+  const commitRequest = page.waitForRequest((request) => request.url().includes('/draft-commit') && request.method() === 'POST')
+  await page.getByRole('button', { name: '统一提交（1）' }).click()
+  const body = (await commitRequest).postDataJSON()
+  expect(body.operations[0]).toMatchObject({
+    operation: 'create_activity',
+    payload: {
+      preconditions: [{
+        state_id: stateA,
+        binding_type: 'state_package',
+        state_package_id: 'state-package:33333333-3333-4333-8333-333333333333',
+        covered_state_ids: [stateA],
+        coverage_status: 'partial',
+      }],
+    },
+  })
 })
 
 test('existing activity can be edited with a new maximum execution count', async ({ page }) => {
@@ -265,7 +325,7 @@ test('existing activity can be edited with a new maximum execution count', async
   await page.getByText('SCN-DEMO · Planner 演示场景', { exact: true }).click()
   await page.getByRole('button', { name: '进入编辑' }).click()
 
-  const activityRow = page.locator('.el-table__body-wrapper tbody tr').filter({ hasText: '准备' }).last()
+  const activityRow = page.locator('.el-table__body-wrapper tbody tr').filter({ hasText: 'ACT-0001' })
   await activityRow.getByRole('button', { name: '编辑', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: '编辑活动' })
   await expect(dialog.getByRole('textbox', { name: '活动名称' })).toHaveValue('准备')
@@ -329,7 +389,7 @@ test('existing external event can be edited and submitted as one draft', async (
   }])
 })
 
-test('activity connection is staged as one draft without exposing state nodes', async ({ page }) => {
+test('activity connection does not overwrite an existing transition', async ({ page }) => {
   await page.goto('/')
   await page.locator('.hero-actions .el-select').click()
   await page.getByText('SCN-DEMO · Planner 演示场景', { exact: true }).click()
@@ -341,8 +401,9 @@ test('activity connection is staged as one draft without exposing state nodes', 
   await nodes.nth(1).click()
   await nodes.nth(0).click()
 
-  await expect(page.getByText('当前有 1 项未提交变更')).toBeVisible()
-  await expect(page.getByRole('button', { name: '统一提交（1）' })).toBeVisible()
+  await expect(page.getByText('准备 已配置状态转移，请在活动的“状态转移”页中调整')).toBeVisible()
+  await expect(page.getByText('当前有 1 项未提交变更')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '统一提交（0）' })).toBeDisabled()
   await expect(page.getByTestId('planner-activity-x6-canvas').locator('.x6-state-node, .x6-state-container')).toHaveCount(0)
 })
 
@@ -361,7 +422,7 @@ test('planner network reuses the three-pane editor with property drafts, undo, a
   await workbench.getByText('ACT-0001 · 准备', { exact: true }).click()
   const properties = workbench.locator('.properties-pane')
   await expect(properties.getByLabel('活动名称')).toHaveValue('准备')
-  await expect(properties.getByLabel('系统主输出')).toHaveValue('准备完成')
+  await expect(properties.getByTestId('transition-output-name')).toHaveValue('准备完成')
 
   await page.getByRole('button', { name: '进入编辑' }).click()
   await properties.getByLabel('活动名称').fill('准备（已调整）')

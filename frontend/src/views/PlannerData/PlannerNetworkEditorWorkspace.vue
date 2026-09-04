@@ -135,34 +135,43 @@
           <div v-if="propertiesPaneCollapsed" class="pane-rail">活动属性</div>
           <template v-else-if="selectedActivity">
             <el-form label-position="top" size="small">
-              <el-form-item label="活动名称"><el-input v-model="form.name" :disabled="!editing" /></el-form-item>
+              <el-form-item label="活动名称"><el-input v-model="form.name" :disabled="!editing" @input="syncPropertyActivityName" /></el-form-item>
               <div class="two-column">
                 <el-form-item label="工期"><el-input-number v-model="form.duration" :min="1" :disabled="!editing" /></el-form-item>
                 <el-form-item label="最多执行"><el-input-number v-model="form.max_instances" :min="1" :disabled="!editing" placeholder="不限" /></el-form-item>
               </div>
-              <el-form-item label="系统主输出">
-                <el-input :model-value="selectedActivity.output_state_name || `${selectedActivity.name}完成`" disabled />
-              </el-form-item>
               <el-form-item label="所属二级活动包">
                 <el-select v-model="form.package_ids" multiple clearable :disabled="!editing" style="width:100%">
                   <el-option v-for="item in childPackages" :key="item.id" :value="item.id" :label="item.name" />
                 </el-select>
               </el-form-item>
-              <el-form-item label="前置状态">
-                <div class="binding-list">
-                  <div v-for="(binding, index) in form.preconditions" :key="index" class="binding-row">
-                    <el-select v-model="binding.state_id" filterable :disabled="!editing" style="width:100%">
-                      <el-option v-for="item in effectiveScenario.states || []" :key="item.id" :value="item.id" :label="item.name" />
-                    </el-select>
-                    <el-radio-group v-model="binding.relation_role" :disabled="!editing" size="small">
-                      <el-radio-button value="transition">替换</el-radio-button>
-                      <el-radio-button value="required">保留</el-radio-button>
-                    </el-radio-group>
-                    <el-button v-if="editing" link type="danger" @click="form.preconditions.splice(index, 1)">移除</el-button>
-                  </div>
-                  <el-button v-if="editing" plain @click="form.preconditions.push({ state_id: '', relation_role: 'transition' })">添加前置</el-button>
-                </div>
-              </el-form-item>
+              <el-tabs v-model="propertyStateTab" class="property-state-tabs">
+                <el-tab-pane label="状态转移" name="transition">
+                  <PlannerTransitionMatrix
+                    :source-state-id="form.transition_state_id"
+                    :output-state-id="selectedActivity.output_state_id"
+                    :output-state-name="form.output_state_name"
+                    :states="effectiveScenario.states || []"
+                    :activities="effectiveScenario.activities || []"
+                    :legacy-transitions="form.legacy_transitions"
+                    :disabled="!editing"
+                    compact
+                    @update:source-state-id="updatePropertyTransition"
+                    @update:output-state-name="updatePropertyOutputName"
+                  />
+                </el-tab-pane>
+                <el-tab-pane label="前置状态" name="required">
+                  <PlannerStateBindingSelector
+                    v-model="form.required_bindings"
+                    :states="effectiveScenario.states || []"
+                    :state-packages="effectiveScenario.state_packages || []"
+                    :state-package-memberships="effectiveScenario.state_package_memberships || []"
+                    :excluded-state-ids="[form.transition_state_id, selectedActivity.output_state_id].filter(Boolean)"
+                    :disabled="!editing"
+                    compact
+                  />
+                </el-tab-pane>
+              </el-tabs>
               <el-form-item label="容量资源需求">
                 <div class="binding-list">
                   <div v-for="item in effectiveScenario.resources || []" :key="item.id" class="quantity-row">
@@ -236,6 +245,9 @@ import { ElMessage } from 'element-plus'
 import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import NetworkEditorWorkbenchFrame from '../DataManagement/components/NetworkEditorWorkbenchFrame.vue'
 import PlannerX6ActivityCanvas from './PlannerX6ActivityCanvas.vue'
+import PlannerStateBindingSelector from './PlannerStateBindingSelector.vue'
+import PlannerTransitionMatrix from './PlannerTransitionMatrix.vue'
+import { activityPreconditions, bindingStateIds, splitActivityRelations } from './plannerStateBindings'
 
 const props = defineProps({
   scenario: { type: Object, default: () => ({}) },
@@ -256,10 +268,11 @@ const packageFilterIds = ref([])
 const resourcePaneCollapsed = ref(false)
 const propertiesPaneCollapsed = ref(false)
 const resourcePaneWidth = ref(280)
-const propertiesPaneWidth = ref(370)
+const propertiesPaneWidth = ref(520)
 const selectedActivityId = ref('')
 const impactVisible = ref(false)
-const form = reactive({ name: '', duration: 1, max_instances: null, package_ids: [], preconditions: [], resource_reqs: {}, event_reqs: [] })
+const propertyStateTab = ref('transition')
+const form = reactive({ name: '', duration: 1, max_instances: null, package_ids: [], transition_state_id: null, transition_dirty: false, legacy_transitions: [], required_bindings: [], output_state_name: '', output_name_customized: false, resource_reqs: {}, event_reqs: [] })
 let stopResize = null
 
 const effectiveScenario = computed(() => applyDrafts(props.scenario, props.drafts))
@@ -277,12 +290,19 @@ const impact = computed(() => selectedActivity.value ? buildImpact(selectedActiv
 watch(selectedActivity, (activity) => {
   if (!activity) return
   const memberships = (effectiveScenario.value.activity_package_memberships || []).filter((item) => item.activity_id === activity.id)
+  const relations = splitActivityRelations(activity.preconditions || [])
+  propertyStateTab.value = 'transition'
   Object.assign(form, {
     name: activity.name,
     duration: activity.duration,
     max_instances: activity.max_instances ?? null,
     package_ids: memberships.map((item) => item.package_id),
-    preconditions: (activity.preconditions || []).map((item) => ({ ...item })),
+    transition_state_id: relations.transitionStateId,
+    transition_dirty: false,
+    legacy_transitions: relations.legacyTransitions,
+    required_bindings: relations.requiredBindings,
+    output_state_name: activity.output_state_name || `${activity.name}完成`,
+    output_name_customized: activity.output_name_customized ?? ((activity.output_state_name || `${activity.name}完成`) !== `${activity.name}完成`),
     resource_reqs: { ...(activity.resource_reqs || {}) },
     event_reqs: [...(activity.event_reqs || [])],
   })
@@ -304,14 +324,24 @@ function handleCreate(command) {
 function selectTreeNode(node) { if (node.kind === 'activity') selectActivity(node.activity_id) }
 function selectActivity(activityId) { selectedActivityId.value = activityId }
 
+function updatePropertyTransition(stateId) { form.transition_state_id = stateId; form.transition_dirty = true }
+function updatePropertyOutputName(name) { form.output_state_name = name; form.output_name_customized = true }
+function syncPropertyActivityName(name) { if (!form.output_name_customized) form.output_state_name = `${name || '当前活动'}完成` }
+
 function saveProperties() {
-  const preconditions = form.preconditions.filter((item) => item.state_id).map((item) => ({ ...item }))
   if (!form.name.trim()) return ElMessage.warning('请填写活动名称')
+  if (!form.output_state_name.trim()) return ElMessage.warning('请填写结果状态名称')
+  if (form.required_bindings.some((item) => item.binding_type === 'state_package' && !item.covered_state_ids?.length)) return ElMessage.warning('状态包绑定至少需要覆盖一个原子状态')
+  const preconditions = activityPreconditions({ transitionStateId: form.transition_state_id, legacyTransitions: form.legacy_transitions, preserveLegacy: form.legacy_transitions.length > 0 && !form.transition_dirty, requiredBindings: form.required_bindings })
   if (new Set(preconditions.map((item) => item.state_id)).size !== preconditions.length) return ElMessage.warning('同一前置状态只能绑定一次')
+  const requiredIds = bindingStateIds(form.required_bindings)
+  if ([form.transition_state_id, selectedActivity.value.output_state_id].some((id) => id && requiredIds.has(id))) { propertyStateTab.value = 'required'; return ElMessage.warning('前置状态与当前状态转移冲突') }
   const resourceReqs = Object.fromEntries(Object.entries(form.resource_reqs || {}).filter(([, value]) => Number(value) > 0).map(([key, value]) => [key, Number(value)]))
+  const payload = { name: form.name.trim(), duration: Number(form.duration), max_instances: form.max_instances || null, preconditions, resource_reqs: resourceReqs, event_reqs: [...form.event_reqs] }
+  if (form.output_name_customized) payload.output_state_name = form.output_state_name.trim()
   emit('update-activity', {
     activityId: selectedActivityId.value,
-    payload: { name: form.name.trim(), duration: Number(form.duration), max_instances: form.max_instances || null, preconditions, resource_reqs: resourceReqs, event_reqs: [...form.event_reqs] },
+    payload,
   })
   emit('change-memberships', { activityId: selectedActivityId.value, packageIds: [...form.package_ids] })
 }
@@ -354,10 +384,16 @@ function applyDrafts(source, drafts) {
       const id = draft.client_ref || `draft:activity:${index}`
       scenario.activities ||= []
       scenario.states ||= []
-      scenario.activities.push({ id, display_code: '草稿', output_state_id: `${id}:output`, output_state_name: `${data.name}完成`, is_active: true, ...data })
-      scenario.states.push({ id: `${id}:output`, name: `${data.name}完成`, state_kind: 'activity_output', source_activity_id: id })
+      const outputName = data.output_state_name || `${data.name}完成`
+      scenario.activities.push({ id, display_code: '草稿', output_state_id: `${id}:output`, output_state_name: outputName, is_active: true, ...data })
+      scenario.states.push({ id: `${id}:output`, name: outputName, state_kind: 'activity_output', source_activity_id: id })
     } else if (draft.operation === 'update_activity') {
-      Object.assign((scenario.activities || []).find((item) => item.id === draft.object_id) || {}, data)
+      const activity = (scenario.activities || []).find((item) => item.id === draft.object_id)
+      if (activity) {
+        Object.assign(activity, data)
+        const output = (scenario.states || []).find((item) => item.id === activity.output_state_id)
+        if (output && data.output_state_name) output.name = data.output_state_name
+      }
     } else if (draft.operation === 'delete_activity') {
       scenario.activities = (scenario.activities || []).filter((item) => item.id !== draft.object_id)
       scenario.activity_package_memberships = (scenario.activity_package_memberships || []).filter((item) => item.activity_id !== draft.object_id)
@@ -480,5 +516,5 @@ function buildImpact(activity, scenario, validation) {
 </script>
 
 <style scoped>
-.planner-network-editor{min-width:0}.resource-section{padding:10px 0;border-top:1px solid #ebeef5}.resource-section:first-of-type{border-top:0}.section-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:13px;font-weight:700}.draft-section{padding-top:0}.draft-row,.compact-row,.tree-row{display:flex;align-items:center;justify-content:space-between;gap:8px}.draft-row{padding:5px 0;font-size:12px}.draft-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.compact-row{padding:5px 2px;font-size:12px}.tree-row{width:100%;padding-right:6px}.two-column{display:grid;grid-template-columns:1fr 1fr;gap:8px}.binding-list{display:grid;width:100%;gap:8px}.binding-row{display:grid;gap:6px}.quantity-row{display:grid;grid-template-columns:1fr 130px;align-items:center;gap:8px}.property-actions{display:flex;flex-wrap:wrap;gap:8px}.canvas-pane :deep(.planner-x6-shell){height:100%}.canvas-pane :deep(.canvas-viewport){height:calc(100% - 52px);min-height:520px}.canvas-pane :deep(.x6-network-canvas){min-height:520px}
+.planner-network-editor{min-width:0}.resource-section{padding:10px 0;border-top:1px solid #ebeef5}.resource-section:first-of-type{border-top:0}.section-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:13px;font-weight:700}.draft-section{padding-top:0}.draft-row,.compact-row,.tree-row{display:flex;align-items:center;justify-content:space-between;gap:8px}.draft-row{padding:5px 0;font-size:12px}.draft-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.compact-row{padding:5px 2px;font-size:12px}.tree-row{width:100%;padding-right:6px}.two-column{display:grid;grid-template-columns:1fr 1fr;gap:8px}.binding-list{display:grid;width:100%;gap:8px}.binding-row{display:grid;gap:6px}.quantity-row{display:grid;grid-template-columns:1fr 130px;align-items:center;gap:8px}.property-state-tabs{width:100%;margin-bottom:12px}.property-actions{display:flex;flex-wrap:wrap;gap:8px}.canvas-pane :deep(.planner-x6-shell){height:100%}.canvas-pane :deep(.canvas-viewport){height:calc(100% - 52px);min-height:520px}.canvas-pane :deep(.x6-network-canvas){min-height:520px}
 </style>

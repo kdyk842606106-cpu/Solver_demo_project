@@ -67,6 +67,7 @@ class ActivityCreate(StrictModel):
     name: str = Field(min_length=1, max_length=128)
     duration: int = Field(default=1, gt=0)
     preconditions: list[dict[str, Any]] = Field(default_factory=list)
+    output_state_name: str | None = Field(default=None, min_length=1, max_length=128)
     additional_output_state_ids: list[str] = Field(default_factory=list)
     resource_reqs: dict[str, int] = Field(default_factory=dict)
     event_reqs: list[str] = Field(default_factory=list)

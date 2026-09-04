@@ -190,6 +190,24 @@ def test_activity_milestone_flag_is_derived_from_dependency_roles():
     assert {item["name"]: item["is_milestone"] for item in validation_copy["activities"]} == flags
 
 
+def test_activity_can_customize_its_managed_output_without_changing_implicit_zero_behavior():
+    scenario = new_scenario("局部状态矩阵")
+    activity = create_activity(
+        scenario,
+        {"name": "上电", "duration": 1, "output_state_name": "已上电", "preconditions": []},
+        display_number=1,
+    )
+
+    assert activity["preconditions"] == []
+    assert activity["is_milestone"] is True
+    assert activity["output_state_name"] == "已上电"
+    assert activity["output_name_customized"] is True
+    assert next(item for item in scenario["states"] if item["id"] == activity["output_state_id"])["name"] == "已上电"
+
+    update_activity(scenario, activity["id"], {"name": "设备上电"})
+    assert activity["output_state_name"] == "已上电"
+
+
 def test_validation_rejects_cycles_dangling_members_and_conflicting_goals():
     scenario, root, child, _, first, _, _ = _modeled_scenario()
     root["parent_id"] = child["id"]
