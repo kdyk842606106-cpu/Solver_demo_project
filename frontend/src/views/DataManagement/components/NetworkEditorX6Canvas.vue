@@ -1694,12 +1694,12 @@ function createEdgeCell(edge, routeContext = null) {
       }
   const active = flowState === 'active'
   const muted = flowState === 'muted'
-  const stroke = active
+  const stroke = flowRole === 'delete_effect' ? '#dc2626' : active
     ? '#f59e0b'
     : isProxy ? '#4f6fae' : isInput ? '#2563eb' : '#0f9f6e'
   const strokeWidth = active ? 4 : (isProxy || edge.aggregate ? 3 : 2)
   const strokeOpacity = muted ? 0.14 : (active ? 0.95 : 0.34)
-  const dash = active
+  const dash = flowRole === 'delete_effect' ? '7 4' : active
     ? '12 8'
     : isProxy ? '8 5' : (edge.aggregate ? '6 5' : ((edge.is_draft || edge.is_pending) ? '4 4' : ''))
   const cell = {

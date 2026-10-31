@@ -136,7 +136,11 @@
       <el-form label-position="top">
         <el-form-item label="活动名称"><el-input v-model="activityForm.name" @input="syncActivityName"/></el-form-item>
         <el-form-item label="工期"><el-input-number v-model="activityForm.duration" :min="1" style="width:100%"/></el-form-item>
-        <el-form-item v-if="!editingActivityId" label="所属二级活动包"><el-select v-model="activityForm.package_id" clearable style="width:100%"><el-option v-for="item in childPackages" :key="item.id" :value="item.id" :label="item.name"/></el-select></el-form-item>
+        <el-form-item label="所属二级活动包">
+          <el-select v-model="activityForm.package_ids" multiple clearable filterable placeholder="选择所属活动包（可多选或清空）" data-testid="activity-package-bindings" style="width:100%">
+            <el-option v-for="item in activityPackageOptions" :key="item.id" :value="item.id" :label="item.name"/>
+          </el-select>
+        </el-form-item>
         <el-form-item label="最大执行次数">
           <div class="instance-limit" data-testid="activity-instance-limit">
             <el-switch v-model="activityForm.limit_instances" active-text="限制次数" inactive-text="不限" />
@@ -146,13 +150,13 @@
         <el-tabs v-model="activityEditorTab" class="activity-state-tabs">
           <el-tab-pane label="状态转移" name="transition">
             <PlannerTransitionMatrix
-              :source-state-id="activityForm.transition_state_id"
+              :source-state-ids="activityForm.transition_state_ids"
               :output-state-id="activityForm.output_state_id"
               :output-state-name="activityForm.output_state_name"
               :states="selectableStates"
               :activities="scenario.activities || []"
               :legacy-transitions="activityForm.legacy_transitions"
-              @update:source-state-id="updateTransitionSource"
+              @update:source-state-ids="updateTransitionSource"
               @update:output-state-name="updateOutputStateName"
             />
           </el-tab-pane>
@@ -164,6 +168,12 @@
               :state-package-memberships="scenario.state_package_memberships || []"
               :excluded-state-ids="transitionExcludedStateIds"
             />
+          </el-tab-pane>
+        <el-tab-pane label="破坏效果" name="delete">
+            <PlannerDeleteEffectSelector v-model="activityForm.delete_effect_state_ids"
+              :states="selectableStates" :activities="scenario.activities || []"
+              :state-packages="scenario.state_packages || []" :state-package-memberships="scenario.state_package_memberships || []"
+              :excluded-state-ids="[...activityForm.transition_state_ids, ...bindingStateIds(activityForm.required_bindings), activityForm.output_state_id].filter(Boolean)"  />
           </el-tab-pane>
         </el-tabs>
         <el-form-item label="外部事件绑定">
@@ -201,7 +211,7 @@
           <el-empty v-else description="当前场景没有容量资源，请先在“资源与事件”中新增" :image-size="48" />
           <span class="state-binding-help">填写活动执行期间需要占用的汇总容量；0 表示不占用。</span>
         </el-form-item>
-        <el-alert title="活动类型由前置关系自动识别；活动编号和运行所需信息由系统管理。" type="info" :closable="false"/>
+        <el-alert title="活动类型由前置关系自动识别；系统自动创建实现效果，前置、转移和破坏关系可为空。" type="info" :closable="false"/>
       </el-form>
       <template #footer><el-button @click="activityDialog=false">取消</el-button><el-button type="primary" @click="queueActivity">{{ editingActivityId ? '保存到草稿' : '加入草稿' }}</el-button></template>
     </el-dialog>
@@ -234,6 +244,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import PlannerNetworkEditorWorkspace from './PlannerNetworkEditorWorkspace.vue'
 import PlannerStateBindingSelector from './PlannerStateBindingSelector.vue'
 import PlannerTransitionMatrix from './PlannerTransitionMatrix.vue'
+import PlannerDeleteEffectSelector from './PlannerDeleteEffectSelector.vue'
 import { activityPreconditions, bindingStateIds, splitActivityRelations } from './plannerStateBindings'
 import { commitPlannerDraft, createPlannerScenario, exportPlannerScenario, getPlannerGraph, getPlannerScenario, importPlannerExcel, importPlannerScenario, listPlannerScenarios, plannerExcelExportUrl, validatePlannerScenario } from '../../api/planner'
 
@@ -244,19 +255,28 @@ const editingActivityId = ref(''), editingEventId = ref('')
 const excelInput = ref(null)
 const scenarioName = ref(''), importText = ref('')
 const packageForm = reactive({ level: 1, name: '', parent_id: null })
-const activityForm = reactive({ name: '', duration: 1, package_id: null, transition_state_id: null, transition_dirty: false, legacy_transitions: [], required_bindings: [], output_state_id: null, output_state_name: '', output_name_customized: false, resource_reqs: {}, event_reqs: [], limit_instances: false, max_instances: 1 })
+const activityForm = reactive({ name: '', duration: 1, package_ids: [], transition_state_id: null, transition_state_ids: [], delete_effect_state_ids: [], transition_dirty: false, legacy_transitions: [], required_bindings: [], output_state_id: null, output_state_name: '', output_name_customized: false, resource_reqs: {}, event_reqs: [], limit_instances: false, max_instances: 1 })
 const seedForm = reactive({ name: '' }), resourceForm = reactive({ name: '', capacity: 1 }), eventForm = reactive({ name: '', time: 0, add_state_ids: [], remove_state_ids: [] })
 const scenario = computed(() => current.value.scenario || {})
 const shortHash = computed(() => (current.value.scenario_hash || '').slice(0, 12))
 const rootPackages = computed(() => (scenario.value.activity_packages || []).filter((item) => item.level === 1))
 const childPackages = computed(() => (scenario.value.activity_packages || []).filter((item) => item.level === 2))
+const activityPackageOptions = computed(() => {
+  const packages = new Map((scenario.value.activity_packages || []).map((item) => [item.id, item]))
+  for (const draft of drafts.value) {
+    if (draft.operation === 'create_package') packages.set(draft.client_ref, { ...draft.payload, id: draft.client_ref, level: draft.payload.parent_id ? 2 : 1 })
+    else if (draft.operation === 'update_package' && packages.has(draft.object_id)) packages.set(draft.object_id, { ...packages.get(draft.object_id), ...draft.payload })
+    else if (draft.operation === 'delete_package') packages.delete(draft.object_id)
+  }
+  return [...packages.values()].filter((item) => item.level === 2)
+})
 const packageRows = computed(() => [...rootPackages.value, ...childPackages.value])
 const baseStates = computed(() => (scenario.value.states || []).filter((item) => item.state_kind === 'seed'))
 const selectableStates = computed(() => scenario.value.states || [])
 const selectableEvents = computed(() => scenario.value.external_events || [])
 const selectableResources = computed(() => scenario.value.resources || [])
 const activityEditorTab = ref('transition')
-const transitionExcludedStateIds = computed(() => [activityForm.transition_state_id, activityForm.output_state_id].filter(Boolean))
+const transitionExcludedStateIds = computed(() => [...activityForm.transition_state_ids, activityForm.output_state_id, ...activityForm.delete_effect_state_ids].filter(Boolean))
 
 onMounted(loadScenarios)
 async function loadScenarios() { scenarios.value = await listPlannerScenarios() }
@@ -289,10 +309,10 @@ function queuePackage() { if (!packageForm.name.trim() || (packageForm.level ===
 function openActivityDialog() {
   editingActivityId.value = ''
   activityEditorTab.value = 'transition'
-  Object.assign(activityForm, { name: '', duration: 1, package_id: null, transition_state_id: null, transition_dirty: false, legacy_transitions: [], required_bindings: [], output_state_id: null, output_state_name: '当前活动完成', output_name_customized: false, resource_reqs: {}, event_reqs: [], limit_instances: false, max_instances: 1 })
+  Object.assign(activityForm, { name: '', duration: 1, package_ids: [], transition_state_id: null, transition_state_ids: [], delete_effect_state_ids: [], transition_dirty: false, legacy_transitions: [], required_bindings: [], output_state_id: null, output_state_name: '当前活动完成', output_name_customized: false, resource_reqs: {}, event_reqs: [], limit_instances: false, max_instances: 1 })
   activityDialog.value = true
 }
-function updateTransitionSource(stateId) { activityForm.transition_state_id = stateId; activityForm.transition_dirty = true }
+function updateTransitionSource(stateIds) { activityForm.transition_state_ids = stateIds; activityForm.transition_state_id = stateIds[0] || null; activityForm.transition_dirty = true }
 function updateOutputStateName(name) { activityForm.output_state_name = name; activityForm.output_name_customized = true }
 function syncActivityName(name) { if (!activityForm.output_name_customized) activityForm.output_state_name = `${name || '当前活动'}完成` }
 function openActivityEdit(row) {
@@ -304,8 +324,10 @@ function openActivityEdit(row) {
   Object.assign(activityForm, {
     name: activity.name,
     duration: activity.duration,
-    package_id: null,
+    package_ids: pendingPackageIds(row.id),
     transition_state_id: relations.transitionStateId,
+    transition_state_ids: relations.transitionStateIds,
+    delete_effect_state_ids: [...(activity.delete_effect_state_ids || [])],
     transition_dirty: false,
     legacy_transitions: relations.legacyTransitions,
     required_bindings: relations.requiredBindings,
@@ -343,26 +365,28 @@ function queueActivity() {
     return ElMessage.warning('状态包绑定至少需要覆盖一个原子状态')
   }
   const preserveLegacy = activityForm.legacy_transitions.length > 0 && !activityForm.transition_dirty
-  const preconditions = activityPreconditions({ transitionStateId: activityForm.transition_state_id, legacyTransitions: activityForm.legacy_transitions, preserveLegacy, requiredBindings: activityForm.required_bindings })
+  const preconditions = activityPreconditions({ transitionStateId: activityForm.transition_state_id, transitionStateIds: activityForm.transition_state_ids, legacyTransitions: activityForm.legacy_transitions, preserveLegacy, requiredBindings: activityForm.required_bindings })
   if (new Set(preconditions.map((item) => item.state_id)).size !== preconditions.length) return ElMessage.warning('同一前置状态只能绑定一次')
   if (activityForm.transition_state_id && activityForm.transition_state_id === activityForm.output_state_id) return ElMessage.warning('状态转移的源状态和结果状态不能相同')
   const requiredStateIds = bindingStateIds(activityForm.required_bindings)
   const conflicts = [activityForm.transition_state_id, activityForm.output_state_id].filter((id) => id && requiredStateIds.has(id))
   if (conflicts.length) { activityEditorTab.value = 'required'; return ElMessage.warning('前置状态与当前状态转移冲突，请先从前置状态树中移除') }
   if (activityForm.limit_instances && (!Number.isInteger(activityForm.max_instances) || activityForm.max_instances < 1)) return ElMessage.warning('最大执行次数必须是正整数')
+  if (activityForm.delete_effect_state_ids.some((id) => preconditions.some((r) => r.state_id === id) || id === activityForm.output_state_id)) return ElMessage.warning('破坏效果与前置、转移或实现效果冲突')
   const resourceReqs = Object.fromEntries(
     Object.entries(activityForm.resource_reqs || {})
       .filter(([, quantity]) => Number(quantity) > 0)
       .map(([resourceId, quantity]) => [resourceId, Number(quantity)]),
   )
-  const payload = { name: activityForm.name.trim(), duration: activityForm.duration, preconditions, resource_reqs: resourceReqs, event_reqs: [...activityForm.event_reqs], max_instances: activityForm.limit_instances ? activityForm.max_instances : null }
+  const payload = { name: activityForm.name.trim(), duration: activityForm.duration, preconditions, delete_effect_state_ids: [...activityForm.delete_effect_state_ids], resource_reqs: resourceReqs, event_reqs: [...activityForm.event_reqs], max_instances: activityForm.limit_instances ? activityForm.max_instances : null }
   if (activityForm.output_name_customized) payload.output_state_name = activityForm.output_state_name.trim()
   if (editingActivityId.value) {
     upsertActivityUpdate(editingActivityId.value, payload, `编辑活动 ${activityForm.name}`)
+    queueMembershipChanges({ activityId: editingActivityId.value, packageIds: activityForm.package_ids })
   } else {
     const ref = `draft:activity:${Date.now()}`
     addDraft({ operation: 'create_activity', client_ref: ref, payload }, `新建活动 ${activityForm.name}`)
-    if (activityForm.package_id) addDraft({ operation: 'add_membership', payload: { package_id: activityForm.package_id, activity_id: ref } }, '加入活动包')
+    queueMembershipChanges({ activityId: ref, packageIds: activityForm.package_ids })
   }
   activityDialog.value = false
 }
@@ -380,24 +404,41 @@ function queueWorkspaceActivityUpdate({ activityId, payload }) {
 function queueMembershipChanges({ activityId, packageIds }) {
   const desired = new Set(packageIds || [])
   const original = (scenario.value.activity_package_memberships || []).filter((item) => item.activity_id === activityId)
-  const removedIds = new Set(drafts.value.filter((item) => item.operation === 'remove_membership').map((item) => item.object_id))
-  const pendingAdds = drafts.value.filter((item) => item.operation === 'add_membership' && item.payload.activity_id === activityId)
-  const current = new Set(original.filter((item) => !removedIds.has(item.id)).map((item) => item.package_id))
-  pendingAdds.forEach((item) => current.add(item.payload.package_id))
-
-  drafts.value = drafts.value.filter((item) => !(
-    item.operation === 'add_membership' &&
-    item.payload.activity_id === activityId &&
-    !desired.has(item.payload.package_id)
-  ))
+  const originalById = new Map(original.map((item) => [item.id, item]))
+  const originalPackages = new Set(original.map((item) => item.package_id))
+  const deletedPackages = new Set(drafts.value.filter((item) => item.operation === 'delete_package').map((item) => item.object_id))
+  const keptAdds = new Set()
+  const keptRemovals = new Set()
+  // Reconcile against persisted memberships so reverting a draft preserves
+  // the original membership ID/layout instead of attempting a duplicate add.
+  drafts.value = drafts.value.filter((item) => {
+    if (item.operation === 'add_membership' && item.payload.activity_id === activityId) {
+      const packageId = item.payload.package_id
+      if (!desired.has(packageId) || originalPackages.has(packageId) || deletedPackages.has(packageId) || keptAdds.has(packageId)) return false
+      keptAdds.add(packageId)
+    }
+    if (item.operation === 'remove_membership' && originalById.has(item.object_id)) {
+      const packageId = originalById.get(item.object_id).package_id
+      if (desired.has(packageId) || deletedPackages.has(packageId) || keptRemovals.has(item.object_id)) return false
+      keptRemovals.add(item.object_id)
+    }
+    return true
+  })
   for (const packageId of desired) {
-    if (current.has(packageId)) continue
+    if (originalPackages.has(packageId) || deletedPackages.has(packageId) || keptAdds.has(packageId)) continue
     drafts.value.push({ operation: 'add_membership', payload: { package_id: packageId, activity_id: activityId }, description: '加入活动包' })
   }
   for (const membership of original) {
-    if (desired.has(membership.package_id) || removedIds.has(membership.id)) continue
+    if (desired.has(membership.package_id) || deletedPackages.has(membership.package_id) || keptRemovals.has(membership.id)) continue
     drafts.value.push({ operation: 'remove_membership', object_id: membership.id, description: '移出活动包' })
   }
+}
+function pendingPackageIds(activityId) {
+  const removedIds = new Set(drafts.value.filter((item) => item.operation === 'remove_membership').map((item) => item.object_id))
+  const deletedPackages = new Set(drafts.value.filter((item) => item.operation === 'delete_package').map((item) => item.object_id))
+  const ids = new Set((scenario.value.activity_package_memberships || []).filter((item) => item.activity_id === activityId && !removedIds.has(item.id)).map((item) => item.package_id))
+  for (const item of drafts.value) if (item.operation === 'add_membership' && item.payload.activity_id === activityId) ids.add(item.payload.package_id)
+  return [...ids].filter((id) => !deletedPackages.has(id))
 }
 function pendingPreconditions(activity) { return drafts.value.findLast((item) => item.operation === 'update_activity' && item.object_id === activity.id && item.payload.preconditions)?.payload.preconditions || activity.preconditions || [] }
 function activityForDraft(activityId) {
@@ -417,7 +458,23 @@ function queueConnection({ sourceActivityId, targetActivityId }) {
   preconditions.push({ state_id: source.output_state_id, relation_role: 'transition', binding_type: 'atomic_state' })
   upsertActivityUpdate(target.id, { preconditions }, `连接 ${source.name} → ${target.name}`)
 }
-function queueRemoveConnection(edge) { const targetRef = (graph.value.nodes || []).find((item) => item.id === edge.target); const target = activityForDraft(edge.target_activity_id || targetRef?.canonical_activity_id); if (!target) return; const preconditions = pendingPreconditions(target).filter((item) => !(item.state_id === edge.state_id && item.relation_role === edge.relation_role)); upsertActivityUpdate(target.id, { preconditions }, `移除指向 ${target.name} 的依赖`) }
+function queueRemoveConnection(edge) {
+  if (edge.relation_role === 'delete_effect') {
+    const sourceRef = (graph.value.nodes || []).find((item) => item.id === edge.source)
+    const activity = activityForDraft(edge.source_activity_id || sourceRef?.canonical_activity_id)
+    if (activity) {
+      const pending = drafts.value.findLast((item) => item.operation === 'update_activity' && item.object_id === activity.id)?.payload || {}
+      const ids = (pending.delete_effect_state_ids || activity.delete_effect_state_ids || []).filter((id) => id !== edge.state_id)
+      upsertActivityUpdate(activity.id, { delete_effect_state_ids: ids }, `移除 ${activity.name} 的破坏效果`)
+    }
+    return
+  }
+  const targetRef = (graph.value.nodes || []).find((item) => item.id === edge.target)
+  const target = activityForDraft(edge.target_activity_id || targetRef?.canonical_activity_id)
+  if (!target) return
+  const preconditions = pendingPreconditions(target).filter((item) => !(item.state_id === edge.state_id && item.relation_role === edge.relation_role))
+  upsertActivityUpdate(target.id, { preconditions }, `移除指向 ${target.name} 的依赖`)
+}
 function queueLayout(layout) {
   const existing = drafts.value.find((item) => item.operation === 'update_layout')
   const activityRefs = new Map((existing?.payload.activity_refs || []).map((item) => [item.id, item]))
@@ -450,7 +507,7 @@ function queueLayout(layout) {
       : (updates.some((item) => item.kind === 'package') ? '调整活动包布局' : '调整活动布局'),
   )
 }
-function queueClone(row) { const ref = `draft:activity:${Date.now()}`; addDraft({ operation: 'create_activity', client_ref: ref, payload: { name: `${row.name}副本`, duration: row.duration, preconditions: row.preconditions, additional_output_state_ids: row.additional_output_state_ids, resource_reqs: row.resource_reqs, event_reqs: row.event_reqs, max_instances: row.max_instances } }, `复制 ${row.name}`) }
+function queueClone(row) { const ref = `draft:activity:${Date.now()}`; addDraft({ operation: 'create_activity', client_ref: ref, payload: { name: `${row.name}副本`, duration: row.duration, preconditions: row.preconditions, additional_output_state_ids: row.additional_output_state_ids, delete_effect_state_ids: [...(row.delete_effect_state_ids || [])], resource_reqs: row.resource_reqs, event_reqs: row.event_reqs, max_instances: row.max_instances } }, `复制 ${row.name}`) }
 async function queueDeletePackage(row) { await ElMessageBox.confirm(`删除活动包“${row.name}”？活动本体不会删除。`, '确认'); addDraft({ operation: 'delete_package', object_id: row.id }, `删除包 ${row.name}`) }
 async function queueDeleteActivity(row) { await ElMessageBox.confirm(`删除活动“${row.name}”？被其他活动依赖时提交会被阻止。`, '确认'); addDraft({ operation: 'delete_activity', object_id: row.id }, `删除活动 ${row.name}`) }
 function queueSeed() { if (!seedForm.name.trim()) return; addDraft({ operation: 'create_seed_state', payload: { name: seedForm.name.trim() } }, `新增基础状态 ${seedForm.name}`); seedDialog.value = false; seedForm.name = '' }

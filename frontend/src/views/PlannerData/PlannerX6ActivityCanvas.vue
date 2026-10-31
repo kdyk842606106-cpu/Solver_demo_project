@@ -5,6 +5,7 @@
         <span><i class="dot activity-dot" />活动节点</span>
         <span><i class="line transition-line" />替换前置</span>
         <span><i class="line required-line" />保留前置</span>
+        <el-checkbox v-model="showDeleteEffects" data-testid="toggle-delete-effects">破坏效果（状态影响）</el-checkbox>
         <el-tag size="small" type="info">状态与状态包已隐藏</el-tag>
       </div>
       <div class="tools">
@@ -31,7 +32,7 @@
     <div v-if="editable && visibleEdges.length" class="edge-list">
       <span>已投影依赖</span>
       <el-tag v-for="edge in visibleEdges" :key="edge.id" closable size="small" @close="$emit('remove-connection', edge)">
-        {{ nodeLabel(edge.source) }} → {{ nodeLabel(edge.target) }}
+        {{ nodeLabel(edge.source) }} → {{ nodeLabel(edge.target) }}{{ edge.relation_role === 'delete_effect' ? '（使结果失效）' : '' }}
       </el-tag>
     </div>
 
@@ -78,6 +79,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['select-activity', 'connect-activities', 'remove-connection', 'layout-change'])
 const zoom = ref(1)
+const showDeleteEffects = ref(true)
 const viewportToken = ref(0)
 const connecting = ref(false)
 const connectSource = ref(null)
@@ -85,7 +87,7 @@ const selectedGraphId = ref(null)
 const arranging = ref(false)
 const collapsedPackageIds = ref(new Set())
 const layoutOverrides = ref(new Map())
-const baseX6 = computed(() => plannerGraphToX6(props.graph, {
+const baseX6 = computed(() => plannerGraphToX6({ ...props.graph, edges: visibleEdges.value }, {
   collapsedPackageIds: [...collapsedPackageIds.value],
 }))
 const x6 = computed(() => ({
@@ -108,7 +110,7 @@ const x6 = computed(() => ({
     }
   }),
 }))
-const visibleEdges = computed(() => props.graph.edges || [])
+const visibleEdges = computed(() => (props.graph.edges || []).filter((edge) => showDeleteEffects.value || edge.relation_role !== 'delete_effect'))
 
 watch(
   () => props.graph.containers,
@@ -167,7 +169,7 @@ async function autoArrange() {
       .map((node) => String(node.id))
     const plan = await layoutNestedContainerGraph({
       activityNodes: nodes,
-      edges: x6.value.edges,
+      edges: x6.value.edges.filter((edge) => edge.relation_role !== 'delete_effect'),
       expandedActivityContainerIds: expandedPackageIds,
       activityDirection: 'RIGHT',
     })

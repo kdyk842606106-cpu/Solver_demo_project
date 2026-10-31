@@ -204,7 +204,7 @@ def _build_rules(scenario: Any) -> tuple[list[OpRule], dict[int, str], dict[int,
         ]
         effects: list[OpRuleEffect] = []
         effect_index = 1
-        for state_id in activity.transition_state_ids:
+        for state_id in activity.removed_state_ids:
             effects.append(OpRuleEffect(
                 id=index * 1000 + effect_index,
                 op_rule_id=index,
@@ -407,11 +407,11 @@ def _apply_execution_mode_constraints(
     for index, left_id in enumerate(step_ids):
         left = activity_by_id[activity_by_rule_id[steps[left_id].op_rule_id]]
         left_reads = set(left.required_state_ids)
-        left_writes = set(left.transition_state_ids) | set(left.output_state_ids)
+        left_writes = set(left.written_state_ids)
         for right_id in step_ids[index + 1:]:
             right = activity_by_id[activity_by_rule_id[steps[right_id].op_rule_id]]
             right_reads = set(right.required_state_ids)
-            right_writes = set(right.transition_state_ids) | set(right.output_state_ids)
+            right_writes = set(right.written_state_ids)
             if left_writes & (right_reads | right_writes) or right_writes & left_reads:
                 schedule_model.model.add_no_overlap([
                     schedule_model.task_vars[left_id].interval,

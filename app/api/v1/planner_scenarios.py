@@ -69,6 +69,7 @@ class ActivityCreate(StrictModel):
     preconditions: list[dict[str, Any]] = Field(default_factory=list)
     output_state_name: str | None = Field(default=None, min_length=1, max_length=128)
     additional_output_state_ids: list[str] = Field(default_factory=list)
+    delete_effect_state_ids: list[str] = Field(default_factory=list)
     resource_reqs: dict[str, int] = Field(default_factory=dict)
     event_reqs: list[str] = Field(default_factory=list)
     max_instances: int | None = Field(default=None, gt=0)
@@ -84,6 +85,7 @@ class ActivityUpdate(StrictModel):
     preconditions: list[dict[str, Any]] | None = None
     output_state_name: str | None = Field(default=None, min_length=1, max_length=128)
     additional_output_state_ids: list[str] | None = None
+    delete_effect_state_ids: list[str] = Field(default_factory=list)
     resource_reqs: dict[str, int] | None = None
     event_reqs: list[str] | None = None
     max_instances: int | None = Field(default=None, gt=0)
@@ -215,14 +217,15 @@ async def commit_draft(scenario_id: str, payload: DraftCommit, db: AsyncSession 
     _check_revision(record, payload.expected_revision)
     scenario = copy.deepcopy(record.scenario_json)
     refs: dict[str, str] = {}
+    output_refs: dict[str, str] = {}
     activity_number = record.next_activity_number
     package_number = record.next_package_number
 
     def resolved(value):
         if isinstance(value, str) and value.startswith("draft:"):
-            if value not in refs:
+            if value not in refs and value not in output_refs:
                 raise HTTPException(status_code=422, detail={"error_code": "DRAFT_REF_UNRESOLVED", "ref": value})
-            return refs[value]
+            return refs.get(value) or output_refs[value]
         if isinstance(value, list):
             return [resolved(item) for item in value]
         if isinstance(value, dict):
@@ -294,6 +297,8 @@ async def commit_draft(scenario_id: str, payload: DraftCommit, db: AsyncSession 
             if created is None or not created.get("id"):
                 raise HTTPException(status_code=422, detail={"error_code": "DRAFT_REF_WITHOUT_OBJECT", "ref": item.client_ref})
             refs[item.client_ref] = created["id"]
+            if item.operation == "create_activity":
+                output_refs[f"{item.client_ref}:output"] = created["output_state_id"]
 
     rebuild_mirror(scenario)
     issues = validate_scenario(copy.deepcopy(scenario))
@@ -302,7 +307,7 @@ async def commit_draft(scenario_id: str, payload: DraftCommit, db: AsyncSession 
     record.next_activity_number = activity_number
     record.next_package_number = package_number
     _save(record, scenario)
-    return {"revision": record.revision, "created_refs": refs, "scenario": _scenario(record), "graph": graph_projection(scenario)}
+    return {"revision": record.revision, "created_refs": refs, "created_output_refs": output_refs, "scenario": _scenario(record), "graph": graph_projection(scenario)}
 
 
 @router.patch("/{scenario_id}")

@@ -14,10 +14,13 @@ from app.services.planner_scenarios import PlannerScenarioError, normalize_impor
 SHEETS = {
     "场景": ["场景名称", "执行模式", "起始时间", "最大活动实例数", "时间预算秒", "转换预算"],
     "活动包": ["包引用", "名称", "父包引用", "排序"],
-    "活动": ["活动引用", "名称", "工期", "最大实例数"],
+    "活动": ["活动引用", "名称", "工期", "最大实例数", "实现效果名称", "效果名称自定义"],
     "包成员": ["包引用", "活动引用", "排序"],
     "种子状态": ["状态引用", "名称", "初始激活", "目标必需", "目标禁止"],
     "活动前置": ["活动引用", "状态引用", "关系角色"],
+    "活动破坏效果": ["活动引用", "状态引用"],
+    "活动附加输出": ["活动引用", "状态引用"],
+    "状态目标": ["用途", "状态引用"],
     "资源": ["资源引用", "名称", "容量"],
     "活动资源": ["活动引用", "资源引用", "需求数量"],
     "外部事件": ["事件引用", "名称", "发生时间"],
@@ -25,6 +28,8 @@ SHEETS = {
     "活动事件": ["活动引用", "事件引用"],
     "包目标范围": ["用途", "包引用"],
 }
+
+OPTIONAL_SHEETS = {"活动破坏效果", "活动附加输出", "状态目标"}
 
 
 def template_workbook() -> bytes:
@@ -61,7 +66,8 @@ def export_workbook(scenario: dict[str, Any]) -> bytes:
     resource_refs = {item["id"]: f"R{index:03d}" for index, item in enumerate(scenario.get("resources", []), 1)}
     event_refs = {item["id"]: f"E{index:03d}" for index, item in enumerate(scenario.get("external_events", []), 1)}
     state_refs: dict[str, str] = {}
-    seed_states = [item for item in scenario.get("states", []) if item.get("state_kind") != "activity_output"]
+    primary_outputs = {item["output_state_id"] for item in scenario.get("activities", [])}
+    seed_states = [item for item in scenario.get("states", []) if item["id"] not in primary_outputs]
     for index, state in enumerate(seed_states, 1):
         state_refs[state["id"]] = f"S{index:03d}"
     for activity in scenario.get("activities", []):
@@ -70,9 +76,13 @@ def export_workbook(scenario: dict[str, Any]) -> bytes:
     for item in scenario.get("activity_packages", []):
         workbook["活动包"].append([package_refs[item["id"]], item["name"], package_refs.get(item.get("parent_id"), ""), item.get("sort_order", 0)])
     for item in scenario.get("activities", []):
-        workbook["活动"].append([activity_refs[item["id"]], item["name"], item["duration"], item.get("max_instances")])
+        workbook["活动"].append([activity_refs[item["id"]], item["name"], item["duration"], item.get("max_instances"), item.get("output_state_name", f"{item['name']}完成"), _yn(item.get("output_name_customized", False))])
         for relation in item.get("preconditions", []):
             workbook["活动前置"].append([activity_refs[item["id"]], state_refs.get(relation["state_id"], relation["state_id"]), relation.get("relation_role", "required")])
+        for state_id in item.get("delete_effect_state_ids", []):
+            workbook["活动破坏效果"].append([activity_refs[item["id"]], state_refs.get(state_id, state_id)])
+        for state_id in item.get("additional_output_state_ids", []):
+            workbook["活动附加输出"].append([activity_refs[item["id"]], state_refs.get(state_id, state_id)])
         for resource_id, quantity in item.get("resource_reqs", {}).items():
             workbook["活动资源"].append([activity_refs[item["id"]], resource_refs.get(resource_id, resource_id), quantity])
         for event_id in item.get("event_reqs", []):
@@ -88,15 +98,17 @@ def export_workbook(scenario: dict[str, Any]) -> bytes:
         for state_id in item.get("add_state_ids", []): workbook["事件状态"].append([event_refs[item["id"]], "add", state_refs.get(state_id, state_id)])
         for state_id in item.get("remove_state_ids", []): workbook["事件状态"].append([event_refs[item["id"]], "remove", state_refs.get(state_id, state_id)])
     for value in scenario.get("activity_package_scope_ids", []): workbook["包目标范围"].append(["scope", package_refs[value]])
+    for purpose, key in (("initial", "initial_state_ids"), ("goal", "goal_state_ids"), ("forbidden", "forbidden_state_ids")):
+        for value in scenario.get(key, []): workbook["状态目标"].append([purpose, state_refs.get(value, value)])
     return _bytes(workbook)
 
 
 def import_workbook(content: bytes) -> dict[str, Any]:
     workbook = load_workbook(BytesIO(content), data_only=True)
-    missing = sorted(set(SHEETS) - set(workbook.sheetnames))
+    missing = sorted(set(SHEETS) - OPTIONAL_SHEETS - set(workbook.sheetnames))
     if missing:
         raise PlannerScenarioError("EXCEL_SHEET_MISSING", f"Missing Excel sheets: {', '.join(missing)}")
-    rows = {name: _rows(workbook[name]) for name in SHEETS}
+    rows = {name: _rows(workbook[name]) if name in workbook.sheetnames else [] for name in SHEETS}
     config = rows["场景"][0] if rows["场景"] else {}
     payload: dict[str, Any] = {
         "name": str(config.get("场景名称") or "Excel 导入场景"),
@@ -133,6 +145,20 @@ def import_workbook(content: bytes) -> dict[str, Any]:
         if _bool(row.get("是否目标活动")): payload["target_activity_ids"].append(ref)
     for row in rows["活动前置"]:
         activity_by_ref[_known(row, "活动引用", activity_refs)].setdefault("preconditions", []).append({"state_id": _text(row.get("状态引用")), "relation_role": str(row.get("关系角色") or "required")})
+    for row in rows["活动"]:
+        activity = activity_by_ref[_text(row.get("活动引用"))]
+        if row.get("实现效果名称"):
+            activity["output_state_name"] = _text(row["实现效果名称"])
+            activity["output_name_customized"] = _bool(row.get("效果名称自定义")) if "效果名称自定义" in row else activity["output_state_name"] != f"{activity['name']}完成"
+        activity["delete_effect_state_ids"] = []
+    for sheet, field in (("活动破坏效果", "delete_effect_state_ids"), ("活动附加输出", "additional_output_state_ids")):
+        for row in rows[sheet]:
+            activity_by_ref[_known(row, "活动引用", activity_refs)][field].append(_text(row.get("状态引用")))
+    for row in rows["状态目标"]:
+        purpose = str(row.get("用途") or "")
+        if purpose not in {"initial", "goal", "forbidden"}:
+            raise PlannerScenarioError("EXCEL_INVALID_STATE_PURPOSE", "Unknown state selection purpose")
+        payload[{"initial": "initial_state_ids", "goal": "goal_state_ids", "forbidden": "forbidden_state_ids"}[purpose]].append(_text(row.get("状态引用")))
     for row in rows["包成员"]:
         package_ref = _known(row, "包引用", package_refs); activity_ref = _known(row, "活动引用", activity_refs)
         payload["activity_package_memberships"].append({"id": f"MEMBER:{len(payload['activity_package_memberships'])+1}", "package_id": package_ref, "activity_id": activity_ref, "sort_order": int(row.get("排序") or 0), "layout": {}})

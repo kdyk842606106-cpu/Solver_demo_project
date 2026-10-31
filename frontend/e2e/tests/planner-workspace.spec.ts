@@ -185,6 +185,178 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
+const alternatePackageId = 'activity-package:77777777-7777-4777-8777-777777777777'
+
+async function withAlternatePackage(page) {
+  const data = structuredClone(scenario)
+  data.activity_packages.push({ id: alternatePackageId, display_code: 'AP-0003', name: '二级验证包', level: 2, parent_id: rootId, layout: {}, mirrored_state_package_id: 'state-package:77777777-7777-4777-8777-777777777777' })
+  await page.route(`**/api/v1/planner-scenarios/${encodeURIComponent(scenarioId)}`, (route) => route.fulfill({ json: {
+    id: scenarioId, display_code: 'SCN-DEMO', revision: 4, scenario_hash: 'membership-hash', scenario: data,
+  } }))
+}
+
+async function openActivityPackageEditor(page) {
+  await page.goto('/')
+  await page.locator('.hero-actions .el-select').click()
+  await page.getByText('SCN-DEMO · Planner 演示场景', { exact: true }).click()
+  await page.getByRole('button', { name: '进入编辑' }).click()
+  await page.locator('.el-table__body-wrapper tbody tr').filter({ hasText: 'ACT-0001' }).getByRole('button', { name: '编辑', exact: true }).click()
+  return page.getByRole('dialog', { name: '编辑活动' })
+}
+
+async function toggleActivityPackages(page, dialog, names) {
+  const input = dialog.getByTestId('activity-package-bindings').getByRole('combobox')
+  await input.focus()
+  await input.press('ArrowDown')
+  const listbox = page.locator(`[id="${await input.getAttribute('aria-controls')}"]`)
+  for (const name of names) await listbox.getByRole('option', { name, exact: true }).click()
+  await input.press('Escape')
+}
+
+test('activity dialog edits package membership and reopens pending selections', async ({ page }) => {
+  await withAlternatePackage(page)
+  const dialog = await openActivityPackageEditor(page)
+  await expect(dialog.getByTestId('activity-package-bindings')).toContainText('二级实施包')
+  await toggleActivityPackages(page, dialog, ['二级实施包', '二级验证包'])
+  await dialog.getByRole('button', { name: '保存到草稿' }).click()
+  await expect(page.getByRole('button', { name: '统一提交（3）' })).toBeVisible()
+  await page.locator('.el-table__body-wrapper tbody tr').filter({ hasText: 'ACT-0001' }).getByRole('button', { name: '编辑', exact: true }).click()
+  await expect(dialog.getByTestId('activity-package-bindings')).toContainText('二级验证包')
+  await expect(dialog.getByTestId('activity-package-bindings')).not.toContainText('二级实施包')
+  await dialog.getByRole('button', { name: '取消', exact: true }).click()
+  const request = page.waitForRequest((r) => r.url().includes('/draft-commit') && r.method() === 'POST')
+  await page.getByRole('button', { name: '统一提交（3）' }).click()
+  const operations = (await request).postDataJSON().operations
+  expect(operations).toContainEqual(expect.objectContaining({ operation: 'remove_membership', object_id: 'activity-package-member:a' }))
+  expect(operations).toContainEqual(expect.objectContaining({ operation: 'add_membership', payload: { package_id: alternatePackageId, activity_id: activityA } }))
+  expect(operations.find((op) => op.operation === 'update_activity').payload.package_ids).toBeUndefined()
+})
+
+test('reverting package edits keeps original membership without duplicate additions', async ({ page }) => {
+  await withAlternatePackage(page)
+  const dialog = await openActivityPackageEditor(page)
+  await toggleActivityPackages(page, dialog, ['二级实施包', '二级验证包'])
+  await dialog.getByRole('button', { name: '保存到草稿' }).click()
+  await page.locator('.el-table__body-wrapper tbody tr').filter({ hasText: 'ACT-0001' }).getByRole('button', { name: '编辑', exact: true }).click()
+  await toggleActivityPackages(page, dialog, ['二级验证包', '二级实施包'])
+  await dialog.getByRole('button', { name: '保存到草稿' }).click()
+  const request = page.waitForRequest((r) => r.url().includes('/draft-commit') && r.method() === 'POST')
+  await page.getByRole('button', { name: '统一提交（1）' }).click()
+  const operations = (await request).postDataJSON().operations
+  expect(operations).toHaveLength(1)
+  expect(operations[0]).toMatchObject({ operation: 'update_activity', object_id: activityA })
+})
+
+test('activity package membership can be cleared', async ({ page }) => {
+  const dialog = await openActivityPackageEditor(page)
+  await toggleActivityPackages(page, dialog, ['二级实施包'])
+  await dialog.getByRole('button', { name: '保存到草稿' }).click()
+  await page.locator('.el-table__body-wrapper tbody tr').filter({ hasText: 'ACT-0001' }).getByRole('button', { name: '编辑', exact: true }).click()
+  await expect(dialog.getByTestId('activity-package-bindings').locator('.el-tag')).toHaveCount(0)
+  await dialog.getByRole('button', { name: '取消', exact: true }).click()
+  const request = page.waitForRequest((r) => r.url().includes('/draft-commit') && r.method() === 'POST')
+  await page.getByRole('button', { name: '统一提交（2）' }).click()
+  const operations = (await request).postDataJSON().operations
+  expect(operations.filter((op) => op.operation === 'add_membership')).toHaveLength(0)
+  expect(operations).toContainEqual(expect.objectContaining({ operation: 'remove_membership', object_id: 'activity-package-member:a' }))
+})
+
+test('new activities can bind multiple level-two packages in one draft', async ({ page }) => {
+  await withAlternatePackage(page)
+  await page.goto('/')
+  await page.locator('.hero-actions .el-select').click()
+  await page.getByText('SCN-DEMO · Planner 演示场景', { exact: true }).click()
+  await page.getByRole('button', { name: '进入编辑' }).click()
+  await page.getByRole('button', { name: '新增活动' }).click()
+  const dialog = page.getByRole('dialog', { name: '新增活动' })
+  await dialog.getByRole('textbox', { name: '活动名称' }).fill('跨包复用活动')
+  await toggleActivityPackages(page, dialog, ['二级实施包', '二级验证包'])
+  await dialog.getByRole('button', { name: '加入草稿' }).click()
+  const request = page.waitForRequest((r) => r.url().includes('/draft-commit') && r.method() === 'POST')
+  await page.getByRole('button', { name: '统一提交（3）' }).click()
+  const operations = (await request).postDataJSON().operations
+  const activity = operations.find((op) => op.operation === 'create_activity')
+  expect(activity.payload.name).toBe('跨包复用活动')
+  const memberships = operations.filter((op) => op.operation === 'add_membership')
+  expect(memberships.map((op) => op.payload.package_id).sort()).toEqual([childId, alternatePackageId].sort())
+  expect(memberships.every((op) => op.payload.activity_id === activity.client_ref)).toBe(true)
+})
+
+test('four relations keep an automatic output and independently bind multiple transitions and deletes', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.hero-actions .el-select').click()
+  await page.getByText('SCN-DEMO · Planner 演示场景', { exact: true }).click()
+  await page.getByRole('button', { name: '进入编辑' }).click()
+  await page.getByRole('button', { name: '新增活动' }).click()
+  const dialog = page.getByRole('dialog', { name: '新增活动' })
+  await dialog.getByRole('textbox', { name: '活动名称' }).fill('重新调整')
+  await expect(dialog.getByTestId('transition-output-name')).toHaveValue('重新调整完成')
+  await dialog.getByTestId('transition-source-select').click()
+  await page.locator('.el-select-dropdown:visible').getByText('初始状态', { exact: true }).click()
+  await page.locator('.el-select-dropdown:visible').getByText('准备完成（准备）', { exact: true }).click()
+  await page.keyboard.press('Escape')
+  await dialog.getByRole('tab', { name: '破坏效果' }).click()
+  const deletes = dialog.getByTestId('activity-delete-effects')
+  await expect(deletes.getByText('活动完成后使所选状态失效；这些状态无须在执行前成立。')).toBeVisible()
+  const deleteInput = deletes.getByRole('combobox')
+  await deleteInput.focus()
+  await deleteInput.press('ArrowDown')
+  await expect(deleteInput).toHaveAttribute('aria-expanded', 'true')
+  const listboxId = await deleteInput.getAttribute('aria-controls')
+  await page.locator(`[id="${listboxId}"]`).getByRole('option', { name: '执行完成（执行）', exact: true }).click()
+  await page.keyboard.press('Escape')
+  await dialog.getByRole('button', { name: '加入草稿' }).click()
+  const request = page.waitForRequest((r) => r.url().includes('/draft-commit') && r.method() === 'POST')
+  await page.getByRole('button', { name: '统一提交（1）' }).click()
+  const payload = (await request).postDataJSON().operations[0].payload
+  expect(payload.preconditions).toEqual([
+    { state_id: 'state:seed', relation_role: 'transition', binding_type: 'atomic_state' },
+    { state_id: stateA, relation_role: 'transition', binding_type: 'atomic_state' },
+  ])
+  expect(payload.delete_effect_state_ids).toEqual(['state:b-output'])
+  expect(payload.output_state_id).toBeUndefined()
+})
+
+test('existing delete bindings project as optional influences and can be removed in properties', async ({ page }) => {
+  const withDeletes = structuredClone(scenario)
+  withDeletes.activities[1].preconditions = []
+  Object.assign(withDeletes.activities[1], { delete_effect_state_ids: [stateA] })
+  await page.route(`**/api/v1/planner-scenarios/${encodeURIComponent(scenarioId)}`, (route) => route.fulfill({ json: {
+    id: scenarioId, revision: 4, scenario_hash: 'delete-hash', scenario: withDeletes,
+  } }))
+  await page.route(`**/api/v1/planner-scenarios/${encodeURIComponent(scenarioId)}/graph`, (route) => route.fulfill({ json: {
+    ...graph, edges: [{ id: 'delete:b:a', source: 'activity-package-member:b', target: 'activity-package-member:a',
+      kind: 'activity_delete_effect', relation_role: 'delete_effect', state_id: stateA, is_precedence: false }],
+  } }))
+  await page.goto('/')
+  await page.locator('.hero-actions .el-select').click()
+  await page.getByText('SCN-DEMO · Planner 演示场景', { exact: true }).click()
+  await page.getByRole('tab', { name: '活动网络' }).click()
+  const workbench = page.getByTestId('network-editor-workbench-frame')
+  const deletionLines = workbench.locator('[data-flow-role="delete_effect"]')
+  await expect(deletionLines).toHaveCount(1)
+  await expect(deletionLines.first()).toHaveAttribute('stroke', '#dc2626')
+  await workbench.getByTestId('toggle-delete-effects').click()
+  await expect(deletionLines).toHaveCount(0)
+  await workbench.getByTestId('toggle-delete-effects').click()
+  await expect(deletionLines).toHaveCount(1)
+  await expect(deletionLines.first()).toHaveAttribute('stroke', '#dc2626')
+  await workbench.getByText('ACT-0002 · 执行', { exact: true }).click()
+  await page.getByRole('button', { name: '进入编辑' }).click()
+  const properties = workbench.locator('.properties-pane')
+  await properties.getByRole('tab', { name: '破坏效果' }).click()
+  const deletes = properties.getByTestId('activity-delete-effects')
+  await expect(deletes).toContainText('准备完成（准备）')
+  await deletes.locator('.el-select').click()
+  await page.locator('.el-select-dropdown:visible').getByText('准备完成（准备）', { exact: true }).click()
+  await page.keyboard.press('Escape')
+  await properties.getByRole('button', { name: '保存到草稿' }).click()
+  const request = page.waitForRequest((r) => r.url().includes('/draft-commit') && r.method() === 'POST')
+  await page.getByRole('button', { name: '统一提交（1）' }).click()
+  const operation = (await request).postDataJSON().operations[0]
+  expect(operation).toMatchObject({ operation: 'update_activity', object_id: activityB, payload: { preconditions: [], delete_effect_state_ids: [] } })
+})
+
 test('activity-only canvas uses package containers and no visible state nodes', async ({ page }) => {
   await page.goto('/')
   await page.locator('.hero-actions .el-select').click()
@@ -515,6 +687,101 @@ test('current and target trees cascade packages and submit canonical states once
   expect(body.target_state_ids).toEqual([stateA, 'state:b-output'].sort())
   expect(body.objectives).toEqual([{ type: 'minimize_makespan', weight: 1 }])
   expect(body.target_state_node_ids).toBeUndefined()
+})
+
+test('preflight explains a shared cycle and confirms only the chosen current fact', async ({ page }) => {
+  const snapshot = { ...moduleXScenario, initial_state_ids: [moduleXStates.installed] }
+  await page.route(`**/api/v1/planner-scenarios/${moduleXScenarioId}`, (route) => route.fulfill({ json: {
+    id: moduleXScenarioId, revision: 1, scenario: snapshot,
+  } }))
+  const submissions: any[] = []
+  await page.route('**/api/v1/planner-runs', (route) => {
+    submissions.push(route.request().postDataJSON())
+    return route.fulfill({ status: 422, json: { error_code: 'HTTP_422', error_message: {
+      error_code: 'SCENARIO_INVALID', error_message: '本次当前状态和目标状态未通过求解预检',
+      issues: [moduleXStates.testedA, moduleXStates.testedB].map((id) => ({
+        code: 'GOAL_STRUCTURALLY_UNREACHABLE', object_id: id, message: '目标暂不可达，请检查当前状态及前置依赖',
+        details: { state_name: id === moduleXStates.testedA ? '功能 A 已调测' : '功能 B 已调测', confirmation_groups: [{
+          reason: 'dependency_cycle', message: '循环依赖缺少已知起点，请确认其中实际已成立的状态；若均未成立，请检查循环入口配置。',
+          states: [{ id: moduleXStates.powerOff, name: '电源已下电' }, { id: moduleXStates.powerOn, name: '电源已上电' }],
+          confirmable_state_ids: [moduleXStates.powerOff, moduleXStates.powerOn],
+        }] },
+      })),
+    } } })
+  })
+  await page.goto('/')
+  await page.getByText('多引擎求解', { exact: true }).click()
+  await page.locator('.control-card .el-select').first().click()
+  await page.getByText('SCN-MODULE-X · 模块X到料延迟提拉测试', { exact: true }).click()
+  await page.getByRole('button', { name: '开始求解' }).click()
+  const panel = page.getByTestId('preflight-confirmations')
+  await expect(panel).toBeVisible()
+  await expect(panel.locator('.confirmation-group')).toHaveCount(1)
+  await expect(panel).toContainText('功能 A 已调测、功能 B 已调测')
+  await expect(panel).toContainText('无需全部勾选')
+  expect(submissions[0].current_state_ids).toEqual([moduleXStates.installed])
+  await panel.getByRole('button', { name: '确认“电源已下电”当前已成立', exact: true }).click()
+  await expect(panel).toBeVisible()
+  await expect(page.getByTestId('state-selection-summary')).toContainText('当前状态 1')
+  await panel.getByRole('button', { name: '将已确认的 1 个状态加入当前状态', exact: true }).click()
+  await expect(panel).toHaveCount(0)
+  await expect(page.getByTestId('state-selection-summary')).toContainText('当前状态 2')
+  await page.getByRole('button', { name: '开始求解' }).click()
+  await expect(panel).toBeVisible()
+  expect(submissions[1].current_state_ids).toEqual([moduleXStates.installed, moduleXStates.powerOff].sort())
+  expect(submissions[1].current_state_ids).not.toContain(moduleXStates.powerOn)
+  await page.getByRole('button', { name: '恢复建议值' }).click()
+  await expect(panel).toHaveCount(0)
+  await expect(page.getByTestId('state-selection-summary')).toContainText('当前状态 1')
+})
+
+test('multiple cycle confirmations can be staged undone and applied together', async ({ page }) => {
+  const snapshot = { ...moduleXScenario, initial_state_ids: [moduleXStates.installed], states: [
+    ...moduleXScenario.states, { id: 'locked', name: '已锁定', state_kind: 'seed' }, { id: 'unlocked', name: '已解锁', state_kind: 'seed' },
+  ] }
+  await page.route(`**/api/v1/planner-scenarios/${moduleXScenarioId}`, (route) => route.fulfill({ json: {
+    id: moduleXScenarioId, revision: 1, scenario: snapshot,
+  } }))
+  const submissions: any[] = []
+  await page.route('**/api/v1/planner-runs', (route) => {
+    submissions.push(route.request().postDataJSON())
+    return route.fulfill({ status: 422, json: { error_code: 'HTTP_422', error_message: {
+      error_code: 'SCENARIO_INVALID', error_message: '请确认当前状态', issues: [{
+        code: 'GOAL_STRUCTURALLY_UNREACHABLE', object_id: moduleXStates.testedB, message: '目标暂不可达', details: {
+          state_name: '功能 B 已调测', confirmation_groups: [
+            [{ id: moduleXStates.powerOff, name: '电源已下电' }, { id: moduleXStates.powerOn, name: '电源已上电' }],
+            [{ id: 'locked', name: '已锁定' }, { id: 'unlocked', name: '已解锁' }],
+          ].map((states) => ({ reason: 'dependency_cycle', message: '循环依赖缺少已知起点', states, confirmable_state_ids: states.map((state) => state.id) })),
+        },
+      }],
+    } } })
+  })
+  await page.goto('/')
+  await page.getByText('多引擎求解', { exact: true }).click()
+  await page.locator('.control-card .el-select').first().click()
+  await page.getByText('SCN-MODULE-X · 模块X到料延迟提拉测试', { exact: true }).click()
+  await page.getByRole('button', { name: '开始求解' }).click()
+  const panel = page.getByTestId('preflight-confirmations')
+  await expect(panel.locator('.confirmation-group')).toHaveCount(2)
+  await panel.getByRole('button', { name: '确认“电源已下电”当前已成立', exact: true }).click()
+  await expect(panel.locator('.confirmation-group')).toHaveCount(2)
+  await panel.getByRole('button', { name: '确认“已锁定”当前已成立', exact: true }).click()
+  await expect(panel.getByRole('button', { name: '将已确认的 2 个状态加入当前状态' })).toBeEnabled()
+  await expect(page.getByTestId('state-selection-summary')).toContainText('当前状态 1')
+  await panel.getByRole('button', { name: '已确认“已锁定”当前已成立', exact: true }).click()
+  await expect(panel.getByRole('button', { name: '将已确认的 1 个状态加入当前状态' })).toBeEnabled()
+  await page.getByRole('button', { name: '恢复建议值' }).click()
+  await expect(panel).toHaveCount(0)
+  await page.getByRole('button', { name: '开始求解' }).click()
+  await expect(panel.getByRole('button', { name: '将已确认的 0 个状态加入当前状态' })).toBeDisabled()
+  await panel.getByRole('button', { name: '确认“电源已下电”当前已成立', exact: true }).click()
+  await panel.getByRole('button', { name: '确认“已锁定”当前已成立', exact: true }).click()
+  await panel.getByRole('button', { name: '将已确认的 2 个状态加入当前状态', exact: true }).click()
+  await expect(panel).toHaveCount(0)
+  await expect(page.getByTestId('state-selection-summary')).toContainText('当前状态 3')
+  await page.getByRole('button', { name: '开始求解' }).click()
+  await expect(panel).toBeVisible()
+  expect(submissions[2].current_state_ids).toEqual([moduleXStates.installed, moduleXStates.powerOff, 'locked'].sort())
 })
 
 test('module X repeated power states render a 90-minute acyclic result', async ({ page }) => {

@@ -14,8 +14,10 @@ from collections import defaultdict
 from typing import Any, Iterable
 from uuid import UUID, uuid4
 
+from app.services.planner_preflight import explain_unreachable_goals, reachable_states
 
-SCHEMA_VERSION = 1
+
+SCHEMA_VERSION = 2
 MANAGED_STATE_PACKAGE = "activity_package_mirror"
 
 
@@ -74,7 +76,7 @@ def new_scenario(name: str, *, display_code: str | None = None) -> dict[str, Any
         "state_package_memberships": [],
         "resources": [],
         "external_events": [],
-        "provenance": {"source": "solver_demo_project", "schema": "planner-shared-scenario/v1"},
+        "provenance": {"source": "solver_demo_project", "schema": "planner-shared-scenario/v2"},
     }
 
 
@@ -95,6 +97,7 @@ def create_activity(
         "output_state_name": output_state_name,
         "output_name_customized": payload.get("output_state_name") is not None,
         "additional_output_state_ids": list(payload.get("additional_output_state_ids", [])),
+        "delete_effect_state_ids": normalize_delete_effects(payload.get("delete_effect_state_ids", [])),
         "resource_reqs": dict(payload.get("resource_reqs", {})),
         "event_reqs": list(payload.get("event_reqs", [])),
         "max_instances": payload.get("max_instances"),
@@ -103,6 +106,8 @@ def create_activity(
     }
     if activity["duration"] <= 0:
         raise PlannerScenarioError("INVALID_DURATION", "Activity duration must be positive")
+    validate_activity_relations(scenario, activity)
+    scenario["schema_version"] = SCHEMA_VERSION
     scenario.setdefault("activities", []).append(activity)
     scenario.setdefault("states", []).append(
         {
@@ -120,22 +125,28 @@ def create_activity(
 
 
 def update_activity(scenario: dict[str, Any], activity_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    activity = require_item(scenario.get("activities", []), activity_id, "ACTIVITY_NOT_FOUND")
+    stored = require_item(scenario.get("activities", []), activity_id, "ACTIVITY_NOT_FOUND")
+    activity = copy.deepcopy(stored)
     old_name = activity["name"]
     for field in (
         "name", "duration", "preconditions", "additional_output_state_ids", "resource_reqs",
-        "event_reqs", "max_instances", "is_active",
+        "event_reqs", "max_instances", "is_active", "delete_effect_state_ids",
     ):
         if field in payload:
             activity[field] = copy.deepcopy(payload[field])
     activity["is_milestone"] = derived_milestone(activity.get("preconditions", []))
     if int(activity["duration"]) <= 0:
         raise PlannerScenarioError("INVALID_DURATION", "Activity duration must be positive")
+    activity["delete_effect_state_ids"] = normalize_delete_effects(activity.get("delete_effect_state_ids", []))
+    validate_activity_relations(scenario, activity)
     if "output_state_name" in payload:
         activity["output_state_name"] = str(payload["output_state_name"]).strip()
         activity["output_name_customized"] = True
     elif activity["name"] != old_name and not activity.get("output_name_customized"):
         activity["output_state_name"] = f"{activity['name']}完成"
+    stored.update(activity)
+    activity = stored
+    scenario["schema_version"] = SCHEMA_VERSION
     state = find_item(scenario.get("states", []), activity["output_state_id"])
     if state is not None:
         state["name"] = activity["output_state_name"]
@@ -181,12 +192,14 @@ def clone_activity(
 
 def delete_activity(scenario: dict[str, Any], activity_id: str) -> None:
     activity = require_item(scenario.get("activities", []), activity_id, "ACTIVITY_NOT_FOUND")
-    output_ids = {activity["output_state_id"], *activity.get("additional_output_state_ids", [])}
+    # Additional outputs can refer to shared states owned elsewhere.
+    output_ids = {activity["output_state_id"]}
     consumers = [
         item["id"]
         for item in scenario.get("activities", [])
         if item["id"] != activity_id
-        and any(rel.get("state_id") in output_ids for rel in item.get("preconditions", []))
+        and (any(rel.get("state_id") in output_ids for rel in item.get("preconditions", []))
+             or bool(output_ids & set(item.get("delete_effect_state_ids", []))))
     ]
     if consumers:
         raise PlannerScenarioError(
@@ -384,6 +397,9 @@ def expand_packages(scenario: dict[str, Any]) -> dict[str, Any]:
         "state_packages", "state_package_memberships", "target_activity_package_ids",
         "activity_package_scope_ids",
     ):
+        if key == "states" and (int(expanded.get("schema_version", 1)) >= 2 or any(a.get("delete_effect_state_ids") for a in expanded["activities"])):
+            expanded["states"] = [{"id": item["id"]} for item in expanded.get("states", [])]
+            continue
         expanded.pop(key, None)
     return expanded
 
@@ -391,6 +407,10 @@ def expand_packages(scenario: dict[str, Any]) -> dict[str, Any]:
 def validate_scenario(scenario: dict[str, Any]) -> list[dict[str, Any]]:
     synchronize_activity_milestones(scenario)
     issues: list[dict[str, Any]] = []
+    version = scenario.get("schema_version", 1)
+    if type(version) is not int or version not in {1, 2}:
+        issues.append(issue("UNSUPPORTED_SCENARIO_SCHEMA", "Only schema versions 1 and 2 are supported"))
+        return issues
     # Check the authoritative package side before rebuilding its managed mirror.
     # Rebuilding deliberately skips dangling memberships, so doing this first is
     # required to report corrupt imports instead of silently hiding them.
@@ -469,6 +489,11 @@ def validate_scenario(scenario: dict[str, Any]) -> list[dict[str, Any]]:
         issues.append(issue("CONFLICTING_GOAL", "A state cannot be both required and forbidden", object_id=state_id))
     producers: dict[str, list[str]] = defaultdict(list)
     for activity in scenario.get("activities", []):
+        if scenario.get("schema_version", 1) >= 2 or activity.get("delete_effect_state_ids"):
+            try:
+                validate_activity_relations(scenario, activity)
+            except PlannerScenarioError as exc:
+                issues.append(issue(exc.code, str(exc), object_id=activity.get("id"), details=exc.details))
         if int(activity.get("duration", 0)) <= 0:
             issues.append(issue("INVALID_DURATION", "Activity duration must be positive", object_id=activity.get("id")))
         for relation in activity.get("preconditions", []):
@@ -512,19 +537,16 @@ def validate_scenario(scenario: dict[str, Any]) -> list[dict[str, Any]]:
 
     # An optimistic fixed point catches structurally unreachable goals without
     # pretending to solve transition consumption or resource scheduling here.
-    reachable = initially_available | event_available
-    changed = True
-    while changed:
-        changed = False
-        for activity in scenario.get("activities", []):
-            required = {item.get("state_id") for item in activity.get("preconditions", [])}
-            if required <= reachable:
-                outputs = {activity.get("output_state_id"), *activity.get("additional_output_state_ids", [])} - {None}
-                if not outputs <= reachable:
-                    reachable.update(outputs)
-                    changed = True
+    reachable = reachable_states(expanded["activities"], initially_available | event_available)
+    explanations = explain_unreachable_goals(scenario, expanded["activities"], reachable, target_states - reachable)
     for state_id in sorted(target_states - reachable):
-        issues.append(issue("GOAL_STRUCTURALLY_UNREACHABLE", "Goal state cannot be reached from initial or event states", object_id=state_id))
+        details = explanations[state_id]
+        issues.append(issue(
+            "GOAL_STRUCTURALLY_UNREACHABLE",
+            f"目标“{details['state_name']}”暂不可达，请检查当前状态及前置依赖",
+            object_id=state_id,
+            details=details,
+        ))
 
     if int(scenario.get("max_steps", 0)) <= 0:
         issues.append(issue("INVALID_MAX_STEPS", "max_steps must be positive"))
@@ -593,6 +615,17 @@ def graph_projection(scenario: dict[str, Any]) -> dict[str, Any]:
                                 "provider_semantics": "OR",
                             }
                         )
+    for destroyer in activities.values():
+        for state_id in destroyer.get("delete_effect_state_ids", []):
+            for provider_id in producers.get(state_id, []):
+                for source_ref in refs_by_activity[destroyer["id"]]:
+                    for target_ref in refs_by_activity[provider_id]:
+                        edges.append({
+                            "id": f"delete-effect:{source_ref}:{target_ref}:{state_id}",
+                            "kind": "activity_delete_effect", "source": source_ref, "target": target_ref,
+                            "source_activity_id": destroyer["id"], "target_activity_id": provider_id,
+                            "state_id": state_id, "relation_role": "delete_effect", "is_precedence": False,
+                        })
     return {
         "scenario_id": scenario["id"],
         "revision": scenario.get("revision", 1),
@@ -617,6 +650,14 @@ def scenario_hash(scenario: dict[str, Any]) -> str:
 def normalize_import(payload: dict[str, Any], *, preserve_ids: bool) -> dict[str, Any]:
     """Normalize imported JSON and regenerate every derived mirror object."""
     imported = copy.deepcopy(payload)
+    version = imported.get("schema_version", 1)
+    if type(version) is not int or version not in {1, 2}:
+        raise PlannerScenarioError("UNSUPPORTED_SCENARIO_SCHEMA", "Only schema versions 1 and 2 are supported")
+    for activity in imported.get("activities", []):
+        if "delete_effect_state_ids" in activity:
+            activity["delete_effect_state_ids"] = normalize_delete_effects(activity["delete_effect_state_ids"])
+            if activity["delete_effect_state_ids"]:
+                imported["schema_version"] = SCHEMA_VERSION
     synchronize_activity_milestones(imported)
     migrate_target_activities_to_goals(imported)
     if not preserve_ids:
@@ -706,9 +747,16 @@ def _regenerate_import_ids(payload: dict[str, Any]) -> dict[str, Any]:
     package_map: dict[str, str] = {}
     resource_map: dict[str, str] = {}
     event_map: dict[str, str] = {}
+    primary_outputs = {
+        activity.get("output_state_id") or f"{activity.get('id') or f'A{index:03d}'}:output"
+        for index, activity in enumerate(payload.get("activities", []), start=1)
+    }
     result["states"] = []
     for index, state in enumerate(payload.get("states", []), start=1):
         old_id = state.get("id") or f"S{index:03d}"
+        if old_id in primary_outputs:
+            # These are recreated once, atomically, with their owning activity.
+            continue
         new_id = technical_id("state")
         state_map[old_id] = new_id
         cloned = copy.deepcopy(state)
@@ -732,6 +780,10 @@ def _regenerate_import_ids(payload: dict[str, Any]) -> dict[str, Any]:
         for relation in activity.get("preconditions", []):
             relation["state_id"] = state_map.get(relation["state_id"], relation["state_id"])
         activity["additional_output_state_ids"] = [state_map.get(value, value) for value in activity.get("additional_output_state_ids", [])]
+        activity["delete_effect_state_ids"] = sorted({state_map.get(value, value) for value in activity.get("delete_effect_state_ids", [])})
+    for state in result["states"]:
+        if state.get("source_activity_id") in activity_map:
+            state["source_activity_id"] = activity_map[state["source_activity_id"]]
     result["resources"] = []
     for resource in payload.get("resources", []):
         old_id = resource.get("id") or f"R{len(resource_map) + 1:03d}"
@@ -812,6 +864,27 @@ def require_item(items: Iterable[dict[str, Any]], item_id: str | None, code: str
     if item is None:
         raise PlannerScenarioError(code, f"Object not found: {item_id}")
     return item
+
+
+def validate_activity_relations(scenario: dict[str, Any], activity: dict[str, Any]) -> None:
+    """Validate effects separately from execution prerequisites."""
+    bindings = activity.get("preconditions", [])
+    required = {r.get("state_id") for r in bindings if r.get("relation_role", "required") == "required"}
+    transitions = {r.get("state_id") for r in bindings if r.get("relation_role") == "transition"}
+    outputs = {activity.get("output_state_id"), *activity.get("additional_output_state_ids", [])} - {None}
+    deletes = set(normalize_delete_effects(activity.get("delete_effect_state_ids", [])))
+    conflicts = (required & transitions) | (required & deletes) | (transitions & deletes) | (outputs & (transitions | deletes))
+    if conflicts:
+        raise PlannerScenarioError("CONFLICTING_STATE_ROLES", "同一状态的保留、转移、实现或破坏角色冲突", details={"state_ids": sorted(conflicts)})
+    unknown = deletes - {s["id"] for s in scenario.get("states", [])}
+    if unknown:
+        raise PlannerScenarioError("UNKNOWN_DELETE_STATE", "破坏效果引用了不存在的状态", details={"state_ids": sorted(unknown)})
+
+
+def normalize_delete_effects(value: Any) -> list[str]:
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise PlannerScenarioError("INVALID_DELETE_EFFECTS", "破坏效果必须是原子状态 ID 列表")
+    return sorted(set(value))
 
 
 def find_item(items: Iterable[dict[str, Any]], item_id: str | None) -> dict[str, Any] | None:

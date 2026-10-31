@@ -92,7 +92,7 @@ export function plannerGraphToX6(graph = {}, { collapsedPackageIds = [] } = {}) 
       source_id: source,
       target_id: target,
       type: 'STATE_FLOW',
-      displayLabel: projected ? '折叠依赖' : (item.relation_role === 'transition' ? '替换前置' : '保留前置'),
+      displayLabel: item.relation_role === 'delete_effect' ? '使结果失效' : projected ? '折叠依赖' : (item.relation_role === 'transition' ? '替换前置' : '保留前置'),
       flow: { state: 'backbone', role: item.relation_role || 'required' },
       aggregate: projected,
       projectionProxy: projected,
@@ -112,6 +112,7 @@ export function plannerGraphToX6(graph = {}, { collapsedPackageIds = [] } = {}) 
 export function plannerPathToTasks(path = {}, scenario = {}) {
   const activities = new Map((scenario.activities || []).map((item) => [item.id, item]))
   const resources = new Map((scenario.resources || []).map((item) => [item.id, item.name]))
+  const stateNames = new Map((scenario.states || []).map((item) => [item.id, item.name]))
   const executions = path.executions || []
   const producerByState = new Map()
 
@@ -128,6 +129,7 @@ export function plannerPathToTasks(path = {}, scenario = {}) {
     preconditions
       .filter((item) => item.relation_role === 'transition')
       .forEach((item) => producerByState.delete(item.state_id))
+    for (const stateId of activity.delete_effect_state_ids || []) producerByState.delete(stateId)
     const outputStateIds = [activity.output_state_id, ...(activity.additional_output_state_ids || [])]
     outputStateIds
       .filter(Boolean)
@@ -153,6 +155,9 @@ export function plannerPathToTasks(path = {}, scenario = {}) {
       })),
       step_role: 'normal',
       activity_id: execution.activity_id,
+      added_states: (execution.after_state_ids || []).filter((id) => !(execution.before_state_ids || []).includes(id) && outputStateIds.includes(id)).map((id) => stateNames.get(id) || id).join('、'),
+      transitioned_states: preconditions.filter((r) => r.relation_role === 'transition' && (execution.before_state_ids || []).includes(r.state_id) && !(execution.after_state_ids || []).includes(r.state_id)).map((r) => stateNames.get(r.state_id) || r.state_id).join('、'),
+      deleted_states: (activity.delete_effect_state_ids || []).filter((id) => (execution.before_state_ids || []).includes(id) && !(execution.after_state_ids || []).includes(id)).map((id) => stateNames.get(id) || id).join('、'),
     }
   })
 }

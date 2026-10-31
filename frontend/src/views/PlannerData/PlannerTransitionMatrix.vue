@@ -1,31 +1,21 @@
 <template>
   <div class="transition-matrix" :class="{ compact }" data-testid="activity-transition-matrix">
-    <el-alert
-      v-if="legacyTransitions.length"
-      type="warning"
-      :closable="false"
-      show-icon
-      title="检测到历史多状态或状态包转移"
-    >
-      <template #default>
-        当前保留 {{ legacyTransitions.length }} 条历史转移。修改源状态后将规范化为一条原子状态转移。
-      </template>
-    </el-alert>
 
     <div class="transition-fields">
       <div class="state-field source-field">
         <div>
           <strong>执行前状态</strong>
-          <small>不选择时保持原有无显式 transition 逻辑</small>
+          <small>转移条件：执行前成立，完成后失效；可不选或多选。</small>
         </div>
         <el-select
-          :model-value="sourceStateId"
+          :model-value="sourceStateIds"
+          multiple
           clearable
           filterable
           :disabled="disabled"
           placeholder="无显式 transition"
           data-testid="transition-source-select"
-          @update:model-value="$emit('update:sourceStateId', $event || null)"
+          @update:model-value="$emit('update:sourceStateIds', $event || [])"
         >
           <el-option
             v-for="state in sourceStates"
@@ -41,7 +31,7 @@
       <div class="state-field target-field">
         <div>
           <strong>执行后状态</strong>
-          <small>当前活动管理的 canonical 原子完成状态</small>
+          <small>实现效果：系统自动创建并绑定，完成后生效。</small>
         </div>
         <el-input
           :model-value="outputStateName"
@@ -60,6 +50,7 @@ import { computed } from 'vue'
 
 const props = defineProps({
   sourceStateId: { type: String, default: null },
+  sourceStateIds: { type: Array, default: () => [] },
   outputStateId: { type: String, default: null },
   outputStateName: { type: String, default: '' },
   states: { type: Array, default: () => [] },
@@ -69,7 +60,7 @@ const props = defineProps({
   compact: { type: Boolean, default: false },
 })
 
-defineEmits(['update:sourceStateId', 'update:outputStateName'])
+defineEmits(['update:sourceStateIds', 'update:outputStateName'])
 
 const activityById = computed(() => new Map(props.activities.map((item) => [item.id, item])))
 const sourceStates = computed(() => props.states.filter((item) => item.id !== props.outputStateId))

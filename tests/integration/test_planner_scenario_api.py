@@ -8,6 +8,38 @@ async def _create(client, path, payload):
 
 
 @pytest.mark.asyncio
+async def test_activity_package_move_and_clear_keep_activity_and_output_identity(client):
+    created = await _create(client, "/api/v1/planner-scenarios", {"name": "活动归属编辑"})
+    base = f"/api/v1/planner-scenarios/{created['id']}"
+    root = (await _create(client, base + "/activity-packages", {"name": "一级"}))["activity_package"]
+    source = (await _create(client, base + "/activity-packages", {"name": "原归属", "parent_id": root["id"]}))["activity_package"]
+    target = (await _create(client, base + "/activity-packages", {"name": "新归属", "parent_id": root["id"]}))["activity_package"]
+    activity = (await _create(client, base + "/activities", {"name": "活动", "duration": 2}))["activity"]
+    member = (await _create(client, base + f"/activity-packages/{source['id']}/members", {"activity_id": activity["id"]}))["activity_membership"]
+    current = (await client.get(base)).json()
+    response = await client.post(base + "/draft-commit", json={"expected_revision": current["revision"], "operations": [
+        {"operation": "update_activity", "object_id": activity["id"], "payload": {"name": "活动"}},
+        {"operation": "remove_membership", "object_id": member["id"]},
+        {"operation": "add_membership", "payload": {"package_id": target["id"], "activity_id": activity["id"]}},
+    ]})
+    assert response.status_code == 200, response.text
+    moved = response.json()
+    state = moved["scenario"]
+    assert state["activities"][0]["id"] == activity["id"]
+    assert state["activities"][0]["output_state_id"] == activity["output_state_id"]
+    assert len(state["activity_package_memberships"]) == 1
+    assert state["activity_package_memberships"][0]["package_id"] == target["id"]
+    assert [(m["state_package_id"], m["state_id"]) for m in state["state_package_memberships"]] == [(target["mirrored_state_package_id"], activity["output_state_id"])]
+    cleared = await client.post(base + "/draft-commit", json={"expected_revision": moved["revision"], "operations": [
+        {"operation": "remove_membership", "object_id": state["activity_package_memberships"][0]["id"]},
+    ]})
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["scenario"]["activity_package_memberships"] == []
+    assert cleared.json()["scenario"]["state_package_memberships"] == []
+    assert cleared.json()["scenario"]["activities"][0]["output_state_id"] == activity["output_state_id"]
+
+
+@pytest.mark.asyncio
 async def test_planner_scenario_activity_package_mirror_and_graph_flow(client):
     created = await _create(client, "/api/v1/planner-scenarios", {"name": "接口场景"})
     scenario_id = created["id"]
@@ -167,6 +199,49 @@ async def test_external_event_can_be_edited_directly_and_in_a_draft(client):
     )
     assert missing.status_code == 404
     assert missing.json()["error_message"]["error_code"] == "EVENT_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_runtime_preflight_names_cycle_confirmations_without_writing_facts(client, db_session):
+    from app.db.models import PlannerScenarioRecord, PlannerRunRecord
+    from app.services.planner_scenarios import create_activity, new_scenario
+    from sqlalchemy import select
+
+    scenario = new_scenario("初始供电确认")
+    scenario["states"].append({"id": "installed", "name": "模块 A 已安装"})
+    scenario["initial_state_ids"] = ["installed"]
+    on = create_activity(scenario, {"name": "上电", "output_state_name": "已上电"}, display_number=1)
+    off = create_activity(scenario, {
+        "name": "下电", "output_state_name": "已下电",
+        "preconditions": [{"state_id": on["output_state_id"], "relation_role": "transition"}],
+    }, display_number=2)
+    on["preconditions"] = [{"state_id": off["output_state_id"], "relation_role": "transition"}]
+    target = create_activity(scenario, {
+        "name": "模块 A 调测", "preconditions": [
+            {"state_id": on["output_state_id"], "relation_role": "required"},
+            {"state_id": "installed", "relation_role": "required"},
+        ],
+    }, display_number=3)
+    scenario["goal_state_ids"] = [target["output_state_id"]]
+    db_session.add(PlannerScenarioRecord(
+        id=scenario["id"], name=scenario["name"], display_code=scenario["display_code"],
+        revision=1, scenario_json=scenario,
+    ))
+    await db_session.commit()
+    response = await client.post("/api/v1/planner-runs", json={
+        "scenario_id": scenario["id"], "expected_revision": 1,
+        "current_state_ids": ["installed"], "target_state_ids": [target["output_state_id"]],
+        "engine": "ASTAR",
+    })
+    assert response.status_code == 422
+    detail = response.json()["error_message"]
+    assert detail["error_code"] == "SCENARIO_INVALID"
+    group = detail["issues"][0]["details"]["confirmation_groups"][0]
+    assert {item["name"] for item in group["states"]} == {"已上电", "已下电"}
+    assert set(group["confirmable_state_ids"]) == {on["output_state_id"], off["output_state_id"]}
+    stored = (await client.get(f"/api/v1/planner-scenarios/{scenario['id']}")).json()
+    assert stored["scenario"]["initial_state_ids"] == ["installed"]
+    assert (await db_session.execute(select(PlannerRunRecord))).scalars().all() == []
 
 
 @pytest.mark.asyncio

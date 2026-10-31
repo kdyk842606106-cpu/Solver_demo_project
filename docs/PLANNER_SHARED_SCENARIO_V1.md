@@ -1,5 +1,7 @@
 # Planner Shared Scenario V1 契约
 
+> 2026-10-28：新建场景采用 [V2 契约](PLANNER_SHARED_SCENARIO_V2.md)，支持独立 `delete_effect_state_ids`。本文保留 V1 兼容语义及既有预检约定；历史场景和运行快照不批量重写。
+
 ## 1. 权威对象
 
 场景对象以 `schema_version: 1` 和来源标识 `planner-shared-scenario/v1` 表示。权威业务字段包括：
@@ -66,6 +68,10 @@ activity-package:<uuid>  <=>  state-package:<uuid>
 `POST /api/v1/planner-runs` 必须提交 `expected_revision`、非空 `current_state_ids` 和非空 `target_state_ids`。后端复制权威场景，在副本中覆盖当前/目标状态并清空目标活动/目标包，然后校验并计算 SHA-256。`ALL` 模式向三个独立线程传入深拷贝，运行记录证明三者使用同一哈希且不共享可变状态。
 
 运行记录在既有 `planner_run.request_json/result_json` 中保存基础哈希、有效快照、状态选择、引擎、预算、种子和 Validator 结论；列表接口去除完整快照，只在详情返回。状态选择不会回写场景。运行输入错误使用 `CURRENT_STATE_REQUIRED`、`TARGET_STATE_REQUIRED`、`UNKNOWN_CURRENT_STATE`、`UNKNOWN_TARGET_STATE`、`TARGET_STATE_FORBIDDEN` 和 `SCENARIO_REVISION_CONFLICT`。
+
+结构可达性预检使用本次范围内启用的活动。`SCENARIO_INVALID.issues` 中的 `GOAL_STRUCTURALLY_UNREACHABLE` 保留原错误码，并在 `details` 返回目标名称 `state_name`、目标活动缺失的前置条件 `blocked_activities`，以及反向追溯得到的 `confirmation_groups`。分组原因包括循环依赖 `dependency_cycle`、无提供者的初始事实 `missing_initial_fact`，以及活动停用或范围外 `provider_unavailable`。每组包含状态 ID/名称、中文说明及允许确认的 `confirmable_state_ids`；未知、禁止状态和提供者不可用的分组不提供确认按钮。
+
+这些分组是候选缺口，不是必须全部补充的条件，也不保证补充一个状态即可求解。活动的多个提供者是替代路径，单个活动的多个前置则需同时成立。页面合并多个目标共享的缺口，支持跨组逐项确认或撤销，最后统一把已确认状态加入本次当前状态；确认一项不会清空其他组。不自动假设事实、不写入场景或活动执行记录。当前/目标选择变化、恢复建议值或重新求解后清除旧诊断和待加入的确认项，再做预检与引擎校验。
 
 正式方案必须由 Planner Validator 重放。统一结果至少包含引擎、状态、快照哈希、候选活动执行、指标、诊断及 Validator 状态。活动包、状态包和资源实例不会出现在计划步骤中。
 

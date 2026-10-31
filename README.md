@@ -1,5 +1,7 @@
 # State-Driven Process Planning + Resource Optimization System
 
+Planner exploration 支持四类状态关系：前置保留、转移消耗、系统自动绑定的实现效果，以及独立破坏效果。活动完成时统一生效，三引擎共享回放校验。新场景采用 [V2 契约](docs/PLANNER_SHARED_SCENARIO_V2.md)，保留 V1 输入兼容；实现与测试见 [TICKET-099](docs/TICKET_099.md) 和[验收记录](docs/validation/PLANNER_DELETE_EFFECTS_20261028.md)。
+
 基于 FastAPI + PostgreSQL + OR-Tools 的两阶段求解系统：Planner 构建 RAG（状态推导有向无环图），Scheduler 基于 RAG + 资源约束做 CP-SAT 最优排程。
 
 > **AI 开发上下文**：请先阅读 [`docs/ANCHOR.md`](./docs/ANCHOR.md)、当前 [`docs/STATE_V0.3.md`](./docs/STATE_V0.3.md)，再阅读最新 `docs/TICKET_*.md`。旧 `CONTEXT` 入口已归档到 `docs/archive/cleanup_20260529/outdated_notes/`。

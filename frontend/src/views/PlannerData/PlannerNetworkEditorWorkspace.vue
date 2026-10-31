@@ -148,7 +148,7 @@
               <el-tabs v-model="propertyStateTab" class="property-state-tabs">
                 <el-tab-pane label="状态转移" name="transition">
                   <PlannerTransitionMatrix
-                    :source-state-id="form.transition_state_id"
+                    :source-state-ids="form.transition_state_ids"
                     :output-state-id="selectedActivity.output_state_id"
                     :output-state-name="form.output_state_name"
                     :states="effectiveScenario.states || []"
@@ -156,7 +156,7 @@
                     :legacy-transitions="form.legacy_transitions"
                     :disabled="!editing"
                     compact
-                    @update:source-state-id="updatePropertyTransition"
+                    @update:source-state-ids="updatePropertyTransition"
                     @update:output-state-name="updatePropertyOutputName"
                   />
                 </el-tab-pane>
@@ -166,12 +166,18 @@
                     :states="effectiveScenario.states || []"
                     :state-packages="effectiveScenario.state_packages || []"
                     :state-package-memberships="effectiveScenario.state_package_memberships || []"
-                    :excluded-state-ids="[form.transition_state_id, selectedActivity.output_state_id].filter(Boolean)"
+                    :excluded-state-ids="[...form.transition_state_ids, selectedActivity.output_state_id, ...form.delete_effect_state_ids].filter(Boolean)"
                     :disabled="!editing"
                     compact
                   />
                 </el-tab-pane>
-              </el-tabs>
+              <el-tab-pane label="破坏效果" name="delete">
+            <PlannerDeleteEffectSelector v-model="form.delete_effect_state_ids"
+              :states="effectiveScenario.states || []" :activities="effectiveScenario.activities || []"
+              :state-packages="effectiveScenario.state_packages || []" :state-package-memberships="effectiveScenario.state_package_memberships || []"
+              :excluded-state-ids="[...form.transition_state_ids, ...bindingStateIds(form.required_bindings), selectedActivity.output_state_id].filter(Boolean)" :disabled="!editing" />
+          </el-tab-pane>
+        </el-tabs>
               <el-form-item label="容量资源需求">
                 <div class="binding-list">
                   <div v-for="item in effectiveScenario.resources || []" :key="item.id" class="quantity-row">
@@ -227,6 +233,8 @@
           <el-descriptions-item label="活动">{{ impact.activity.display_code }} · {{ impact.activity.name }}</el-descriptions-item>
           <el-descriptions-item label="所属包">{{ impact.packages.join('、') || '未归属' }}</el-descriptions-item>
           <el-descriptions-item label="直接前置">{{ impact.preconditions.join('、') || '无' }}</el-descriptions-item>
+          <el-descriptions-item label="实现效果">{{ selectedActivity?.output_state_name || impact.activity.output_state_name }}</el-descriptions-item>
+          <el-descriptions-item label="破坏效果">{{ (impact.activity.delete_effect_state_ids || []).map((id) => (effectiveScenario.states || []).find((state) => state.id === id)?.name || id).join('、') || '无' }}</el-descriptions-item>
           <el-descriptions-item label="提供者活动">{{ impact.providers.join('、') || '无' }}</el-descriptions-item>
           <el-descriptions-item label="下游活动">{{ impact.consumers.join('、') || '无' }}</el-descriptions-item>
           <el-descriptions-item label="容量资源">{{ impact.resources.join('、') || '无' }}</el-descriptions-item>
@@ -247,6 +255,7 @@ import NetworkEditorWorkbenchFrame from '../DataManagement/components/NetworkEdi
 import PlannerX6ActivityCanvas from './PlannerX6ActivityCanvas.vue'
 import PlannerStateBindingSelector from './PlannerStateBindingSelector.vue'
 import PlannerTransitionMatrix from './PlannerTransitionMatrix.vue'
+import PlannerDeleteEffectSelector from './PlannerDeleteEffectSelector.vue'
 import { activityPreconditions, bindingStateIds, splitActivityRelations } from './plannerStateBindings'
 
 const props = defineProps({
@@ -272,7 +281,7 @@ const propertiesPaneWidth = ref(520)
 const selectedActivityId = ref('')
 const impactVisible = ref(false)
 const propertyStateTab = ref('transition')
-const form = reactive({ name: '', duration: 1, max_instances: null, package_ids: [], transition_state_id: null, transition_dirty: false, legacy_transitions: [], required_bindings: [], output_state_name: '', output_name_customized: false, resource_reqs: {}, event_reqs: [] })
+const form = reactive({ name: '', duration: 1, max_instances: null, package_ids: [], transition_state_id: null, transition_state_ids: [], delete_effect_state_ids: [], transition_dirty: false, legacy_transitions: [], required_bindings: [], output_state_name: '', output_name_customized: false, resource_reqs: {}, event_reqs: [] })
 let stopResize = null
 
 const effectiveScenario = computed(() => applyDrafts(props.scenario, props.drafts))
@@ -298,6 +307,8 @@ watch(selectedActivity, (activity) => {
     max_instances: activity.max_instances ?? null,
     package_ids: memberships.map((item) => item.package_id),
     transition_state_id: relations.transitionStateId,
+    transition_state_ids: relations.transitionStateIds,
+    delete_effect_state_ids: [...(activity.delete_effect_state_ids || [])],
     transition_dirty: false,
     legacy_transitions: relations.legacyTransitions,
     required_bindings: relations.requiredBindings,
@@ -324,7 +335,7 @@ function handleCreate(command) {
 function selectTreeNode(node) { if (node.kind === 'activity') selectActivity(node.activity_id) }
 function selectActivity(activityId) { selectedActivityId.value = activityId }
 
-function updatePropertyTransition(stateId) { form.transition_state_id = stateId; form.transition_dirty = true }
+function updatePropertyTransition(stateIds) { form.transition_state_ids = stateIds; form.transition_state_id = stateIds[0] || null; form.transition_dirty = true }
 function updatePropertyOutputName(name) { form.output_state_name = name; form.output_name_customized = true }
 function syncPropertyActivityName(name) { if (!form.output_name_customized) form.output_state_name = `${name || '当前活动'}完成` }
 
@@ -332,12 +343,13 @@ function saveProperties() {
   if (!form.name.trim()) return ElMessage.warning('请填写活动名称')
   if (!form.output_state_name.trim()) return ElMessage.warning('请填写结果状态名称')
   if (form.required_bindings.some((item) => item.binding_type === 'state_package' && !item.covered_state_ids?.length)) return ElMessage.warning('状态包绑定至少需要覆盖一个原子状态')
-  const preconditions = activityPreconditions({ transitionStateId: form.transition_state_id, legacyTransitions: form.legacy_transitions, preserveLegacy: form.legacy_transitions.length > 0 && !form.transition_dirty, requiredBindings: form.required_bindings })
+  const preconditions = activityPreconditions({ transitionStateId: form.transition_state_id, transitionStateIds: form.transition_state_ids, legacyTransitions: form.legacy_transitions, preserveLegacy: form.legacy_transitions.length > 0 && !form.transition_dirty, requiredBindings: form.required_bindings })
   if (new Set(preconditions.map((item) => item.state_id)).size !== preconditions.length) return ElMessage.warning('同一前置状态只能绑定一次')
   const requiredIds = bindingStateIds(form.required_bindings)
   if ([form.transition_state_id, selectedActivity.value.output_state_id].some((id) => id && requiredIds.has(id))) { propertyStateTab.value = 'required'; return ElMessage.warning('前置状态与当前状态转移冲突') }
+  if (form.delete_effect_state_ids.some((id) => preconditions.some((r) => r.state_id === id) || id === selectedActivity.value.output_state_id)) return ElMessage.warning('破坏效果与前置、转移或实现效果冲突')
   const resourceReqs = Object.fromEntries(Object.entries(form.resource_reqs || {}).filter(([, value]) => Number(value) > 0).map(([key, value]) => [key, Number(value)]))
-  const payload = { name: form.name.trim(), duration: Number(form.duration), max_instances: form.max_instances || null, preconditions, resource_reqs: resourceReqs, event_reqs: [...form.event_reqs] }
+  const payload = { name: form.name.trim(), duration: Number(form.duration), max_instances: form.max_instances || null, preconditions, delete_effect_state_ids: [...form.delete_effect_state_ids], resource_reqs: resourceReqs, event_reqs: [...form.event_reqs] }
   if (form.output_name_customized) payload.output_state_name = form.output_state_name.trim()
   emit('update-activity', {
     activityId: selectedActivityId.value,
@@ -451,6 +463,9 @@ function projectScenario(scenario) {
     if (initial.has(relation.state_id)) for (const ref of refs.get(consumer.id) || []) nodeById.get(ref)?.seed_preconditions.push(relation.state_id)
     if (eventStates.has(relation.state_id)) continue
     for (const providerId of producers.get(relation.state_id) || []) for (const source of refs.get(providerId) || []) for (const target of refs.get(consumer.id) || []) edges.push({ id: `dependency:${source}:${target}:${relation.state_id}`, kind: 'activity_dependency', source, target, source_activity_id: providerId, target_activity_id: consumer.id, state_id: relation.state_id, relation_role: relation.relation_role || 'required', provider_semantics: 'OR' })
+  }
+  for (const destroyer of activities.values()) for (const stateId of destroyer.delete_effect_state_ids || []) {
+    for (const providerId of producers.get(stateId) || []) for (const source of refs.get(destroyer.id) || []) for (const target of refs.get(providerId) || []) edges.push({ id: `delete-effect:${source}:${target}:${stateId}`, kind: 'activity_delete_effect', source, target, source_activity_id: destroyer.id, target_activity_id: providerId, state_id: stateId, relation_role: 'delete_effect', is_precedence: false })
   }
   return { scenario_id: scenario.id, containers: scenario.activity_packages || [], nodes, edges, summary: { state_node_count: 0 } }
 }

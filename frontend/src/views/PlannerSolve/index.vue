@@ -99,6 +99,21 @@
         <span>尚需实现 <strong>{{ stateCounts.outstanding }}</strong></span>
         <el-button link type="primary" :disabled="!form.scenario_id" @click="restoreSuggestions">恢复建议值</el-button>
       </div>
+      <section v-if="preflightIssues.length" class="preflight-panel" data-testid="preflight-confirmations" aria-live="polite">
+        <h3>请确认当前状态或检查依赖配置</h3>
+        <p>以下是影响目标的候选缺口，无需全部勾选。可逐项确认实际已成立的状态，再统一加入当前状态。补充后请重新求解，仍需检查其他前置条件、资源和时间约束。</p>
+        <ul><li v-for="item in preflightIssues" :key="`${item.code}:${item.object_id}`">{{ item.message }}</li></ul>
+        <div v-for="group in confirmationGroups" :key="group.key" class="confirmation-group">
+          <strong>{{ group.message }}</strong>
+          <p>影响目标：{{ group.goalNames.join('、') }}</p>
+          <div v-for="state in group.states" :key="state.id" class="confirmation-state">
+            <span>{{ state.name }}</span>
+            <el-button v-if="group.confirmable_state_ids?.includes(state.id)" size="small" :type="pendingConfirmations.includes(state.id) ? 'success' : 'default'" :aria-pressed="pendingConfirmations.includes(state.id)" :disabled="running" @click="toggleConfirmation(state.id)">{{ pendingConfirmations.includes(state.id) ? '已确认' : '确认' }}“{{ state.name }}”当前已成立</el-button>
+          </div>
+          <p v-if="group.provider_activities?.length">请检查活动：{{ group.provider_activities.map((item) => item.name).join('、') }}</p>
+        </div>
+        <el-button type="primary" :disabled="running || !pendingConfirmations.length" @click="applyConfirmedStates">将已确认的 {{ pendingConfirmations.length }} 个状态加入当前状态</el-button>
+      </section>
       <div class="run-actions">
         <div><span>资源模型</span><strong>容量汇总（不分配具体资源实例）</strong></div>
         <el-button type="primary" size="large" :disabled="!canSolve" :loading="running" @click="solve">开始求解</el-button>
@@ -163,6 +178,9 @@
                 <el-table-column prop="start_min" label="开始" width="85" />
                 <el-table-column prop="end_min" label="结束" width="85" />
                 <el-table-column prop="duration_min" label="工期" width="85" />
+                <el-table-column prop="added_states" label="实现状态" min-width="150" />
+                <el-table-column prop="transitioned_states" label="转移失效" min-width="150" />
+                <el-table-column prop="deleted_states" label="破坏失效" min-width="150" />
                 <el-table-column label="资源" min-width="180"><template #default="{ row }">{{ resourceLabel(row.resources) || '-' }}</template></el-table-column>
               </el-table>
             </el-tab-pane>
@@ -181,7 +199,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import GanttChart from '../../components/GanttChart.vue'
 import ActivityNetworkBoard from '../../components/ActivityNetworkBoard.vue'
@@ -193,6 +211,8 @@ const capabilities = ref({ planner_available: false })
 const scenarioDetails = ref({ revision: 0, scenario: {} })
 const running = ref(false)
 const run = ref(null)
+const preflightIssues = ref([])
+const pendingConfirmations = ref([])
 const activeEngine = ref('ASTAR')
 const activeResultTab = ref('gantt')
 const suggestedStates = reactive({ current: [], target: [] })
@@ -224,6 +244,36 @@ const selectedForbiddenTargetLabels = computed(() => {
 const stateCounts = computed(() => selectionCounts(currentStateIds.value, targetStateIds.value))
 const runStateCounts = computed(() => selectionCounts(run.value?.request?.current_state_ids || [], run.value?.request?.target_state_ids || []))
 const canSolve = computed(() => Boolean(form.scenario_id && capabilities.value.planner_available && currentStateIds.value.length && targetStateIds.value.length && !invalidSuggestedStateLabels.value.length && !selectedForbiddenTargetLabels.value.length))
+const selectionKey = computed(() => JSON.stringify([form.scenario_id, form.expected_revision, currentStateIds.value, targetStateIds.value]))
+watch(selectionKey, () => { preflightIssues.value = [] })
+watch(preflightIssues, () => { pendingConfirmations.value = [] })
+const confirmationGroups = computed(() => {
+  const groups = new Map()
+  for (const item of preflightIssues.value) {
+    for (const group of item.details?.confirmation_groups || []) {
+      const key = `${group.reason}:${group.states.map((state) => state.id).sort().join('|')}`
+      if (!groups.has(key)) groups.set(key, { ...group, key, goalNames: [] })
+      const name = item.details?.state_name || item.object_id
+      if (!groups.get(key).goalNames.includes(name)) groups.get(key).goalNames.push(name)
+    }
+  }
+  return [...groups.values()]
+})
+
+function toggleConfirmation(stateId) {
+  if (!knownStateIds.value.has(stateId) || stateTreeIndex.value.forbidden.has(stateId)) return
+  const index = pendingConfirmations.value.indexOf(stateId)
+  if (index < 0) pendingConfirmations.value.push(stateId)
+  else pendingConfirmations.value.splice(index, 1)
+}
+
+function applyConfirmedStates() {
+  const allowed = new Set(confirmationGroups.value.flatMap((group) => group.confirmable_state_ids || []))
+  const additions = pendingConfirmations.value.filter((id) => allowed.has(id)
+    && knownStateIds.value.has(id) && !stateTreeIndex.value.forbidden.has(id) && !currentStateIds.value.includes(id))
+  form.current_state_node_ids = [...new Set([...form.current_state_node_ids, ...additions.map(directStateNodeId)])]
+  preflightIssues.value = []
+}
 
 const presentations = computed(() => Object.fromEntries(Object.entries(results.value).map(([engine, result]) => {
   const path = result.paths?.[0] || null
@@ -254,6 +304,7 @@ onMounted(async () => {
 
 async function loadScenario() {
   run.value = null
+  preflightIssues.value = []
   if (!form.scenario_id) {
     scenarioDetails.value = { revision: 0, scenario: {} }
     return
@@ -268,6 +319,7 @@ async function loadScenario() {
 }
 
 function restoreSuggestions() {
+  preflightIssues.value = []
   form.current_state_node_ids = suggestedStates.current.map(directStateNodeId)
   form.target_state_node_ids = suggestedStates.target.map(directStateNodeId)
 }
@@ -278,6 +330,9 @@ async function solve() {
   if (invalidSuggestedStateLabels.value.length) return ElMessage.error(`存在失效状态：${invalidSuggestedStateLabels.value.join('、')}`)
   if (selectedForbiddenTargetLabels.value.length) return ElMessage.error(`禁止状态不能作为目标：${selectedForbiddenTargetLabels.value.join('、')}`)
   running.value = true
+  preflightIssues.value = []
+  run.value = null
+  const submittedSelection = selectionKey.value
   try {
     run.value = await createPlannerRun({
       scenario_id: form.scenario_id,
@@ -295,7 +350,11 @@ async function solve() {
     if (run.value.status === 'OK') ElMessage.success('求解完成并通过统一校验')
     else ElMessage.warning('运行结束，请检查各引擎结果')
   } catch (error) {
-    ElMessage.error(error?.response?.data?.error_message || error.message || '求解失败')
+    const data = error?.response?.data || error.data || {}
+    const detail = typeof data.error_message === 'object' && data.error_message !== null
+      ? data.error_message : (typeof data.detail === 'object' && data.detail !== null ? data.detail : data)
+    if (submittedSelection === selectionKey.value) preflightIssues.value = Array.isArray(detail.issues) ? detail.issues : []
+    ElMessage.error(typeof detail.error_message === 'string' ? detail.error_message : error.message || '求解失败')
   } finally {
     running.value = false
   }
@@ -448,5 +507,6 @@ function formatMetric(value) {
 </script>
 
 <style scoped>
+.preflight-panel{margin:14px 0;padding:16px;border:1px solid #fcd34d;border-radius:10px;background:#fffbeb}.preflight-panel h3{margin:0 0 8px}.preflight-panel p,.preflight-panel li{font-size:13px;line-height:1.6}.confirmation-group{margin-top:12px;padding-top:12px;border-top:1px solid #fde68a}.confirmation-state{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:8px 0}
 .solve-workspace{display:grid;gap:16px}.solve-hero{display:flex;align-items:center;justify-content:space-between;padding:26px 30px;border-radius:18px;color:#fff;background:linear-gradient(130deg,#172554,#1e3a8a 62%,#0f766e);box-shadow:0 18px 45px rgba(30,58,138,.18)}.solve-hero h1{margin:3px 0 7px;font-size:28px}.solve-hero p{margin:0;color:#bfdbfe}.eyebrow{font-size:11px;letter-spacing:.16em;color:#5eead4!important}.eyebrow.dark{color:#0f766e!important}.control-card,.comparison-card,.result-card{padding:20px 22px;background:#fff;border:1px solid #e2e8f0;border-radius:14px}.control-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:14px}.state-control{grid-column:span 2}.objective-control{grid-column:1/-1}.objective-editor{display:grid;gap:8px;width:100%}.objective-row,.objective-hint{display:flex;align-items:center;gap:10px}.objective-hint{justify-content:space-between;color:#64748b;font-size:12px}.selection-alert{margin-bottom:12px}.selection-summary{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:10px 12px;margin-bottom:12px;border-radius:10px;background:#f8fafc;color:#64748b;font-size:13px}.selection-summary strong{color:#0f766e}.selection-summary .el-button{margin-left:auto}.run-actions,.result-header,.section-title{display:flex;align-items:center;justify-content:space-between;gap:16px}.run-actions{border-top:1px solid #e2e8f0;padding-top:14px}.run-actions div{display:flex;gap:10px;align-items:center}.run-actions span,.run-summary span,.metric-strip span,.section-title p{color:#64748b;font-size:12px}.run-summary{display:flex;gap:32px;flex-wrap:wrap;padding:14px 20px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe}.run-summary div{display:flex;gap:8px;align-items:center}.section-title h2,.result-header h2{margin:0}.section-title p{margin:4px 0 14px}.result-header{margin-bottom:16px}.result-header .eyebrow{margin:0 0 4px}.metric-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}.metric-strip div{padding:12px;border:1px solid #dbeafe;border-radius:10px;background:#f8fbff;text-align:center}.metric-strip span{display:block}.metric-strip strong{font-size:20px;color:#1e3a8a}.result-tabs{min-height:360px}@media(max-width:1050px){.control-grid{grid-template-columns:1fr 1fr}.state-control{grid-column:span 1}.solve-hero,.result-header{align-items:flex-start;flex-direction:column}.metric-strip{grid-template-columns:1fr 1fr}}@media(max-width:700px){.control-grid,.metric-strip{grid-template-columns:1fr}.run-actions{align-items:flex-start;flex-direction:column}.selection-summary .el-button{margin-left:0}.objective-row{align-items:stretch;flex-direction:column}.objective-row .el-input-number{width:100%!important}}
 </style>

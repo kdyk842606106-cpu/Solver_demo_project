@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import os
 import sys
 import time
@@ -36,7 +37,10 @@ def run_engine(
     budget_override: dict[str, Any] | None = None,
     objectives: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    issues = validate_scenario(source_scenario)
+    # Validation canonicalizes lists and compatibility flags; never mutate a
+    # caller's authoritative scenario or persisted historical snapshot.
+    source_scenario = copy.deepcopy(source_scenario)
+    issues = validate_scenario(copy.deepcopy(source_scenario))
     if issues:
         raise PlannerScenarioError("SCENARIO_INVALID", "Scenario failed preflight", details={"issues": issues})
     expanded = expand_packages(source_scenario)
@@ -69,7 +73,7 @@ def run_engine(
     result = modules["to_primitive"](validated)
     result["elapsed_seconds"] = round(time.perf_counter() - started, 6)
     result["scenario_hash"] = scenario_hash(source_scenario)
-    result["input_schema"] = "planner-shared-scenario/v1"
+    result["input_schema"] = f"planner-shared-scenario/v{source_scenario.get('schema_version', 1)}"
     result["validator_shared"] = True
     result["engine_pipeline"] = {
         "LEGACY": "partial_order_pathfinder+cp_sat_scheduler",
@@ -99,6 +103,10 @@ def _planner_modules() -> dict[str, Any]:
     from planner_experiment.models import Action, Budget, EngineResult, to_primitive
     from planner_experiment.runner import _validated_result
     from planner_experiment.scenario import scenario_from_dict
+    from planner_experiment import scenario as scenario_module
+
+    if "independent-delete-effects/v1" not in getattr(scenario_module, "ENGINE_CAPABILITIES", ()):
+        raise PlannerEngineUnavailable("Planner engine is outdated; independent-delete-effects/v1 is required")
     from planner_experiment.simulator import PathSimulator
 
     return {

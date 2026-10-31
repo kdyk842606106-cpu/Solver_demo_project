@@ -8,6 +8,7 @@ export function splitActivityRelations(preconditions = []) {
   const compatibleTransition = transitions.length === 1 && transitions[0].binding_type !== 'state_package'
   return {
     transitionStateId: compatibleTransition ? transitions[0].state_id : null,
+    transitionStateIds: [...new Set(transitions.map((item) => item.state_id))],
     legacyTransitions: compatibleTransition ? [] : transitions,
     requiredBindings: inflateRequiredBindings(required),
   }
@@ -69,8 +70,10 @@ export function flattenRequiredBindings(bindings = []) {
   return relations
 }
 
-export function activityPreconditions({ transitionStateId, legacyTransitions = [], preserveLegacy = false, requiredBindings = [] }) {
-  const transitionRelations = preserveLegacy
+export function activityPreconditions({ transitionStateId, transitionStateIds, legacyTransitions = [], preserveLegacy = false, requiredBindings = [] }) {
+  const transitionRelations = Array.isArray(transitionStateIds)
+    ? [...new Set(transitionStateIds)].map((stateId) => legacyTransitions.find((item) => item.state_id === stateId) || { state_id: stateId, relation_role: 'transition', binding_type: 'atomic_state' })
+    : preserveLegacy
     ? legacyTransitions.map((item) => ({ ...item }))
     : transitionStateId
       ? [{ state_id: transitionStateId, relation_role: 'transition', binding_type: 'atomic_state' }]
