@@ -1,0 +1,281 @@
+{
+  "backend_tests_passed": 177,
+  "browser_tests_passed": 4,
+  "database": "planner_windows_85a324327b",
+  "run_id": "planner-run:aeabd166-0fb0-4ab3-bcfe-e67134d85052",
+  "status": "OPTIMAL",
+  "validator": "VALID",
+  "makespan": 285,
+  "windows": [
+    {
+      "activity_id": "power_on",
+      "latest_finish_at": "2026-11-05T00:15:00Z",
+      "earliest_start_at": "2026-11-05T00:10:00Z"
+    }
+  ],
+  "power_on_executions": [
+    {
+      "ordinal": 1,
+      "end_time": 15,
+      "start_time": 10,
+      "activity_id": "power_on",
+      "after_facts": [
+        [
+          "done:power_on",
+          "active"
+        ],
+        [
+          "on",
+          "active"
+        ],
+        [
+          "ready",
+          "active"
+        ]
+      ],
+      "instance_id": "power_on#1",
+      "before_facts": [
+        [
+          "off",
+          "active"
+        ],
+        [
+          "ready",
+          "active"
+        ]
+      ],
+      "activity_name": "上电",
+      "trigger_reason": "transition:off, event:joint-run-window:run-window:power_on@10",
+      "after_state_ids": [
+        "done:power_on",
+        "on",
+        "ready"
+      ],
+      "before_state_ids": [
+        "off",
+        "ready"
+      ]
+    },
+    {
+      "ordinal": 2,
+      "end_time": 145,
+      "start_time": 140,
+      "activity_id": "power_on",
+      "after_facts": [
+        [
+          "done:calibrate",
+          "active"
+        ],
+        [
+          "done:paperwork",
+          "active"
+        ],
+        [
+          "done:power_off",
+          "active"
+        ],
+        [
+          "done:power_on",
+          "active"
+        ],
+        [
+          "done:replace1",
+          "active"
+        ],
+        [
+          "done:scan1",
+          "active"
+        ],
+        [
+          "on",
+          "active"
+        ],
+        [
+          "ready",
+          "active"
+        ]
+      ],
+      "instance_id": "power_on#2",
+      "before_facts": [
+        [
+          "done:calibrate",
+          "active"
+        ],
+        [
+          "done:paperwork",
+          "active"
+        ],
+        [
+          "done:power_off",
+          "active"
+        ],
+        [
+          "done:power_on",
+          "active"
+        ],
+        [
+          "done:replace1",
+          "active"
+        ],
+        [
+          "done:scan1",
+          "active"
+        ],
+        [
+          "off",
+          "active"
+        ],
+        [
+          "ready",
+          "active"
+        ]
+      ],
+      "activity_name": "上电",
+      "trigger_reason": "transition:off, event:joint-run-window:run-window:power_on@10",
+      "after_state_ids": [
+        "done:calibrate",
+        "done:paperwork",
+        "done:power_off",
+        "done:power_on",
+        "done:replace1",
+        "done:scan1",
+        "on",
+        "ready"
+      ],
+      "before_state_ids": [
+        "done:calibrate",
+        "done:paperwork",
+        "done:power_off",
+        "done:power_on",
+        "done:replace1",
+        "done:scan1",
+        "off",
+        "ready"
+      ]
+    },
+    {
+      "ordinal": 3,
+      "end_time": 265,
+      "start_time": 260,
+      "activity_id": "power_on",
+      "after_facts": [
+        [
+          "done:calibrate",
+          "active"
+        ],
+        [
+          "done:paperwork",
+          "active"
+        ],
+        [
+          "done:power_off",
+          "active"
+        ],
+        [
+          "done:power_on",
+          "active"
+        ],
+        [
+          "done:replace1",
+          "active"
+        ],
+        [
+          "done:replace2",
+          "active"
+        ],
+        [
+          "done:scan1",
+          "active"
+        ],
+        [
+          "done:scan2",
+          "active"
+        ],
+        [
+          "on",
+          "active"
+        ],
+        [
+          "ready",
+          "active"
+        ]
+      ],
+      "instance_id": "power_on#3",
+      "before_facts": [
+        [
+          "done:calibrate",
+          "active"
+        ],
+        [
+          "done:paperwork",
+          "active"
+        ],
+        [
+          "done:power_off",
+          "active"
+        ],
+        [
+          "done:power_on",
+          "active"
+        ],
+        [
+          "done:replace1",
+          "active"
+        ],
+        [
+          "done:replace2",
+          "active"
+        ],
+        [
+          "done:scan1",
+          "active"
+        ],
+        [
+          "done:scan2",
+          "active"
+        ],
+        [
+          "off",
+          "active"
+        ],
+        [
+          "ready",
+          "active"
+        ]
+      ],
+      "activity_name": "上电",
+      "trigger_reason": "transition:off, event:joint-run-window:run-window:power_on@10",
+      "after_state_ids": [
+        "done:calibrate",
+        "done:paperwork",
+        "done:power_off",
+        "done:power_on",
+        "done:replace1",
+        "done:replace2",
+        "done:scan1",
+        "done:scan2",
+        "on",
+        "ready"
+      ],
+      "before_state_ids": [
+        "done:calibrate",
+        "done:paperwork",
+        "done:power_off",
+        "done:power_on",
+        "done:replace1",
+        "done:replace2",
+        "done:scan1",
+        "done:scan2",
+        "off",
+        "ready"
+      ]
+    }
+  ],
+  "project_unchanged": true,
+  "source_snapshots_unchanged": true,
+  "live_url": "http://127.0.0.1:8016",
+  "live_capability_verified": true,
+  "preserved_projects": 8,
+  "preserved_runs": 33,
+  "backup_directory": "output/run-windows/before-cutover"
+}

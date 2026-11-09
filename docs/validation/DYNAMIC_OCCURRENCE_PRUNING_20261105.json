@@ -1,0 +1,1355 @@
+{
+  "policy": "initial_goal_repeat_proof_v3",
+  "cases": {
+    "test_a": {
+      "source_run_id": "planner-run:01c77535-00d6-4dda-9294-657d036bb1cc",
+      "status": "OPTIMAL",
+      "makespan": 758,
+      "executions": 9,
+      "validator": "VALID",
+      "wall_seconds": 0.0811744999991788,
+      "branches": 10,
+      "original_branches": 7874,
+      "original_slots": 210,
+      "model": {
+        "candidate_activities": 10,
+        "optional_occurrence_slots": 9,
+        "occurrence_pruning": {
+          "policy": "initial_goal_repeat_proof_v3",
+          "eligible": true,
+          "applied": true,
+          "skip_reason": null,
+          "input_slots": 210,
+          "effective_slots": 9,
+          "removed_slots": 201,
+          "activity_limits": {
+            "activity:a4201bba-5288-4e49-b840-ef762e0449b7": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:bc4c32e0-cdde-4db0-ae7f-690583decaee": {
+              "input_limit": 21,
+              "effective_limit": 0
+            },
+            "activity:cd49665c-5083-4ea1-b4e5-2dcedad88cb0": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:fae9abb6-3324-4302-9aae-7501fea68f98": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:8b8856dc-d3cc-4999-bbfc-36a0ee6f3841": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:8a00aaad-4906-4bb8-873a-4e451852c3fa": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:8f7addd9-3cee-41c5-8a6e-9e16996fceee": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:3034e5e4-23e9-4f79-892e-3c605607842c": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:81206a95-1689-4f3e-a041-2f3dcadc29ac": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:92507e64-bd8c-46e5-8b1d-01e3cacd5ac6": {
+              "input_limit": 21,
+              "effective_limit": 1
+            }
+          },
+          "activity_proofs": {
+            "activity:a4201bba-5288-4e49-b840-ef762e0449b7": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:a4201bba-5288-4e49-b840-ef762e0449b7:output"
+              ]
+            },
+            "activity:bc4c32e0-cdde-4db0-ae7f-690583decaee": {
+              "reason": "not_goal_relevant",
+              "round": 1
+            },
+            "activity:cd49665c-5083-4ea1-b4e5-2dcedad88cb0": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:cd49665c-5083-4ea1-b4e5-2dcedad88cb0:output"
+              ]
+            },
+            "activity:fae9abb6-3324-4302-9aae-7501fea68f98": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:fae9abb6-3324-4302-9aae-7501fea68f98:output"
+              ]
+            },
+            "activity:8b8856dc-d3cc-4999-bbfc-36a0ee6f3841": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:8b8856dc-d3cc-4999-bbfc-36a0ee6f3841:output"
+              ]
+            },
+            "activity:8a00aaad-4906-4bb8-873a-4e451852c3fa": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:8a00aaad-4906-4bb8-873a-4e451852c3fa:output"
+              ]
+            },
+            "activity:8f7addd9-3cee-41c5-8a6e-9e16996fceee": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:8f7addd9-3cee-41c5-8a6e-9e16996fceee:output"
+              ]
+            },
+            "activity:3034e5e4-23e9-4f79-892e-3c605607842c": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:3034e5e4-23e9-4f79-892e-3c605607842c:output"
+              ]
+            },
+            "activity:81206a95-1689-4f3e-a041-2f3dcadc29ac": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:81206a95-1689-4f3e-a041-2f3dcadc29ac:output"
+              ]
+            },
+            "activity:92507e64-bd8c-46e5-8b1d-01e3cacd5ac6": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:92507e64-bd8c-46e5-8b1d-01e3cacd5ac6:output"
+              ]
+            }
+          },
+          "retained_activities": {},
+          "scope_analysis": {
+            "policy": "initial_goal_projection_v1",
+            "status": "complete",
+            "input_activities": 10,
+            "retained_activities": 9,
+            "seconds": 9.760000102687627e-05,
+            "rounds": [
+              {
+                "input_activities": 10,
+                "reachable_activities": 10,
+                "retained_activities": 9,
+                "stable_initial_state_ids": [
+                  "state:bc4c32e0-cdde-4db0-ae7f-690583decaee:output"
+                ],
+                "certificate_verified": true
+              },
+              {
+                "input_activities": 9,
+                "reachable_activities": 9,
+                "retained_activities": 9,
+                "stable_initial_state_ids": [
+                  "state:bc4c32e0-cdde-4db0-ae7f-690583decaee:output"
+                ],
+                "certificate_verified": true
+              }
+            ],
+            "excluded_activities": {
+              "activity:bc4c32e0-cdde-4db0-ae7f-690583decaee": {
+                "reason": "not_goal_relevant",
+                "round": 1
+              }
+            }
+          }
+        },
+        "exclusive_activity_count": 5,
+        "exclusive_occurrence_slots": 5,
+        "state_count": 10,
+        "horizon": 142998,
+        "support_choices": 15,
+        "threat_checks": 0,
+        "interval_locks": 12,
+        "variables": 43,
+        "constraints": 106,
+        "execution_mode": "parallel",
+        "time_window_count": 0,
+        "model_time_axis": "working_minutes"
+      }
+    },
+    "assembly20": {
+      "source_run_id": "planner-run:dbb48cc2-2c7f-42a9-8e21-006155a2610c",
+      "status": "OPTIMAL",
+      "makespan": 625,
+      "executions": 20,
+      "validator": "VALID",
+      "wall_seconds": 0.03249639999921783,
+      "branches": 38,
+      "original_branches": 38,
+      "original_slots": 20,
+      "model": {
+        "candidate_activities": 20,
+        "optional_occurrence_slots": 20,
+        "occurrence_pruning": {
+          "policy": "initial_goal_repeat_proof_v3",
+          "eligible": true,
+          "applied": false,
+          "skip_reason": null,
+          "input_slots": 20,
+          "effective_slots": 20,
+          "removed_slots": 0,
+          "activity_limits": {},
+          "activity_proofs": {
+            "activity:51c17609-26fd-444c-ab45-ddff20497f7e": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:51c17609-26fd-444c-ab45-ddff20497f7e:output"
+              ]
+            },
+            "activity:acbfd04e-e831-4e5e-b781-461cb020ce7d": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:acbfd04e-e831-4e5e-b781-461cb020ce7d:output"
+              ]
+            },
+            "activity:d3aa577e-c14a-4fd2-8bd2-086c20c8bca9": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:d3aa577e-c14a-4fd2-8bd2-086c20c8bca9:output"
+              ]
+            },
+            "activity:995983e4-7014-4d99-8aa0-e7cc91ba3fe1": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:995983e4-7014-4d99-8aa0-e7cc91ba3fe1:output"
+              ]
+            },
+            "activity:eb0d1128-aced-49a9-9121-290c39a3baea": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:eb0d1128-aced-49a9-9121-290c39a3baea:output"
+              ]
+            },
+            "activity:9493e1ed-d675-4363-8b40-5f444d73c6b1": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:9493e1ed-d675-4363-8b40-5f444d73c6b1:output"
+              ]
+            },
+            "activity:3876dd3c-6a62-4df3-9103-383a9099eeb2": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:3876dd3c-6a62-4df3-9103-383a9099eeb2:output"
+              ]
+            },
+            "activity:ce107442-a8e7-43fb-9f08-281f2c92355e": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:ce107442-a8e7-43fb-9f08-281f2c92355e:output"
+              ]
+            },
+            "activity:6daf2aae-6962-4a84-91ae-60d8cd88366e": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:6daf2aae-6962-4a84-91ae-60d8cd88366e:output"
+              ]
+            },
+            "activity:bf04aa1e-c455-4150-ba5b-f4950e3fb515": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:bf04aa1e-c455-4150-ba5b-f4950e3fb515:output"
+              ]
+            },
+            "activity:d9f20724-94a9-4d79-9c0d-89921a70ea2b": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:d9f20724-94a9-4d79-9c0d-89921a70ea2b:output"
+              ]
+            },
+            "activity:557fd9e5-7590-4370-948a-c2b70dc1f185": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:557fd9e5-7590-4370-948a-c2b70dc1f185:output"
+              ]
+            },
+            "activity:cd1b723f-7d7b-4115-aa04-5eeaeec20d48": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:cd1b723f-7d7b-4115-aa04-5eeaeec20d48:output"
+              ]
+            },
+            "activity:dd3168d3-4e61-44a2-9073-0c080476d3da": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:dd3168d3-4e61-44a2-9073-0c080476d3da:output"
+              ]
+            },
+            "activity:d7a2a273-22aa-4745-b478-34a8b2e6895d": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:d7a2a273-22aa-4745-b478-34a8b2e6895d:output"
+              ]
+            },
+            "activity:3c59889c-5a57-4162-af45-14c57e3b2634": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:3c59889c-5a57-4162-af45-14c57e3b2634:output"
+              ]
+            },
+            "activity:fce83e00-c62d-43e8-bf5b-df6673172644": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:fce83e00-c62d-43e8-bf5b-df6673172644:output"
+              ]
+            },
+            "activity:28984bf0-a764-48a2-9d0e-1dc79b89ee04": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:28984bf0-a764-48a2-9d0e-1dc79b89ee04:output"
+              ]
+            },
+            "activity:97e3d665-8a5b-41f8-b741-88148e41a5bb": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:97e3d665-8a5b-41f8-b741-88148e41a5bb:output"
+              ]
+            },
+            "activity:4365cc42-e27c-4cce-8ed7-2d871f58d637": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:4365cc42-e27c-4cce-8ed7-2d871f58d637:output"
+              ]
+            }
+          },
+          "retained_activities": {},
+          "scope_analysis": {
+            "policy": "initial_goal_projection_v1",
+            "status": "complete",
+            "input_activities": 20,
+            "retained_activities": 20,
+            "seconds": 0.00010479999764356762,
+            "rounds": [
+              {
+                "input_activities": 20,
+                "reachable_activities": 20,
+                "retained_activities": 20,
+                "stable_initial_state_ids": [
+                  "state:475d4cf3-8d38-44ec-a077-6aed68f67d6a"
+                ],
+                "certificate_verified": true
+              }
+            ],
+            "excluded_activities": {}
+          }
+        },
+        "exclusive_activity_count": 11,
+        "exclusive_occurrence_slots": 11,
+        "state_count": 23,
+        "horizon": 900,
+        "support_choices": 61,
+        "threat_checks": 0,
+        "interval_locks": 59,
+        "variables": 122,
+        "constraints": 348,
+        "execution_mode": "parallel",
+        "time_window_count": 0,
+        "model_time_axis": "working_minutes"
+      }
+    },
+    "night150": {
+      "source_run_id": "planner-run:98008222-cce3-435e-8366-d40b6b75d51d",
+      "status": "OPTIMAL",
+      "makespan": 2831,
+      "executions": 150,
+      "validator": "VALID",
+      "wall_seconds": 9.03954860000158,
+      "branches": 26537,
+      "original_branches": 26537,
+      "original_slots": 150,
+      "model": {
+        "candidate_activities": 150,
+        "optional_occurrence_slots": 150,
+        "occurrence_pruning": {
+          "policy": "initial_goal_repeat_proof_v3",
+          "eligible": true,
+          "applied": false,
+          "skip_reason": null,
+          "input_slots": 150,
+          "effective_slots": 150,
+          "removed_slots": 0,
+          "activity_limits": {},
+          "activity_proofs": {
+            "activity:a6e80bf8-0e57-4571-8547-ca61f0e01c0b": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:a6e80bf8-0e57-4571-8547-ca61f0e01c0b:output"
+              ]
+            },
+            "activity:6b3763cd-3fa1-4f7d-8396-73af13138432": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:c7abb9c6-67c4-4437-8b06-b383ddb15316"
+              ]
+            },
+            "activity:39d544d6-c62b-4b21-8a87-3f8c3713bbad": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:f766fd4c-a8c8-4d11-842e-aa9f227a9463"
+              ]
+            },
+            "activity:6ea1602b-a0d4-4ba6-a45f-41e4e4bbee1d": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:93b4dd17-beba-4771-a1ef-f66e291b4f8e"
+              ]
+            },
+            "activity:2d8bc38c-e584-43d0-b82b-d3b8c24a97fe": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:a5f46ed2-e523-4135-89d5-0040aadb1300"
+              ]
+            },
+            "activity:bbcdf613-9f1a-47e6-8d1d-7532486de62b": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:d001dbaa-1aba-47a7-850e-b8fd7094d234"
+              ]
+            },
+            "activity:55617c77-a8c4-4037-afab-8f682d475a8e": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:b66fb995-0b5e-4d9b-bcaf-382c753fc9af"
+              ]
+            },
+            "activity:2920951c-6694-4723-a702-54cc0b95ccd4": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:2920951c-6694-4723-a702-54cc0b95ccd4:output"
+              ]
+            },
+            "activity:9cef54cf-f878-4498-ad22-a9f5e23bf724": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:9cef54cf-f878-4498-ad22-a9f5e23bf724:output"
+              ]
+            },
+            "activity:ba705ca8-e43e-4be7-be68-3185804c2bec": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:ba705ca8-e43e-4be7-be68-3185804c2bec:output"
+              ]
+            },
+            "activity:a2da1a4e-fecc-42a2-8f6c-4bb67179c833": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:a2da1a4e-fecc-42a2-8f6c-4bb67179c833:output"
+              ]
+            },
+            "activity:526d9563-513b-4987-9b4a-2ce87f09767e": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:526d9563-513b-4987-9b4a-2ce87f09767e:output"
+              ]
+            },
+            "activity:5a8bf6e3-5263-4795-ae63-1b75f21b895b": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:5a8bf6e3-5263-4795-ae63-1b75f21b895b:output"
+              ]
+            },
+            "activity:917eff91-6696-41b2-b5d6-3b0071af46ef": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:917eff91-6696-41b2-b5d6-3b0071af46ef:output"
+              ]
+            },
+            "activity:72283142-f2c8-4c51-b3d8-4d035a84f9ce": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:72283142-f2c8-4c51-b3d8-4d035a84f9ce:output"
+              ]
+            },
+            "activity:4277d8df-ed38-4af0-acc5-d145b8eb30fa": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:4277d8df-ed38-4af0-acc5-d145b8eb30fa:output"
+              ]
+            },
+            "activity:21d59115-b46a-4808-b61e-fccd34a64015": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:21d59115-b46a-4808-b61e-fccd34a64015:output"
+              ]
+            },
+            "activity:fd7c0bf9-fa37-49eb-a1ac-4545ee6afb84": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:fd7c0bf9-fa37-49eb-a1ac-4545ee6afb84:output"
+              ]
+            },
+            "activity:0b29635c-7db1-4c26-ac93-e846b86e99bb": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:0b29635c-7db1-4c26-ac93-e846b86e99bb:output"
+              ]
+            },
+            "activity:74f04640-2c22-4d1c-baa7-8f684d67ac8c": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:66eee61b-55a2-403b-8b1e-063e57f07ec0"
+              ]
+            },
+            "activity:4b589ef2-bcc7-4f8d-a8bf-1e22763948da": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:a3965946-5bdf-4dad-b7a6-b87669a729eb"
+              ]
+            },
+            "activity:1d3e5164-ada9-4968-8ced-640c42d061fb": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:cefa9985-5e39-444d-8994-cc6f9bd1df8b"
+              ]
+            },
+            "activity:aff03369-6f17-4516-a479-c1a5939ee6bb": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:31abdbd1-865c-42c0-abeb-3cbc1e7a000b"
+              ]
+            },
+            "activity:137433da-1073-4b75-a09f-9a5373219ddb": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:8140e0e0-8f68-433d-bc8b-030f214b91a8"
+              ]
+            },
+            "activity:c3b360ae-b491-42c9-8bad-a8560414416c": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:c1a7c74d-3b31-444f-9f2f-fe6d002822cb"
+              ]
+            },
+            "activity:34e748ef-e30a-455c-b5df-b6dacea6f8d8": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:34e748ef-e30a-455c-b5df-b6dacea6f8d8:output"
+              ]
+            },
+            "activity:bd6b67f1-4669-4d5e-a42c-5ea025543996": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:bd6b67f1-4669-4d5e-a42c-5ea025543996:output"
+              ]
+            },
+            "activity:4f07c4ae-71b3-476e-a00d-68f335b2045d": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:4f07c4ae-71b3-476e-a00d-68f335b2045d:output"
+              ]
+            },
+            "activity:f21cd985-7aa6-4ea0-b403-7edbb2eb43e3": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:f21cd985-7aa6-4ea0-b403-7edbb2eb43e3:output"
+              ]
+            },
+            "activity:5e13b88b-dc6b-4cec-b458-8e29be54483a": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:5e13b88b-dc6b-4cec-b458-8e29be54483a:output"
+              ]
+            },
+            "activity:c245b9f8-8811-4efe-bc51-99325cc0c22a": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:c245b9f8-8811-4efe-bc51-99325cc0c22a:output"
+              ]
+            },
+            "activity:9cbde5b6-4c8d-4191-b00e-cc6c9d51e438": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:9cbde5b6-4c8d-4191-b00e-cc6c9d51e438:output"
+              ]
+            },
+            "activity:7a742a85-e910-4ffd-9912-756bc4bfd8c5": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:7a742a85-e910-4ffd-9912-756bc4bfd8c5:output"
+              ]
+            },
+            "activity:b90f75be-7f3b-45c7-bd83-72ff5b43695f": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:b90f75be-7f3b-45c7-bd83-72ff5b43695f:output"
+              ]
+            },
+            "activity:e2315b8d-e1c0-45c1-b8db-a5758b10406c": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:e2315b8d-e1c0-45c1-b8db-a5758b10406c:output"
+              ]
+            },
+            "activity:3fa41e9c-1d02-420a-bc5b-c66f69d23a81": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:3fa41e9c-1d02-420a-bc5b-c66f69d23a81:output"
+              ]
+            },
+            "activity:4b34af06-d1d0-46eb-bcff-7205196a3ea6": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:4b34af06-d1d0-46eb-bcff-7205196a3ea6:output"
+              ]
+            },
+            "activity:b28047c7-d748-4d1d-b8bd-5d347eb37a57": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:c3c81829-aa2b-47a1-a9d6-67de4a085829"
+              ]
+            },
+            "activity:071bb8f6-9c30-4cbc-b478-e2d1b690d56c": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:2190e528-98e6-492a-b3b4-5ab05a0bb0ae"
+              ]
+            },
+            "activity:59e9fc80-ab51-4024-a915-aeefb22ad72d": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:6faeafea-74a3-46ed-8f5b-9c8ea7c67b32"
+              ]
+            },
+            "activity:710aa96b-c23d-41b3-8e78-9a73555e52b4": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:09bc6cdc-d06b-4d3a-bdbf-9f6f8d0dda45"
+              ]
+            },
+            "activity:55256a7c-8ec6-443e-87e8-c4e336c69b04": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:2e8c7ef6-74de-4ff7-b2cc-a1a166b24d6d"
+              ]
+            },
+            "activity:b9b1683a-d674-4433-9b27-1aab8339548f": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:53bf17dc-db75-42cc-b265-78010f4688f9"
+              ]
+            },
+            "activity:c052a1f4-11a5-4514-af2d-780a5b8a24dc": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:c052a1f4-11a5-4514-af2d-780a5b8a24dc:output"
+              ]
+            },
+            "activity:ba975781-4e69-4d21-b9f7-775856ace794": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:ba975781-4e69-4d21-b9f7-775856ace794:output"
+              ]
+            },
+            "activity:15d473cd-b3d4-4c5d-855b-9d3a037d58c1": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:15d473cd-b3d4-4c5d-855b-9d3a037d58c1:output"
+              ]
+            },
+            "activity:09ea66a5-be1d-4198-930b-53435dafd970": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:09ea66a5-be1d-4198-930b-53435dafd970:output"
+              ]
+            },
+            "activity:06d0986e-85ab-469c-9c1c-3158665fefac": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:06d0986e-85ab-469c-9c1c-3158665fefac:output"
+              ]
+            },
+            "activity:f2f3c88b-d558-4291-b936-5d3a9ed25077": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:f2f3c88b-d558-4291-b936-5d3a9ed25077:output"
+              ]
+            },
+            "activity:c51607ca-a61e-44df-b4f3-3ccc8261635c": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:c51607ca-a61e-44df-b4f3-3ccc8261635c:output"
+              ]
+            },
+            "activity:7bb5afa1-03cb-41a8-a4ba-f3238eb65aa9": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:7bb5afa1-03cb-41a8-a4ba-f3238eb65aa9:output"
+              ]
+            },
+            "activity:6d18358d-992d-4616-9aef-29e37b3fe9fb": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:6d18358d-992d-4616-9aef-29e37b3fe9fb:output"
+              ]
+            },
+            "activity:c2886100-8fd5-4b79-9886-30ee3927a9a7": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:c2886100-8fd5-4b79-9886-30ee3927a9a7:output"
+              ]
+            },
+            "activity:ee40b173-bb49-4021-b742-e04a1b4d367f": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:ee40b173-bb49-4021-b742-e04a1b4d367f:output"
+              ]
+            },
+            "activity:07f3b3a3-0792-4377-a091-82094661e249": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:07f3b3a3-0792-4377-a091-82094661e249:output"
+              ]
+            },
+            "activity:bb92e779-812b-445a-ae0a-58db21b8a5be": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:732dc043-ba9c-4ff0-8323-de3747edcb4a"
+              ]
+            },
+            "activity:bcc6aa73-3ed5-4f1b-a702-26eb874f6d7c": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:286a8b5a-17da-4202-9240-150ce6aabf56"
+              ]
+            },
+            "activity:e2fd4927-9249-4df3-8ab4-fa712fba6704": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:469f0d7a-d64f-4edb-b438-b766893b1a3a"
+              ]
+            },
+            "activity:95652367-2f44-45d9-be66-082d76572284": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:63384f80-8779-402c-9139-b3774918e060"
+              ]
+            },
+            "activity:c7a2999b-332b-46ea-891d-d3038a35f7e5": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:1f50b7af-28f3-4b17-88e6-139178abb507"
+              ]
+            },
+            "activity:d69d3910-0dd6-4f6e-8e1e-5d18808ee603": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:9c887b65-ce71-4d6d-b4e3-249cb848c4af"
+              ]
+            },
+            "activity:d9fd70b1-9746-41ea-aa49-f11813d2eb79": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:d9fd70b1-9746-41ea-aa49-f11813d2eb79:output"
+              ]
+            },
+            "activity:45564d3e-b79b-4e3c-abef-1c8a1dc74589": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:45564d3e-b79b-4e3c-abef-1c8a1dc74589:output"
+              ]
+            },
+            "activity:b339907c-6b1b-44ab-b29d-96a83dfca80d": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:b339907c-6b1b-44ab-b29d-96a83dfca80d:output"
+              ]
+            },
+            "activity:e95b7e8d-5a85-4b90-b059-0f3ec627e44e": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:e95b7e8d-5a85-4b90-b059-0f3ec627e44e:output"
+              ]
+            },
+            "activity:cabaa134-69ff-4492-aaea-e33638752306": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:cabaa134-69ff-4492-aaea-e33638752306:output"
+              ]
+            },
+            "activity:618a79ee-7cfb-4348-86dd-4ca8f9fb4ffd": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:618a79ee-7cfb-4348-86dd-4ca8f9fb4ffd:output"
+              ]
+            },
+            "activity:5e9a1c52-4803-4d31-9d19-b11df7b6b789": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:5e9a1c52-4803-4d31-9d19-b11df7b6b789:output"
+              ]
+            },
+            "activity:368c97c7-3541-48bb-9c0f-af5f9b9da20c": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:368c97c7-3541-48bb-9c0f-af5f9b9da20c:output"
+              ]
+            },
+            "activity:babde4f6-35b5-4c35-b6de-4d7aecada92f": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:babde4f6-35b5-4c35-b6de-4d7aecada92f:output"
+              ]
+            },
+            "activity:c66a9413-b156-4309-b908-e887d06085b2": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:c66a9413-b156-4309-b908-e887d06085b2:output"
+              ]
+            },
+            "activity:a145e2d5-f0a5-4c09-bf13-1a62eaf6f1f3": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:a145e2d5-f0a5-4c09-bf13-1a62eaf6f1f3:output"
+              ]
+            },
+            "activity:f7532287-7367-4a99-8eb6-dfa3eb9d026f": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:f7532287-7367-4a99-8eb6-dfa3eb9d026f:output"
+              ]
+            },
+            "activity:74cccad0-4a55-481a-8eaf-a6e74f80841c": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:96a4db0a-d0b0-46ca-a2f7-33e176089629"
+              ]
+            },
+            "activity:c1b0d10c-1a1d-4201-89b5-2ebdd66efe0b": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:9e3d597e-d38f-455e-8a08-dfa6588d9845"
+              ]
+            },
+            "activity:6c1483c3-48a5-41ee-abc2-ec5ac19ae577": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:9f8cafb7-91a1-4733-a6dd-5ee64b5350ad"
+              ]
+            },
+            "activity:c002742d-8ac5-4874-ab1f-234aa77e6fe5": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:91559bfa-7252-4d16-a2eb-771b502361c0"
+              ]
+            },
+            "activity:9e5fad99-c9cc-480f-9f8b-05dfa7d6444c": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:537eafa1-f958-4c09-ab9c-a75c7ab3bec4"
+              ]
+            },
+            "activity:aacc7791-0851-4622-93de-1c503caebe3d": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "state:b304d7f2-91d0-4f06-b625-3400ef6d4060"
+              ]
+            },
+            "activity:f898614f-685b-4a33-95bc-0e500fb5d11e": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:f898614f-685b-4a33-95bc-0e500fb5d11e:output"
+              ]
+            },
+            "activity:2dac09a6-2740-4311-9d9b-aba45e2257ca": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:2dac09a6-2740-4311-9d9b-aba45e2257ca:output"
+              ]
+            },
+            "activity:1c78492e-7a40-4294-956d-5a787223cb4c": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:1c78492e-7a40-4294-956d-5a787223cb4c:output"
+              ]
+            },
+            "activity:daecf3d7-a318-4aff-91d7-b70a97c6dbdd": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:daecf3d7-a318-4aff-91d7-b70a97c6dbdd:output"
+              ]
+            },
+            "activity:557bdcb3-b838-4de3-a050-1c6723c03601": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:557bdcb3-b838-4de3-a050-1c6723c03601:output"
+              ]
+            },
+            "activity:a9d596c5-3a2d-4d75-a5a8-776bea8aaee0": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:a9d596c5-3a2d-4d75-a5a8-776bea8aaee0:output"
+              ]
+            },
+            "activity:d8ce70a3-8bdb-4d8d-9040-b53b9305868e": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:d8ce70a3-8bdb-4d8d-9040-b53b9305868e:output"
+              ]
+            },
+            "activity:feaee5b4-d07e-4476-a919-af4b0d5704ba": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:feaee5b4-d07e-4476-a919-af4b0d5704ba:output"
+              ]
+            },
+            "activity:8e5a2def-7d6b-4fa8-bcfe-d1b5daf50df6": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:8e5a2def-7d6b-4fa8-bcfe-d1b5daf50df6:output"
+              ]
+            },
+            "activity:4de47688-aa80-40f9-ab68-69077cb53cc7": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:4de47688-aa80-40f9-ab68-69077cb53cc7:output"
+              ]
+            },
+            "activity:05a7c2d6-2720-4131-a08f-8f0f7315776e": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:05a7c2d6-2720-4131-a08f-8f0f7315776e:output"
+              ]
+            }
+          },
+          "retained_activities": {
+            "activity:b4372c77-be9b-4d26-b331-34ae6b6f5fff": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:a48c8080-9200-41cc-9372-fbba1fb0739d",
+                "state:b7d308a1-a4be-4c99-8635-37943dc8cf28"
+              ]
+            },
+            "activity:571b784b-3af0-438d-81fa-0f7a1c7870ba": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:b7d72810-177c-4d2d-875c-c735eacdc23d",
+                "state:cb771130-e646-4bf4-a302-a4f780341b17"
+              ]
+            },
+            "activity:69bd13e1-3acd-467e-b861-e7486df37467": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:4fe95cc6-88a7-4d3a-91c1-90d1424c8301",
+                "state:b4dfe30e-3478-4a8f-8da5-7e84bcd83d48"
+              ]
+            },
+            "activity:7495c47a-aeca-40c1-a68c-3634691ae801": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:4c760a0c-1b37-405c-afd6-98e4bcd49682",
+                "state:d24ca016-0cf1-4375-bebf-8b47ec6ec8d4"
+              ]
+            },
+            "activity:1c19150d-3a78-4cf4-b77c-48448d249ed8": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:c2385ba8-8a66-43a2-ad9f-31e0630d8f7c",
+                "state:f7a1928d-1a5e-452c-ace7-a41b9cc047e5"
+              ]
+            },
+            "activity:b9b61b09-9d6c-49e8-85e0-28f47ee78220": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:61796a6c-690c-4fc6-8afa-39900079f751",
+                "state:b2d755e9-0642-4e47-a579-6d4278c50cee"
+              ]
+            },
+            "activity:2de43650-58c9-4cb8-b9df-68462955a3fd": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:1ed407db-7eab-4fbe-9386-7c265553b9ae"
+              ]
+            },
+            "activity:685ac008-e303-4959-a331-633d481cb006": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:fb1ab3d7-4bd6-4670-9c65-c35eca32cdc6"
+              ]
+            },
+            "activity:71f8b719-41e4-4790-834c-ce1463ee3077": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:07cb4ae9-00a0-43a8-b120-9fcbc9f8e529"
+              ]
+            },
+            "activity:7cbf2b6c-7905-4001-96a2-741a3095a3d1": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:21b66001-516e-4435-9dc4-35f7575d82c3"
+              ]
+            },
+            "activity:4005f23b-c56a-4cc9-ab13-3af4628ec5da": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:880bc8a2-ddfe-40fb-8441-310243184db9"
+              ]
+            },
+            "activity:c3242414-ea20-4ae8-838c-bd270c1eb3b2": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:acbd9ee5-6c07-4f2b-8e69-13a4201c92e1"
+              ]
+            },
+            "activity:ebd8c707-c291-4e77-9510-de3a3cf91d46": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:4d5ff1fc-eb32-4b3b-8c4d-4ea86e95e097",
+                "state:dd3ebfc6-ee4a-40f6-9067-2cfc489f054f"
+              ]
+            },
+            "activity:7010d158-8bfd-4e06-ad3d-759d25aa5b08": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:b9450b5f-9e12-4916-9719-098cb20a269c",
+                "state:c988171d-5a64-4d33-b8a0-a79cfb28b013"
+              ]
+            },
+            "activity:83d1dc29-b18c-40fd-88e5-6031a145ec15": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:18e3027e-e392-4904-9d46-0bbee28a87e9",
+                "state:ac76d35c-653a-4870-87f0-02459442d95a"
+              ]
+            },
+            "activity:c6090093-b964-49f2-aeda-d6a1a3fc0619": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:6e23cedd-7a2a-4ea7-9607-25336b90c0c0",
+                "state:a749c1e2-212f-4b2d-acd7-0916112d18a2"
+              ]
+            },
+            "activity:d91d851e-adc2-4091-9411-99f336f17a00": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:1a3a2540-a0f1-4bf5-9472-176bf2e975b2",
+                "state:b1e7c0b5-a81e-4476-b6ff-23dce5b6d176"
+              ]
+            },
+            "activity:5fff37ab-f5a7-4298-b168-688cfa42d11c": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:89855363-3431-4eba-87a2-eaba7fa0aedf",
+                "state:9a45e2ad-4fc9-4cc2-a7cc-3837d1907e9f"
+              ]
+            },
+            "activity:c36dd0a6-5461-4237-a4ec-8fd29ceb6473": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:cf60d1ca-7a0d-4db4-a00e-85ba3a7e4e3c"
+              ]
+            },
+            "activity:1ec09c9f-a16a-44d4-ac8e-02090c5b80f2": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:40b30628-7d9b-4237-b304-7d87a840b5e1"
+              ]
+            },
+            "activity:7e8c4a06-0a41-481e-8d37-b7a6cc5f4a80": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:c0c93582-bfc0-4824-814c-0b605a5c156e"
+              ]
+            },
+            "activity:0b589bfb-653f-43ed-8431-8f50109879a3": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:c0fc0fea-93eb-460f-885c-dc42d9924c79"
+              ]
+            },
+            "activity:9437e177-e416-46bc-b045-d242be9d025e": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:a31fa396-2f7b-4055-a769-075e6f29977c"
+              ]
+            },
+            "activity:b414e677-9389-4f01-9c74-7f2232e4cd99": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:64c3b711-24eb-4391-9982-32a93daa5603"
+              ]
+            },
+            "activity:399821e6-6b59-4941-869c-5527415b3670": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:4cb09a6a-2747-4682-ba4c-90e5a029ca49",
+                "state:c45a4a63-a73b-48b8-95bf-b2a753b0988b"
+              ]
+            },
+            "activity:1b486c34-ae2b-4730-9e93-6191fd250403": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:62a67c43-c35a-4cdb-be63-1867a210823e",
+                "state:853cd116-ed3d-4889-95a1-6964a4223f42"
+              ]
+            },
+            "activity:acc21d42-b83c-4f65-9510-da7a448eca41": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:4a18c449-139c-4a68-b9f8-885907e52d05",
+                "state:6b193052-5a0a-4b85-8489-da4235f26355"
+              ]
+            },
+            "activity:3d88ded2-a123-4568-a902-d03f258a3199": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:34f904c9-7b62-445c-8412-65fb5112f651",
+                "state:92d114e0-b1ce-403e-ad9e-020f26dbf24e"
+              ]
+            },
+            "activity:9f3d57b9-22f7-4315-85b6-8db39c364d2e": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:6cb24a70-1438-4c51-80ab-1ed8c32dbadb",
+                "state:6e1ba6ca-2559-4871-a662-b3f9b8689fa9"
+              ]
+            },
+            "activity:e09c1fca-de2f-4b35-acd6-723c9b64f94e": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:07ebb2b5-942c-4213-86e9-b942be3de2ac",
+                "state:ab0aa365-39b2-4d84-ac8b-5da8b72e3040"
+              ]
+            },
+            "activity:317d555b-06b0-470e-8c25-d85150f55d17": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:8fa45de2-0e0b-4ca6-9614-0b391d407ef4"
+              ]
+            },
+            "activity:3e1cd86c-e880-4e16-86c8-22b150dabd15": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:d8682f1a-acd9-477c-b684-ae8713cb8316"
+              ]
+            },
+            "activity:1d96f912-1876-4357-9472-e7d0fef4e7b9": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:d72234c0-c678-4c86-81ed-a4c46da9cdb9"
+              ]
+            },
+            "activity:a495a628-afea-464a-ba9f-b1f915adda40": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:ffa3b34f-b495-4ce8-a4c2-0ffe1609967c"
+              ]
+            },
+            "activity:0e5509fb-33e0-4a26-856e-fc03f17d53c8": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:1687e985-2f4a-448c-b8a4-4f7295f663bf"
+              ]
+            },
+            "activity:1c5102a4-9551-4366-8d05-dd6a80f4905a": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:df9336d2-30da-4896-b1fe-7aefc0a59b0c"
+              ]
+            },
+            "activity:e7c07adc-0c3c-4725-9864-34e36ac8f788": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:591462fc-99cc-4ec3-8f31-8e99e51b3d57",
+                "state:98eb022d-46a1-4903-98af-a9250d6b42e9"
+              ]
+            },
+            "activity:2c466d26-d85b-4e67-8527-b64235e685f0": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:1818f818-a9f7-4c23-b6d5-78091822e041",
+                "state:93ddb0be-6925-422b-ba60-4fb3b4aaf8e8"
+              ]
+            },
+            "activity:2bb5c58c-08c0-422e-8702-569e5dca7199": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:21c08f3a-95b8-470f-9652-8305821db18e",
+                "state:c5cf6f88-aad5-453e-8946-9f45428e3fa7"
+              ]
+            },
+            "activity:b39f743e-6c64-4b07-8e94-8eeb49110785": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:9230f803-7301-4de7-b633-bedc17023a23",
+                "state:ea022a03-e115-45d2-b1d1-52c5877eb6e6"
+              ]
+            },
+            "activity:fe9fdb21-b437-4a5b-aafb-7a481a139b87": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:6f4509fe-c9e3-4ab9-847c-38b9073991c5",
+                "state:aa5863ab-53e0-4622-8a86-d84e47ffe26b"
+              ]
+            },
+            "activity:0fc5bd12-b13a-4d72-87d2-f714a62b4cc8": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:7a0ec308-8705-403f-a986-ae0493f4a6ea",
+                "state:afd651da-c05e-4936-8c5d-c5e7096e66c8"
+              ]
+            },
+            "activity:60c67fe7-afbb-4311-8bd2-3050301f6a58": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:b0ca5e4f-27a7-4d05-bfc7-522d8b4911f3"
+              ]
+            },
+            "activity:6b4f9be7-1eae-42e7-acb4-68ba140b4551": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:2e3415c4-d45c-42a8-84a3-f7390d714363"
+              ]
+            },
+            "activity:ae031525-e14d-4b2d-9e40-1fc3999e1c57": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:f88b0361-a01c-482b-bf82-f4e246c951f0"
+              ]
+            },
+            "activity:eb428494-2325-48c1-b175-9929e3b8f25a": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:078e3d47-cb31-4007-8949-c0a96ab64961"
+              ]
+            },
+            "activity:09bdf40b-ac26-42d4-a916-ef920384a35b": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:f169c94f-9b70-4372-8d39-75ce12718ea5"
+              ]
+            },
+            "activity:842bb983-f27d-43c9-ab6e-c52053ce2950": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:e44c7553-73df-40ae-8ab9-37581f1b10c0"
+              ]
+            },
+            "activity:36ce4a01-6bff-4714-a600-f0f81bdbf289": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:8a7ac179-76a4-4421-ac9f-5e6683e4ec98",
+                "state:e44771a5-6503-4d73-bcb4-feb781ee51de"
+              ]
+            },
+            "activity:ebd8662d-2b89-4a6a-a3a2-9486731dd2a9": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:174291ee-fbc2-44b5-a6d1-c06c6f59726a",
+                "state:915d40c6-d4e7-4b0e-bd06-bd1c79edb51c"
+              ]
+            },
+            "activity:d8f218f1-eb57-4574-a0e9-b55ae44d8a90": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:69ea1a99-41e1-4dc9-853c-21df86fdfc61",
+                "state:bd05cb27-0ba0-4dbd-8e27-66935ceeaa0e"
+              ]
+            },
+            "activity:489cbc65-540b-413c-8e96-7460c7b24346": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:4c2bc035-11c5-4b98-8995-e17f79f6806c",
+                "state:738e2417-ebd4-48d2-87c2-6ea3bea91df8"
+              ]
+            },
+            "activity:22c41b59-2c79-4774-8f15-e15b4a4c50ee": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:1f70cfbd-7307-4718-a45f-2012eab3fa02",
+                "state:7dc19666-290b-4b13-a54a-1948ce4c38f6"
+              ]
+            },
+            "activity:a718f454-4088-4e0a-a537-777b8b549aee": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:2864e027-6463-4aa0-9042-2f0c88f07a8a",
+                "state:f0dfa795-c518-4e01-abff-1fcdcd56c404"
+              ]
+            },
+            "activity:2c50a36e-87b2-43ea-8dd8-791f2a292998": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:e764cfe1-fac6-4d03-b3f3-946f9480a58f"
+              ]
+            },
+            "activity:f399750b-10ea-4cf9-bce1-bb99e7a4f156": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:b8a49894-7e0d-4125-96d2-6c4970033a96"
+              ]
+            },
+            "activity:62993dd3-6bf8-4b69-b939-01fc6b4889f7": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:bafd7ef3-4b96-4100-b4d4-469e0d5029c7"
+              ]
+            },
+            "activity:9edb697b-cfb3-4f87-9842-f339ddffc48a": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:43ccd849-99a5-42f4-ad3e-3d65973ec36d"
+              ]
+            },
+            "activity:6422b8e6-8033-482b-a3bc-013f6fbdbd13": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:b889bce8-b0fb-45b9-8ea6-0f0086ba4ded"
+              ]
+            },
+            "activity:c3b741de-6a97-4c88-b9ef-ed5224835964": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "state:6b422201-dde8-4083-be7f-c4bd4f58cbde"
+              ]
+            }
+          },
+          "scope_analysis": {
+            "policy": "initial_goal_projection_v1",
+            "status": "complete",
+            "input_activities": 150,
+            "retained_activities": 150,
+            "seconds": 0.0010165999992750585,
+            "rounds": [
+              {
+                "input_activities": 150,
+                "reachable_activities": 150,
+                "retained_activities": 150,
+                "stable_initial_state_ids": [
+                  "state:23d1f703-96aa-4ddc-95b3-fa5ce51e0cc7",
+                  "state:26d804aa-5f9a-4968-980a-53e52ad427ba",
+                  "state:6b0de88e-7971-4eb1-b2fe-5cdf69aa54ad",
+                  "state:70552484-c8f2-4833-ab9f-f746b07eea56",
+                  "state:73df5c55-b882-4a36-b3ca-ff349653ad1d",
+                  "state:87e27252-7841-42bf-b36f-3d2d3d797756",
+                  "state:fa892383-af18-466d-ba6b-39df084ec94b"
+                ],
+                "certificate_verified": true
+              }
+            ],
+            "excluded_activities": {}
+          }
+        },
+        "exclusive_activity_count": 0,
+        "exclusive_occurrence_slots": 0,
+        "state_count": 277,
+        "horizon": 48900,
+        "support_choices": 1201,
+        "threat_checks": 120,
+        "interval_locks": 1018,
+        "variables": 1712,
+        "constraints": 5252,
+        "execution_mode": "parallel",
+        "time_window_count": 0,
+        "model_time_axis": "working_minutes"
+      }
+    }
+  },
+  "tests_passed": 151,
+  "exhaustive_small_cases": 32,
+  "validation_scope": "Historical immutable snapshots; in-memory solve; no production database writes."
+}

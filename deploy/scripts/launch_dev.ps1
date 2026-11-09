@@ -297,6 +297,9 @@ if (-not $backendReady) {
     throw "Backend did not become healthy at $backendHealthUrl. Check the backend PowerShell window for the uvicorn error."
 }
 
+Write-Section 'Starting durable Planner worker'
+& (Join-Path $PSScriptRoot 'start_planner_worker.ps1') -ProjectRoot $ProjectRoot -PythonExe $venvPython
+
 Write-Section 'Starting frontend'
 $escapedFrontendRoot = $frontendRoot.Replace("'", "''")
 $frontendCommand = "Set-Location -LiteralPath '$escapedFrontendRoot'; & '$npmCommand' run dev -- --host 0.0.0.0"

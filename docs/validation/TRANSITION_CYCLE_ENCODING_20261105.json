@@ -1,0 +1,30 @@
+{
+  "case": "Synthetic 20-activity assembly plus reciprocal dismantle transition, unlimited activity caps",
+  "not_user_remote_snapshot": true,
+  "seed": 11,
+  "budget_seconds": 60,
+  "before": {
+    "status": "OPTIMAL",
+    "branches": 155161,
+    "elapsed_seconds": 25.48697639999955,
+    "build_seconds": 2.649627099999634,
+    "slots": 113,
+    "variables": 214951,
+    "constraints": 437092,
+    "makespan": 515,
+    "validator": "VALID"
+  },
+  "after": {
+    "status": "OPTIMAL",
+    "branches": 15357,
+    "elapsed_seconds": 2.439957400001731,
+    "build_seconds": 0.1091011000025901,
+    "slots": 113,
+    "variables": 9808,
+    "constraints": 24445,
+    "makespan": 515,
+    "validator": "VALID"
+  },
+  "regression_tests_passed": 183,
+  "independent_exhaustive_state_cases": 32
+}

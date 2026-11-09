@@ -1,0 +1,63 @@
+{
+  "version": "0.3.1-beta.3-snapshot.20261105",
+  "archive": {
+    "files": 4362,
+    "manifest": "PASS",
+    "zip_crc": "PASS",
+    "no_database_or_env": true,
+    "sha256": "c62e0634dbc9c306936243a0eacd648841473ad0d9180ecf94acc8cf1319f14a",
+    "bytes": 130759156
+  },
+  "fresh_install": "ready",
+  "upgrade": {
+    "status": "PASS",
+    "scenario_preserved": true,
+    "historical_run_preserved": true,
+    "revision_unchanged": true,
+    "backup_count": 1
+  },
+  "solves": {
+    "example20": {
+      "status": "OPTIMAL",
+      "validator": "VALID",
+      "makespan": 515,
+      "executions": 20,
+      "elapsed_seconds": 0.03768,
+      "execution_count_proven_optimal": true
+    },
+    "first_execution_window20": {
+      "status": "OPTIMAL",
+      "validator": "VALID",
+      "makespan": 575,
+      "executions": 20,
+      "elapsed_seconds": 0.098812,
+      "execution_count_proven_optimal": true
+    },
+    "calendar_exclusive150": {
+      "status": "OPTIMAL",
+      "validator": "VALID",
+      "makespan": 3033,
+      "executions": 150,
+      "elapsed_seconds": 8.216008,
+      "execution_count_proven_optimal": true
+    }
+  },
+  "browser": {
+    "status": "PASS",
+    "url": "http://127.0.0.1:8026/",
+    "activities": 150,
+    "rules_checked": 3,
+    "result_rows": 150,
+    "gantt_rows": 150,
+    "refresh_history": "PASS",
+    "errors": []
+  },
+  "isolation": {
+    "live_system_unchanged": true,
+    "projects": 8,
+    "runs": 34,
+    "isolated_services_stopped": true
+  },
+  "packaging_tests_passed": 10,
+  "gantt_browser_regressions_passed": 7
+}

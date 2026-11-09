@@ -1,0 +1,1415 @@
+{
+  "schema_version": 2,
+  "id": "scenario:939f25e8-4b9d-4cd2-816e-0ce16b22ed81",
+  "display_code": "SCN-6B22ED81",
+  "name": "20活动机械组装→功能调测｜集成验收到功能联调",
+  "execution_mode": "parallel",
+  "start_time": 0,
+  "max_steps": 20,
+  "default_budget": {
+    "time_limit_seconds": 60,
+    "transition_limit": 20000,
+    "max_solutions": 20
+  },
+  "states": [
+    {
+      "id": "state:04559747-89a2-410a-999e-162bc266357f",
+      "name": "集成验收待开展",
+      "state_kind": "seed",
+      "managed": true
+    },
+    {
+      "id": "state:fd2fbf3f-9257-4934-9ca1-aff1bdcbae61:output",
+      "name": "集成验收完成",
+      "source_activity_id": "activity:fd2fbf3f-9257-4934-9ca1-aff1bdcbae61",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:f45741a3-6ea4-4be2-99a6-36ff04b8e521:output",
+      "name": "基座与机架预装完成",
+      "source_activity_id": "activity:f45741a3-6ea4-4be2-99a6-36ff04b8e521",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:c6893886-dea1-4abb-b781-152e0398a883:output",
+      "name": "驱动传动单元预装完成",
+      "source_activity_id": "activity:c6893886-dea1-4abb-b781-152e0398a883",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:4fbfadf8-068a-42e8-a0b2-cd943eb77f94:output",
+      "name": "电控柜与线束预装完成",
+      "source_activity_id": "activity:4fbfadf8-068a-42e8-a0b2-cd943eb77f94",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:6d85c402-1821-41ff-ac0b-eaf79e3d25b1:output",
+      "name": "机架吊装就位完成",
+      "source_activity_id": "activity:6d85c402-1821-41ff-ac0b-eaf79e3d25b1",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:931ed71c-6b11-43c9-b3a7-1520714cdd35:output",
+      "name": "传动单元吊装就位完成",
+      "source_activity_id": "activity:931ed71c-6b11-43c9-b3a7-1520714cdd35",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:43cc8410-419a-4b83-bc3c-9e70b23f4250:output",
+      "name": "管路与阀组预装完成",
+      "source_activity_id": "activity:43cc8410-419a-4b83-bc3c-9e70b23f4250",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:243dc439-835a-40c4-86d8-8ec398fc3136:output",
+      "name": "电控柜安装接线完成",
+      "source_activity_id": "activity:243dc439-835a-40c4-86d8-8ec398fc3136",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:c2f9208d-3d5b-49f3-bae4-389fba0fc51a:output",
+      "name": "传动机构紧固找正完成",
+      "source_activity_id": "activity:c2f9208d-3d5b-49f3-bae4-389fba0fc51a",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:124f5b25-7c27-4dc3-8328-e48dbcd61782:output",
+      "name": "管路安装与密封检查完成",
+      "source_activity_id": "activity:124f5b25-7c27-4dc3-8328-e48dbcd61782",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:3ff2f067-f5b8-415d-8e09-534093ce35bd:output",
+      "name": "机械装配验收完成",
+      "source_activity_id": "activity:3ff2f067-f5b8-415d-8e09-534093ce35bd",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:4a720893-3f75-484a-9991-5f209ef02d97:output",
+      "name": "传感器安装与标定完成",
+      "source_activity_id": "activity:4a720893-3f75-484a-9991-5f209ef02d97",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:7f6cdf30-8029-4faa-8f5a-657990f0e9f2:output",
+      "name": "控制程序下载与参数配置完成",
+      "source_activity_id": "activity:7f6cdf30-8029-4faa-8f5a-657990f0e9f2",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:eadce61f-2695-4fb7-8636-33c91b44a99c:output",
+      "name": "电源与安全回路测试完成",
+      "source_activity_id": "activity:eadce61f-2695-4fb7-8636-33c91b44a99c",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:52663a8f-bdfb-4053-b4cd-3701ab503bf7:output",
+      "name": "执行机构单机调试完成",
+      "source_activity_id": "activity:52663a8f-bdfb-4053-b4cd-3701ab503bf7",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:e0ae292c-3323-46c4-bd22-fc3fc902956a:output",
+      "name": "液压与气动功能调试完成",
+      "source_activity_id": "activity:e0ae292c-3323-46c4-bd22-fc3fc902956a",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:0b72c3e4-806b-4a1c-b7cb-5b60d8b21634:output",
+      "name": "控制逻辑与联锁验证完成",
+      "source_activity_id": "activity:0b72c3e4-806b-4a1c-b7cb-5b60d8b21634",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:4e8f6edd-0b70-4797-8291-19e543b59edf:output",
+      "name": "机械电气接口联调完成",
+      "source_activity_id": "activity:4e8f6edd-0b70-4797-8291-19e543b59edf",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:ac2a3e94-1dbf-4d01-9661-0e5edc90a527:output",
+      "name": "负载运行与节拍调测完成",
+      "source_activity_id": "activity:ac2a3e94-1dbf-4d01-9661-0e5edc90a527",
+      "state_kind": "activity_output",
+      "managed": true
+    },
+    {
+      "id": "state:0f0dfc7a-5ed7-49df-99d4-373dc62a01b1:output",
+      "name": "功能联调完成",
+      "source_activity_id": "activity:0f0dfc7a-5ed7-49df-99d4-373dc62a01b1",
+      "state_kind": "activity_output",
+      "managed": true
+    }
+  ],
+  "initial_state_ids": [
+    "state:04559747-89a2-410a-999e-162bc266357f"
+  ],
+  "goal_state_ids": [
+    "state:0f0dfc7a-5ed7-49df-99d4-373dc62a01b1:output"
+  ],
+  "forbidden_state_ids": [],
+  "target_activity_ids": [],
+  "target_activity_package_ids": [],
+  "activity_package_scope_ids": [],
+  "activities": [
+    {
+      "id": "activity:fd2fbf3f-9257-4934-9ca1-aff1bdcbae61",
+      "display_code": "ACT-0001",
+      "name": "集成验收",
+      "duration": 30,
+      "preconditions": [
+        {
+          "state_id": "state:04559747-89a2-410a-999e-162bc266357f",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:fd2fbf3f-9257-4934-9ca1-aff1bdcbae61:output",
+      "output_state_name": "集成验收完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:3cb6474f-b6fe-4ce1-81d6-8a05ba7de21a": 1,
+        "resource:76b413cc-a2e4-4fc5-80a7-2bdc6159cdbc": 1,
+        "resource:7103259b-c705-49f2-a64c-acc70033fb48": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "机械集成",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:f45741a3-6ea4-4be2-99a6-36ff04b8e521",
+      "display_code": "ACT-0002",
+      "name": "基座与机架预装",
+      "duration": 45,
+      "preconditions": [
+        {
+          "state_id": "state:fd2fbf3f-9257-4934-9ca1-aff1bdcbae61:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:f45741a3-6ea4-4be2-99a6-36ff04b8e521:output",
+      "output_state_name": "基座与机架预装完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:3cb6474f-b6fe-4ce1-81d6-8a05ba7de21a": 2,
+        "resource:7103259b-c705-49f2-a64c-acc70033fb48": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "机械集成",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:c6893886-dea1-4abb-b781-152e0398a883",
+      "display_code": "ACT-0003",
+      "name": "驱动传动单元预装",
+      "duration": 40,
+      "preconditions": [
+        {
+          "state_id": "state:fd2fbf3f-9257-4934-9ca1-aff1bdcbae61:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:c6893886-dea1-4abb-b781-152e0398a883:output",
+      "output_state_name": "驱动传动单元预装完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:3cb6474f-b6fe-4ce1-81d6-8a05ba7de21a": 3,
+        "resource:7103259b-c705-49f2-a64c-acc70033fb48": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "机械集成",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:4fbfadf8-068a-42e8-a0b2-cd943eb77f94",
+      "display_code": "ACT-0004",
+      "name": "电控柜与线束预装",
+      "duration": 35,
+      "preconditions": [
+        {
+          "state_id": "state:fd2fbf3f-9257-4934-9ca1-aff1bdcbae61:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:4fbfadf8-068a-42e8-a0b2-cd943eb77f94:output",
+      "output_state_name": "电控柜与线束预装完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:76b413cc-a2e4-4fc5-80a7-2bdc6159cdbc": 2,
+        "resource:7103259b-c705-49f2-a64c-acc70033fb48": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "机械集成",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:6d85c402-1821-41ff-ac0b-eaf79e3d25b1",
+      "display_code": "ACT-0005",
+      "name": "机架吊装就位",
+      "duration": 20,
+      "preconditions": [
+        {
+          "state_id": "state:f45741a3-6ea4-4be2-99a6-36ff04b8e521:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:fd2fbf3f-9257-4934-9ca1-aff1bdcbae61:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:6d85c402-1821-41ff-ac0b-eaf79e3d25b1:output",
+      "output_state_name": "机架吊装就位完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:3cb6474f-b6fe-4ce1-81d6-8a05ba7de21a": 2,
+        "resource:96dd3a51-a0c9-44d2-89dd-a9c51e4cb8a6": 1,
+        "resource:0d88e65d-6f67-4bea-a8f2-52c9f32ff391": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "机械集成",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [
+          "吊装作业"
+        ],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:931ed71c-6b11-43c9-b3a7-1520714cdd35",
+      "display_code": "ACT-0006",
+      "name": "传动单元吊装就位",
+      "duration": 25,
+      "preconditions": [
+        {
+          "state_id": "state:c6893886-dea1-4abb-b781-152e0398a883:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:fd2fbf3f-9257-4934-9ca1-aff1bdcbae61:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:931ed71c-6b11-43c9-b3a7-1520714cdd35:output",
+      "output_state_name": "传动单元吊装就位完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:3cb6474f-b6fe-4ce1-81d6-8a05ba7de21a": 2,
+        "resource:96dd3a51-a0c9-44d2-89dd-a9c51e4cb8a6": 1,
+        "resource:0d88e65d-6f67-4bea-a8f2-52c9f32ff391": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "机械集成",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [
+          "吊装作业"
+        ],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:43cc8410-419a-4b83-bc3c-9e70b23f4250",
+      "display_code": "ACT-0007",
+      "name": "管路与阀组预装",
+      "duration": 35,
+      "preconditions": [
+        {
+          "state_id": "state:fd2fbf3f-9257-4934-9ca1-aff1bdcbae61:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:43cc8410-419a-4b83-bc3c-9e70b23f4250:output",
+      "output_state_name": "管路与阀组预装完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:3cb6474f-b6fe-4ce1-81d6-8a05ba7de21a": 2,
+        "resource:7103259b-c705-49f2-a64c-acc70033fb48": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "机械集成",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:243dc439-835a-40c4-86d8-8ec398fc3136",
+      "display_code": "ACT-0008",
+      "name": "电控柜安装接线",
+      "duration": 45,
+      "preconditions": [
+        {
+          "state_id": "state:4fbfadf8-068a-42e8-a0b2-cd943eb77f94:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:6d85c402-1821-41ff-ac0b-eaf79e3d25b1:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:931ed71c-6b11-43c9-b3a7-1520714cdd35:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:243dc439-835a-40c4-86d8-8ec398fc3136:output",
+      "output_state_name": "电控柜安装接线完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:76b413cc-a2e4-4fc5-80a7-2bdc6159cdbc": 2,
+        "resource:0d88e65d-6f67-4bea-a8f2-52c9f32ff391": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "机械集成",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:c2f9208d-3d5b-49f3-bae4-389fba0fc51a",
+      "display_code": "ACT-0009",
+      "name": "传动机构紧固找正",
+      "duration": 40,
+      "preconditions": [
+        {
+          "state_id": "state:6d85c402-1821-41ff-ac0b-eaf79e3d25b1:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:931ed71c-6b11-43c9-b3a7-1520714cdd35:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:f45741a3-6ea4-4be2-99a6-36ff04b8e521:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:c6893886-dea1-4abb-b781-152e0398a883:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:c2f9208d-3d5b-49f3-bae4-389fba0fc51a:output",
+      "output_state_name": "传动机构紧固找正完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:3cb6474f-b6fe-4ce1-81d6-8a05ba7de21a": 3,
+        "resource:0d88e65d-6f67-4bea-a8f2-52c9f32ff391": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "机械集成",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:124f5b25-7c27-4dc3-8328-e48dbcd61782",
+      "display_code": "ACT-0010",
+      "name": "管路安装与密封检查",
+      "duration": 40,
+      "preconditions": [
+        {
+          "state_id": "state:43cc8410-419a-4b83-bc3c-9e70b23f4250:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:6d85c402-1821-41ff-ac0b-eaf79e3d25b1:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:931ed71c-6b11-43c9-b3a7-1520714cdd35:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:124f5b25-7c27-4dc3-8328-e48dbcd61782:output",
+      "output_state_name": "管路安装与密封检查完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:3cb6474f-b6fe-4ce1-81d6-8a05ba7de21a": 2,
+        "resource:0d88e65d-6f67-4bea-a8f2-52c9f32ff391": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "机械集成",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:3ff2f067-f5b8-415d-8e09-534093ce35bd",
+      "display_code": "ACT-0011",
+      "name": "机械装配验收",
+      "duration": 25,
+      "preconditions": [
+        {
+          "state_id": "state:243dc439-835a-40c4-86d8-8ec398fc3136:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:c2f9208d-3d5b-49f3-bae4-389fba0fc51a:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:124f5b25-7c27-4dc3-8328-e48dbcd61782:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:4fbfadf8-068a-42e8-a0b2-cd943eb77f94:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:3ff2f067-f5b8-415d-8e09-534093ce35bd:output",
+      "output_state_name": "机械装配验收完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:3cb6474f-b6fe-4ce1-81d6-8a05ba7de21a": 2,
+        "resource:0d88e65d-6f67-4bea-a8f2-52c9f32ff391": 2
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "机械集成",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:4a720893-3f75-484a-9991-5f209ef02d97",
+      "display_code": "ACT-0012",
+      "name": "传感器安装与标定",
+      "duration": 30,
+      "preconditions": [
+        {
+          "state_id": "state:3ff2f067-f5b8-415d-8e09-534093ce35bd:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:243dc439-835a-40c4-86d8-8ec398fc3136:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:c2f9208d-3d5b-49f3-bae4-389fba0fc51a:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:4a720893-3f75-484a-9991-5f209ef02d97:output",
+      "output_state_name": "传感器安装与标定完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:76b413cc-a2e4-4fc5-80a7-2bdc6159cdbc": 2,
+        "resource:0d88e65d-6f67-4bea-a8f2-52c9f32ff391": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "功能调测",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:7f6cdf30-8029-4faa-8f5a-657990f0e9f2",
+      "display_code": "ACT-0013",
+      "name": "控制程序下载与参数配置",
+      "duration": 25,
+      "preconditions": [
+        {
+          "state_id": "state:3ff2f067-f5b8-415d-8e09-534093ce35bd:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:4fbfadf8-068a-42e8-a0b2-cd943eb77f94:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:243dc439-835a-40c4-86d8-8ec398fc3136:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:7f6cdf30-8029-4faa-8f5a-657990f0e9f2:output",
+      "output_state_name": "控制程序下载与参数配置完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:76b413cc-a2e4-4fc5-80a7-2bdc6159cdbc": 1,
+        "resource:e230c8d1-52ef-4f54-9efa-3c8a8782279b": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "功能调测",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:eadce61f-2695-4fb7-8636-33c91b44a99c",
+      "display_code": "ACT-0014",
+      "name": "电源与安全回路测试",
+      "duration": 30,
+      "preconditions": [
+        {
+          "state_id": "state:3ff2f067-f5b8-415d-8e09-534093ce35bd:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:243dc439-835a-40c4-86d8-8ec398fc3136:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:c2f9208d-3d5b-49f3-bae4-389fba0fc51a:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:124f5b25-7c27-4dc3-8328-e48dbcd61782:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:eadce61f-2695-4fb7-8636-33c91b44a99c:output",
+      "output_state_name": "电源与安全回路测试完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:76b413cc-a2e4-4fc5-80a7-2bdc6159cdbc": 2,
+        "resource:0d88e65d-6f67-4bea-a8f2-52c9f32ff391": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "功能调测",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:52663a8f-bdfb-4053-b4cd-3701ab503bf7",
+      "display_code": "ACT-0015",
+      "name": "执行机构单机调试",
+      "duration": 35,
+      "preconditions": [
+        {
+          "state_id": "state:c2f9208d-3d5b-49f3-bae4-389fba0fc51a:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:4a720893-3f75-484a-9991-5f209ef02d97:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:eadce61f-2695-4fb7-8636-33c91b44a99c:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:7f6cdf30-8029-4faa-8f5a-657990f0e9f2:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:52663a8f-bdfb-4053-b4cd-3701ab503bf7:output",
+      "output_state_name": "执行机构单机调试完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:3cb6474f-b6fe-4ce1-81d6-8a05ba7de21a": 1,
+        "resource:76b413cc-a2e4-4fc5-80a7-2bdc6159cdbc": 2,
+        "resource:e230c8d1-52ef-4f54-9efa-3c8a8782279b": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "功能调测",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:e0ae292c-3323-46c4-bd22-fc3fc902956a",
+      "display_code": "ACT-0016",
+      "name": "液压与气动功能调试",
+      "duration": 35,
+      "preconditions": [
+        {
+          "state_id": "state:124f5b25-7c27-4dc3-8328-e48dbcd61782:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:4a720893-3f75-484a-9991-5f209ef02d97:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:eadce61f-2695-4fb7-8636-33c91b44a99c:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:7f6cdf30-8029-4faa-8f5a-657990f0e9f2:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:e0ae292c-3323-46c4-bd22-fc3fc902956a:output",
+      "output_state_name": "液压与气动功能调试完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:3cb6474f-b6fe-4ce1-81d6-8a05ba7de21a": 2,
+        "resource:76b413cc-a2e4-4fc5-80a7-2bdc6159cdbc": 1,
+        "resource:e230c8d1-52ef-4f54-9efa-3c8a8782279b": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "功能调测",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:0b72c3e4-806b-4a1c-b7cb-5b60d8b21634",
+      "display_code": "ACT-0017",
+      "name": "控制逻辑与联锁验证",
+      "duration": 30,
+      "preconditions": [
+        {
+          "state_id": "state:7f6cdf30-8029-4faa-8f5a-657990f0e9f2:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:eadce61f-2695-4fb7-8636-33c91b44a99c:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:4a720893-3f75-484a-9991-5f209ef02d97:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:243dc439-835a-40c4-86d8-8ec398fc3136:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:0b72c3e4-806b-4a1c-b7cb-5b60d8b21634:output",
+      "output_state_name": "控制逻辑与联锁验证完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:76b413cc-a2e4-4fc5-80a7-2bdc6159cdbc": 2,
+        "resource:e230c8d1-52ef-4f54-9efa-3c8a8782279b": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "功能调测",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:4e8f6edd-0b70-4797-8291-19e543b59edf",
+      "display_code": "ACT-0018",
+      "name": "机械电气接口联调",
+      "duration": 40,
+      "preconditions": [
+        {
+          "state_id": "state:52663a8f-bdfb-4053-b4cd-3701ab503bf7:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:e0ae292c-3323-46c4-bd22-fc3fc902956a:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:0b72c3e4-806b-4a1c-b7cb-5b60d8b21634:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:3ff2f067-f5b8-415d-8e09-534093ce35bd:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:eadce61f-2695-4fb7-8636-33c91b44a99c:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:4e8f6edd-0b70-4797-8291-19e543b59edf:output",
+      "output_state_name": "机械电气接口联调完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:3cb6474f-b6fe-4ce1-81d6-8a05ba7de21a": 2,
+        "resource:76b413cc-a2e4-4fc5-80a7-2bdc6159cdbc": 2,
+        "resource:0d88e65d-6f67-4bea-a8f2-52c9f32ff391": 1,
+        "resource:e230c8d1-52ef-4f54-9efa-3c8a8782279b": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "功能调测",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:ac2a3e94-1dbf-4d01-9661-0e5edc90a527",
+      "display_code": "ACT-0019",
+      "name": "负载运行与节拍调测",
+      "duration": 45,
+      "preconditions": [
+        {
+          "state_id": "state:4e8f6edd-0b70-4797-8291-19e543b59edf:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:3ff2f067-f5b8-415d-8e09-534093ce35bd:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:eadce61f-2695-4fb7-8636-33c91b44a99c:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:52663a8f-bdfb-4053-b4cd-3701ab503bf7:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:e0ae292c-3323-46c4-bd22-fc3fc902956a:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:ac2a3e94-1dbf-4d01-9661-0e5edc90a527:output",
+      "output_state_name": "负载运行与节拍调测完成",
+      "output_name_customized": false,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:3cb6474f-b6fe-4ce1-81d6-8a05ba7de21a": 2,
+        "resource:76b413cc-a2e4-4fc5-80a7-2bdc6159cdbc": 1,
+        "resource:e230c8d1-52ef-4f54-9efa-3c8a8782279b": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "功能调测",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [],
+        "precision_fragile": false
+      }
+    },
+    {
+      "id": "activity:0f0dfc7a-5ed7-49df-99d4-373dc62a01b1",
+      "display_code": "ACT-0020",
+      "name": "整机功能联调与验收",
+      "duration": 30,
+      "preconditions": [
+        {
+          "state_id": "state:ac2a3e94-1dbf-4d01-9661-0e5edc90a527:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:0b72c3e4-806b-4a1c-b7cb-5b60d8b21634:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:e0ae292c-3323-46c4-bd22-fc3fc902956a:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:4e8f6edd-0b70-4797-8291-19e543b59edf:output",
+          "relation_role": "required"
+        },
+        {
+          "state_id": "state:52663a8f-bdfb-4053-b4cd-3701ab503bf7:output",
+          "relation_role": "required"
+        }
+      ],
+      "output_state_id": "state:0f0dfc7a-5ed7-49df-99d4-373dc62a01b1:output",
+      "output_state_name": "功能联调完成",
+      "output_name_customized": true,
+      "additional_output_state_ids": [],
+      "delete_effect_state_ids": [],
+      "resource_reqs": {
+        "resource:3cb6474f-b6fe-4ce1-81d6-8a05ba7de21a": 1,
+        "resource:76b413cc-a2e4-4fc5-80a7-2bdc6159cdbc": 2,
+        "resource:e230c8d1-52ef-4f54-9efa-3c8a8782279b": 1
+      },
+      "event_reqs": [],
+      "max_instances": 1,
+      "is_milestone": true,
+      "is_active": true,
+      "metadata": {
+        "activity_type": "功能调测",
+        "description": "20活动教学实例；所有前置须同时满足，平均每活动3项。唯一初始事实为集成验收待开展，后续依靠活动完成状态推进。资源完成后释放。",
+        "risk_jobs": [],
+        "precision_fragile": false
+      }
+    }
+  ],
+  "activity_packages": [
+    {
+      "id": "activity-package:691ecdf2-584b-47e7-b4fb-b699733ad14e",
+      "display_code": "AP-0001",
+      "name": "机械组装—功能调测",
+      "parent_id": null,
+      "level": 1,
+      "sort_order": 0,
+      "is_active": true,
+      "mirrored_state_package_id": "state-package:691ecdf2-584b-47e7-b4fb-b699733ad14e",
+      "layout": {}
+    },
+    {
+      "id": "activity-package:b41bba30-f1e8-4592-b89b-c4d51b243d5a",
+      "display_code": "AP-0002",
+      "name": "01 集成验收",
+      "parent_id": "activity-package:691ecdf2-584b-47e7-b4fb-b699733ad14e",
+      "level": 2,
+      "sort_order": 0,
+      "is_active": true,
+      "mirrored_state_package_id": "state-package:b41bba30-f1e8-4592-b89b-c4d51b243d5a",
+      "layout": {}
+    },
+    {
+      "id": "activity-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "display_code": "AP-0003",
+      "name": "02 机械组装",
+      "parent_id": "activity-package:691ecdf2-584b-47e7-b4fb-b699733ad14e",
+      "level": 2,
+      "sort_order": 1,
+      "is_active": true,
+      "mirrored_state_package_id": "state-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "layout": {}
+    },
+    {
+      "id": "activity-package:e9f4be2a-bba6-4224-93b6-eba0ba062071",
+      "display_code": "AP-0004",
+      "name": "03 功能调测",
+      "parent_id": "activity-package:691ecdf2-584b-47e7-b4fb-b699733ad14e",
+      "level": 2,
+      "sort_order": 2,
+      "is_active": true,
+      "mirrored_state_package_id": "state-package:e9f4be2a-bba6-4224-93b6-eba0ba062071",
+      "layout": {}
+    },
+    {
+      "id": "activity-package:982792cf-ba4b-4446-b095-df005c12e71e",
+      "display_code": "AP-0005",
+      "name": "04 功能联调",
+      "parent_id": "activity-package:691ecdf2-584b-47e7-b4fb-b699733ad14e",
+      "level": 2,
+      "sort_order": 3,
+      "is_active": true,
+      "mirrored_state_package_id": "state-package:982792cf-ba4b-4446-b095-df005c12e71e",
+      "layout": {}
+    }
+  ],
+  "activity_package_memberships": [
+    {
+      "id": "activity-package-member:f2b70a95-932a-4426-8caa-b79a3695cb69",
+      "package_id": "activity-package:b41bba30-f1e8-4592-b89b-c4d51b243d5a",
+      "activity_id": "activity:fd2fbf3f-9257-4934-9ca1-aff1bdcbae61",
+      "sort_order": 1,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:a24cb2a3-c96b-494c-afd1-dd8435722ce6",
+      "package_id": "activity-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "activity_id": "activity:f45741a3-6ea4-4be2-99a6-36ff04b8e521",
+      "sort_order": 2,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:2426e107-ed2e-4907-bb91-68bc7740ca86",
+      "package_id": "activity-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "activity_id": "activity:c6893886-dea1-4abb-b781-152e0398a883",
+      "sort_order": 3,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:b76c03c3-96e0-45c7-ae4d-b08a4cf45f5c",
+      "package_id": "activity-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "activity_id": "activity:4fbfadf8-068a-42e8-a0b2-cd943eb77f94",
+      "sort_order": 4,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:753300a7-4e9f-4412-96ba-ccf60dd6c8f6",
+      "package_id": "activity-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "activity_id": "activity:6d85c402-1821-41ff-ac0b-eaf79e3d25b1",
+      "sort_order": 5,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:c3d97bfa-1f8c-4025-83db-4c5c587d9aac",
+      "package_id": "activity-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "activity_id": "activity:931ed71c-6b11-43c9-b3a7-1520714cdd35",
+      "sort_order": 6,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:4064774e-d622-4bfb-b4fc-cf14d9b30fea",
+      "package_id": "activity-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "activity_id": "activity:43cc8410-419a-4b83-bc3c-9e70b23f4250",
+      "sort_order": 7,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:9c79c747-6a6b-436e-95cf-948833dc1012",
+      "package_id": "activity-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "activity_id": "activity:243dc439-835a-40c4-86d8-8ec398fc3136",
+      "sort_order": 8,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:9b0a06d8-b35e-4254-9d37-7ab4345c417b",
+      "package_id": "activity-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "activity_id": "activity:c2f9208d-3d5b-49f3-bae4-389fba0fc51a",
+      "sort_order": 9,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:e93b5967-28f3-4d10-be35-2ddbeaeb3e8c",
+      "package_id": "activity-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "activity_id": "activity:124f5b25-7c27-4dc3-8328-e48dbcd61782",
+      "sort_order": 10,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:d05d9632-7f81-40db-b513-e1c18de1bf3d",
+      "package_id": "activity-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "activity_id": "activity:3ff2f067-f5b8-415d-8e09-534093ce35bd",
+      "sort_order": 11,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:b70c9377-a614-42c8-b4e2-91213f695dcd",
+      "package_id": "activity-package:e9f4be2a-bba6-4224-93b6-eba0ba062071",
+      "activity_id": "activity:4a720893-3f75-484a-9991-5f209ef02d97",
+      "sort_order": 12,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:8d1a80ee-9571-4cef-a3f6-25d62f7c453c",
+      "package_id": "activity-package:e9f4be2a-bba6-4224-93b6-eba0ba062071",
+      "activity_id": "activity:7f6cdf30-8029-4faa-8f5a-657990f0e9f2",
+      "sort_order": 13,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:c23f2f7f-4d50-4520-903a-4a8452fc0c50",
+      "package_id": "activity-package:e9f4be2a-bba6-4224-93b6-eba0ba062071",
+      "activity_id": "activity:eadce61f-2695-4fb7-8636-33c91b44a99c",
+      "sort_order": 14,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:ad8c11ed-5b76-4b5c-83bc-b1d2f5f6aa75",
+      "package_id": "activity-package:e9f4be2a-bba6-4224-93b6-eba0ba062071",
+      "activity_id": "activity:52663a8f-bdfb-4053-b4cd-3701ab503bf7",
+      "sort_order": 15,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:48da9971-2827-4c9d-9e3f-24daac76c68e",
+      "package_id": "activity-package:e9f4be2a-bba6-4224-93b6-eba0ba062071",
+      "activity_id": "activity:e0ae292c-3323-46c4-bd22-fc3fc902956a",
+      "sort_order": 16,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:ec8b1767-29b7-4f33-8ac9-0de2c180ca66",
+      "package_id": "activity-package:e9f4be2a-bba6-4224-93b6-eba0ba062071",
+      "activity_id": "activity:0b72c3e4-806b-4a1c-b7cb-5b60d8b21634",
+      "sort_order": 17,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:47cf7768-e238-4455-ad55-52d483de3507",
+      "package_id": "activity-package:982792cf-ba4b-4446-b095-df005c12e71e",
+      "activity_id": "activity:4e8f6edd-0b70-4797-8291-19e543b59edf",
+      "sort_order": 18,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:4ee5b645-7dfe-4883-ba4a-10c59a14b0f7",
+      "package_id": "activity-package:982792cf-ba4b-4446-b095-df005c12e71e",
+      "activity_id": "activity:ac2a3e94-1dbf-4d01-9661-0e5edc90a527",
+      "sort_order": 19,
+      "layout": {}
+    },
+    {
+      "id": "activity-package-member:8aaf7e23-a795-4c12-b2d8-78588049f4ba",
+      "package_id": "activity-package:982792cf-ba4b-4446-b095-df005c12e71e",
+      "activity_id": "activity:0f0dfc7a-5ed7-49df-99d4-373dc62a01b1",
+      "sort_order": 20,
+      "layout": {}
+    }
+  ],
+  "state_packages": [
+    {
+      "id": "state-package:691ecdf2-584b-47e7-b4fb-b699733ad14e",
+      "name": "机械组装—功能调测",
+      "level": 1,
+      "parent_id": null,
+      "source_activity_package_id": "activity-package:691ecdf2-584b-47e7-b4fb-b699733ad14e",
+      "managed_by": "activity_package_mirror",
+      "is_active": true
+    },
+    {
+      "id": "state-package:b41bba30-f1e8-4592-b89b-c4d51b243d5a",
+      "name": "01 集成验收",
+      "level": 2,
+      "parent_id": "state-package:691ecdf2-584b-47e7-b4fb-b699733ad14e",
+      "source_activity_package_id": "activity-package:b41bba30-f1e8-4592-b89b-c4d51b243d5a",
+      "managed_by": "activity_package_mirror",
+      "is_active": true
+    },
+    {
+      "id": "state-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "name": "02 机械组装",
+      "level": 2,
+      "parent_id": "state-package:691ecdf2-584b-47e7-b4fb-b699733ad14e",
+      "source_activity_package_id": "activity-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "managed_by": "activity_package_mirror",
+      "is_active": true
+    },
+    {
+      "id": "state-package:e9f4be2a-bba6-4224-93b6-eba0ba062071",
+      "name": "03 功能调测",
+      "level": 2,
+      "parent_id": "state-package:691ecdf2-584b-47e7-b4fb-b699733ad14e",
+      "source_activity_package_id": "activity-package:e9f4be2a-bba6-4224-93b6-eba0ba062071",
+      "managed_by": "activity_package_mirror",
+      "is_active": true
+    },
+    {
+      "id": "state-package:982792cf-ba4b-4446-b095-df005c12e71e",
+      "name": "04 功能联调",
+      "level": 2,
+      "parent_id": "state-package:691ecdf2-584b-47e7-b4fb-b699733ad14e",
+      "source_activity_package_id": "activity-package:982792cf-ba4b-4446-b095-df005c12e71e",
+      "managed_by": "activity_package_mirror",
+      "is_active": true
+    }
+  ],
+  "state_package_memberships": [
+    {
+      "id": "state-package-member:f2b70a95-932a-4426-8caa-b79a3695cb69",
+      "state_package_id": "state-package:b41bba30-f1e8-4592-b89b-c4d51b243d5a",
+      "state_id": "state:fd2fbf3f-9257-4934-9ca1-aff1bdcbae61:output",
+      "source_membership_id": "activity-package-member:f2b70a95-932a-4426-8caa-b79a3695cb69",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:a24cb2a3-c96b-494c-afd1-dd8435722ce6",
+      "state_package_id": "state-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "state_id": "state:f45741a3-6ea4-4be2-99a6-36ff04b8e521:output",
+      "source_membership_id": "activity-package-member:a24cb2a3-c96b-494c-afd1-dd8435722ce6",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:2426e107-ed2e-4907-bb91-68bc7740ca86",
+      "state_package_id": "state-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "state_id": "state:c6893886-dea1-4abb-b781-152e0398a883:output",
+      "source_membership_id": "activity-package-member:2426e107-ed2e-4907-bb91-68bc7740ca86",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:b76c03c3-96e0-45c7-ae4d-b08a4cf45f5c",
+      "state_package_id": "state-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "state_id": "state:4fbfadf8-068a-42e8-a0b2-cd943eb77f94:output",
+      "source_membership_id": "activity-package-member:b76c03c3-96e0-45c7-ae4d-b08a4cf45f5c",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:753300a7-4e9f-4412-96ba-ccf60dd6c8f6",
+      "state_package_id": "state-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "state_id": "state:6d85c402-1821-41ff-ac0b-eaf79e3d25b1:output",
+      "source_membership_id": "activity-package-member:753300a7-4e9f-4412-96ba-ccf60dd6c8f6",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:c3d97bfa-1f8c-4025-83db-4c5c587d9aac",
+      "state_package_id": "state-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "state_id": "state:931ed71c-6b11-43c9-b3a7-1520714cdd35:output",
+      "source_membership_id": "activity-package-member:c3d97bfa-1f8c-4025-83db-4c5c587d9aac",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:4064774e-d622-4bfb-b4fc-cf14d9b30fea",
+      "state_package_id": "state-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "state_id": "state:43cc8410-419a-4b83-bc3c-9e70b23f4250:output",
+      "source_membership_id": "activity-package-member:4064774e-d622-4bfb-b4fc-cf14d9b30fea",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:9c79c747-6a6b-436e-95cf-948833dc1012",
+      "state_package_id": "state-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "state_id": "state:243dc439-835a-40c4-86d8-8ec398fc3136:output",
+      "source_membership_id": "activity-package-member:9c79c747-6a6b-436e-95cf-948833dc1012",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:9b0a06d8-b35e-4254-9d37-7ab4345c417b",
+      "state_package_id": "state-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "state_id": "state:c2f9208d-3d5b-49f3-bae4-389fba0fc51a:output",
+      "source_membership_id": "activity-package-member:9b0a06d8-b35e-4254-9d37-7ab4345c417b",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:e93b5967-28f3-4d10-be35-2ddbeaeb3e8c",
+      "state_package_id": "state-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "state_id": "state:124f5b25-7c27-4dc3-8328-e48dbcd61782:output",
+      "source_membership_id": "activity-package-member:e93b5967-28f3-4d10-be35-2ddbeaeb3e8c",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:d05d9632-7f81-40db-b513-e1c18de1bf3d",
+      "state_package_id": "state-package:c86506d6-0bea-41c9-bf65-0a800e22b9ab",
+      "state_id": "state:3ff2f067-f5b8-415d-8e09-534093ce35bd:output",
+      "source_membership_id": "activity-package-member:d05d9632-7f81-40db-b513-e1c18de1bf3d",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:b70c9377-a614-42c8-b4e2-91213f695dcd",
+      "state_package_id": "state-package:e9f4be2a-bba6-4224-93b6-eba0ba062071",
+      "state_id": "state:4a720893-3f75-484a-9991-5f209ef02d97:output",
+      "source_membership_id": "activity-package-member:b70c9377-a614-42c8-b4e2-91213f695dcd",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:8d1a80ee-9571-4cef-a3f6-25d62f7c453c",
+      "state_package_id": "state-package:e9f4be2a-bba6-4224-93b6-eba0ba062071",
+      "state_id": "state:7f6cdf30-8029-4faa-8f5a-657990f0e9f2:output",
+      "source_membership_id": "activity-package-member:8d1a80ee-9571-4cef-a3f6-25d62f7c453c",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:c23f2f7f-4d50-4520-903a-4a8452fc0c50",
+      "state_package_id": "state-package:e9f4be2a-bba6-4224-93b6-eba0ba062071",
+      "state_id": "state:eadce61f-2695-4fb7-8636-33c91b44a99c:output",
+      "source_membership_id": "activity-package-member:c23f2f7f-4d50-4520-903a-4a8452fc0c50",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:ad8c11ed-5b76-4b5c-83bc-b1d2f5f6aa75",
+      "state_package_id": "state-package:e9f4be2a-bba6-4224-93b6-eba0ba062071",
+      "state_id": "state:52663a8f-bdfb-4053-b4cd-3701ab503bf7:output",
+      "source_membership_id": "activity-package-member:ad8c11ed-5b76-4b5c-83bc-b1d2f5f6aa75",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:48da9971-2827-4c9d-9e3f-24daac76c68e",
+      "state_package_id": "state-package:e9f4be2a-bba6-4224-93b6-eba0ba062071",
+      "state_id": "state:e0ae292c-3323-46c4-bd22-fc3fc902956a:output",
+      "source_membership_id": "activity-package-member:48da9971-2827-4c9d-9e3f-24daac76c68e",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:ec8b1767-29b7-4f33-8ac9-0de2c180ca66",
+      "state_package_id": "state-package:e9f4be2a-bba6-4224-93b6-eba0ba062071",
+      "state_id": "state:0b72c3e4-806b-4a1c-b7cb-5b60d8b21634:output",
+      "source_membership_id": "activity-package-member:ec8b1767-29b7-4f33-8ac9-0de2c180ca66",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:47cf7768-e238-4455-ad55-52d483de3507",
+      "state_package_id": "state-package:982792cf-ba4b-4446-b095-df005c12e71e",
+      "state_id": "state:4e8f6edd-0b70-4797-8291-19e543b59edf:output",
+      "source_membership_id": "activity-package-member:47cf7768-e238-4455-ad55-52d483de3507",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:4ee5b645-7dfe-4883-ba4a-10c59a14b0f7",
+      "state_package_id": "state-package:982792cf-ba4b-4446-b095-df005c12e71e",
+      "state_id": "state:ac2a3e94-1dbf-4d01-9661-0e5edc90a527:output",
+      "source_membership_id": "activity-package-member:4ee5b645-7dfe-4883-ba4a-10c59a14b0f7",
+      "managed_by": "activity_package_mirror"
+    },
+    {
+      "id": "state-package-member:8aaf7e23-a795-4c12-b2d8-78588049f4ba",
+      "state_package_id": "state-package:982792cf-ba4b-4446-b095-df005c12e71e",
+      "state_id": "state:0f0dfc7a-5ed7-49df-99d4-373dc62a01b1:output",
+      "source_membership_id": "activity-package-member:8aaf7e23-a795-4c12-b2d8-78588049f4ba",
+      "managed_by": "activity_package_mirror"
+    }
+  ],
+  "resources": [
+    {
+      "id": "resource:3cb6474f-b6fe-4ce1-81d6-8a05ba7de21a",
+      "name": "机械装配组",
+      "kind": "crew",
+      "capacity": 4,
+      "is_active": true
+    },
+    {
+      "id": "resource:76b413cc-a2e4-4fc5-80a7-2bdc6159cdbc",
+      "name": "电气调测组",
+      "kind": "crew",
+      "capacity": 3,
+      "is_active": true
+    },
+    {
+      "id": "resource:96dd3a51-a0c9-44d2-89dd-a9c51e4cb8a6",
+      "name": "共享行吊",
+      "kind": "crane",
+      "capacity": 1,
+      "is_active": true
+    },
+    {
+      "id": "resource:7103259b-c705-49f2-a64c-acc70033fb48",
+      "name": "部件预装区",
+      "kind": "workspace",
+      "capacity": 2,
+      "is_active": true
+    },
+    {
+      "id": "resource:0d88e65d-6f67-4bea-a8f2-52c9f32ff391",
+      "name": "机械总装区",
+      "kind": "workspace",
+      "capacity": 2,
+      "is_active": true
+    },
+    {
+      "id": "resource:e230c8d1-52ef-4f54-9efa-3c8a8782279b",
+      "name": "功能调测工位",
+      "kind": "workspace",
+      "capacity": 1,
+      "is_active": true
+    }
+  ],
+  "external_events": [],
+  "provenance": {
+    "source": "solver_demo_project",
+    "schema": "planner-shared-scenario/v2",
+    "fixture": "assembly_commissioning_20_v2",
+    "description": "唯一初始状态为集成验收待开展；60条普通前置依赖，平均每活动3条。人力、行吊和空间均为可重复占用容量资源。"
+  },
+  "exclusive_rules": {
+    "crane": false,
+    "commissioning": false
+  },
+  "night_lift_rule": {
+    "enabled": false,
+    "night_start": "20:00",
+    "night_end": "08:00"
+  }
+}

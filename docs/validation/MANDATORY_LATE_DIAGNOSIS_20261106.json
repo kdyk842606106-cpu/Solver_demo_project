@@ -1,0 +1,882 @@
+{
+  "ortools_version": "9.15.6755",
+  "seed": 11,
+  "threads": 1,
+  "budget_seconds": 60,
+  "input": "output/mandatory-normal-late-20261106/late-input.json",
+  "business_constraints_changed": false,
+  "production_solver_settings_changed": false,
+  "database_writes": false,
+  "runs": {
+    "baseline": {
+      "parameters": {},
+      "status": "OPTIMAL",
+      "first_solution_seconds": 5.541876200000843,
+      "elapsed_seconds": 5.993401,
+      "build_seconds": 0.020341100000223378,
+      "mandatory_identification_seconds": null,
+      "replay_seconds": 0.08388420000119368,
+      "after_first_solution_seconds": 0.4515247999991576,
+      "first_search": {
+        "status": "FEASIBLE",
+        "objective": 44754,
+        "best_bound": 1020,
+        "integers": 127,
+        "booleans": 1091,
+        "conflicts": 572,
+        "branches": 33293,
+        "propagations": 214294,
+        "integer_propagations": 6359231,
+        "restarts": 6,
+        "lp_iterations": 646,
+        "walltime": 5.51856,
+        "usertime": 5.51856,
+        "deterministic_time": 1.86771,
+        "gap_integral": 0,
+        "solution_fingerprint": "0xbff6c41635329335"
+      },
+      "presolve_to_search_seconds_rounded": 0.08,
+      "lp_optimal_status_counter": 86320,
+      "total_branches": 39882,
+      "total_conflicts": 801,
+      "makespan": 1570,
+      "executions": 14,
+      "validator": "VALID",
+      "initial_model_identical_to_same_presence_mode": true
+    },
+    "mandatory": {
+      "parameters": {},
+      "status": "OPTIMAL",
+      "first_solution_seconds": 36.53115300000172,
+      "elapsed_seconds": 37.096211,
+      "build_seconds": 0.018787800001518917,
+      "mandatory_identification_seconds": 5.2600000344682485e-05,
+      "replay_seconds": 0.056553999998868676,
+      "after_first_solution_seconds": 0.5650579999982739,
+      "first_search": {
+        "status": "FEASIBLE",
+        "objective": 41631,
+        "best_bound": 1020,
+        "integers": 127,
+        "booleans": 2431,
+        "conflicts": 1304,
+        "branches": 45103,
+        "propagations": 1603414,
+        "integer_propagations": 20677690,
+        "restarts": 9,
+        "lp_iterations": 2711,
+        "walltime": 36.5095,
+        "usertime": 36.5095,
+        "deterministic_time": 8.25089,
+        "gap_integral": 0,
+        "solution_fingerprint": "0x9a5b10e29620e0c0"
+      },
+      "presolve_to_search_seconds_rounded": 0.07,
+      "lp_optimal_status_counter": 1765413,
+      "total_branches": 51011,
+      "total_conflicts": 1492,
+      "makespan": 1570,
+      "executions": 14,
+      "validator": "VALID",
+      "initial_model_identical_to_same_presence_mode": true
+    },
+    "baseline-no-lp": {
+      "parameters": {
+        "linearization_level": 0
+      },
+      "status": "OPTIMAL",
+      "first_solution_seconds": 4.500317399999403,
+      "elapsed_seconds": 5.084913,
+      "build_seconds": 0.0175362000009045,
+      "mandatory_identification_seconds": null,
+      "replay_seconds": 0.06201669999791193,
+      "after_first_solution_seconds": 0.584595600000597,
+      "first_search": {
+        "status": "FEASIBLE",
+        "objective": 44655,
+        "best_bound": 1022,
+        "integers": 127,
+        "booleans": 936,
+        "conflicts": 516,
+        "branches": 22903,
+        "propagations": 130445,
+        "integer_propagations": 4338778,
+        "restarts": 6,
+        "lp_iterations": 0,
+        "walltime": 4.48001,
+        "usertime": 4.48001,
+        "deterministic_time": 1.4814,
+        "gap_integral": 0,
+        "solution_fingerprint": "0x1c692f48d64c432a"
+      },
+      "presolve_to_search_seconds_rounded": 0.08,
+      "lp_optimal_status_counter": null,
+      "total_branches": 30699,
+      "total_conflicts": 780,
+      "makespan": 1570,
+      "executions": 14,
+      "validator": "VALID",
+      "initial_model_identical_to_same_presence_mode": true
+    },
+    "mandatory-no-lp": {
+      "parameters": {
+        "linearization_level": 0
+      },
+      "status": "OPTIMAL",
+      "first_solution_seconds": 20.77839270000004,
+      "elapsed_seconds": 21.430766,
+      "build_seconds": 0.0182329999988724,
+      "mandatory_identification_seconds": 4.9700000090524554e-05,
+      "replay_seconds": 0.06909619999714778,
+      "after_first_solution_seconds": 0.6523732999999581,
+      "first_search": {
+        "status": "FEASIBLE",
+        "objective": 43995,
+        "best_bound": 1020,
+        "integers": 127,
+        "booleans": 1963,
+        "conflicts": 1115,
+        "branches": 52996,
+        "propagations": 1737719,
+        "integer_propagations": 15164745,
+        "restarts": 11,
+        "lp_iterations": 0,
+        "walltime": 20.7575,
+        "usertime": 20.7575,
+        "deterministic_time": 5.4133,
+        "gap_integral": 0,
+        "solution_fingerprint": "0x5ce17d7c9c73383a"
+      },
+      "presolve_to_search_seconds_rounded": 0.07,
+      "lp_optimal_status_counter": null,
+      "total_branches": 61486,
+      "total_conflicts": 1334,
+      "makespan": 1570,
+      "executions": 14,
+      "validator": "VALID",
+      "initial_model_identical_to_same_presence_mode": true
+    },
+    "baseline-old-linear": {
+      "parameters": {
+        "new_linear_propagation": false
+      },
+      "status": "OPTIMAL",
+      "first_solution_seconds": 0.5408883999989484,
+      "elapsed_seconds": 1.300421,
+      "build_seconds": 0.01762589999998454,
+      "mandatory_identification_seconds": null,
+      "replay_seconds": 0.07808659999864176,
+      "after_first_solution_seconds": 0.7595326000010516,
+      "first_search": {
+        "status": "FEASIBLE",
+        "objective": 36200,
+        "best_bound": 1020,
+        "integers": 127,
+        "booleans": 663,
+        "conflicts": 352,
+        "branches": 14936,
+        "propagations": 49608,
+        "integer_propagations": 1393569,
+        "restarts": 5,
+        "lp_iterations": 399,
+        "walltime": 0.520704,
+        "usertime": 0.520705,
+        "deterministic_time": 0.195075,
+        "gap_integral": 0,
+        "solution_fingerprint": "0x4afc6578a737df4c"
+      },
+      "presolve_to_search_seconds_rounded": 0.08,
+      "lp_optimal_status_counter": 1521,
+      "total_branches": 25264,
+      "total_conflicts": 776,
+      "makespan": 1570,
+      "executions": 14,
+      "validator": "VALID",
+      "initial_model_identical_to_same_presence_mode": true
+    },
+    "mandatory-old-linear": {
+      "parameters": {
+        "new_linear_propagation": false
+      },
+      "status": "OPTIMAL",
+      "first_solution_seconds": 0.6584829000003083,
+      "elapsed_seconds": 1.308211,
+      "build_seconds": 0.01774699999987206,
+      "mandatory_identification_seconds": 5.0299999202252366e-05,
+      "replay_seconds": 0.07397829999899841,
+      "after_first_solution_seconds": 0.6497280999996917,
+      "first_search": {
+        "status": "FEASIBLE",
+        "objective": 1330,
+        "best_bound": 1020,
+        "integers": 127,
+        "booleans": 632,
+        "conflicts": 296,
+        "branches": 10022,
+        "propagations": 37911,
+        "integer_propagations": 1477384,
+        "restarts": 4,
+        "lp_iterations": 245,
+        "walltime": 0.63785,
+        "usertime": 0.637851,
+        "deterministic_time": 0.23531,
+        "gap_integral": 0,
+        "solution_fingerprint": "0x752da6e22939b87"
+      },
+      "presolve_to_search_seconds_rounded": 0.06,
+      "lp_optimal_status_counter": 13494,
+      "total_branches": 19429,
+      "total_conflicts": 629,
+      "makespan": 1570,
+      "executions": 14,
+      "validator": "VALID",
+      "initial_model_identical_to_same_presence_mode": true
+    },
+    "mandatory-old-linear-repeat": {
+      "parameters": {
+        "new_linear_propagation": false
+      },
+      "status": "OPTIMAL",
+      "first_solution_seconds": 0.6739589999997406,
+      "elapsed_seconds": 1.341327,
+      "build_seconds": 0.019252699999924516,
+      "mandatory_identification_seconds": 5.210000017541461e-05,
+      "replay_seconds": 0.08123650000015914,
+      "after_first_solution_seconds": 0.6673680000002593,
+      "first_search": {
+        "status": "FEASIBLE",
+        "objective": 1330,
+        "best_bound": 1020,
+        "integers": 127,
+        "booleans": 632,
+        "conflicts": 296,
+        "branches": 10022,
+        "propagations": 37911,
+        "integer_propagations": 1477384,
+        "restarts": 4,
+        "lp_iterations": 245,
+        "walltime": 0.651958,
+        "usertime": 0.651958,
+        "deterministic_time": 0.23531,
+        "gap_integral": 0,
+        "solution_fingerprint": "0x752da6e22939b87"
+      },
+      "presolve_to_search_seconds_rounded": 0.07,
+      "lp_optimal_status_counter": 13494,
+      "total_branches": 19429,
+      "total_conflicts": 629,
+      "makespan": 1570,
+      "executions": 14,
+      "validator": "VALID",
+      "initial_model_identical_to_same_presence_mode": true
+    },
+    "mandatory-loop-factor1": {
+      "parameters": {
+        "propagation_loop_detection_factor": 1
+      },
+      "status": "OPTIMAL",
+      "first_solution_seconds": 36.08540089999951,
+      "elapsed_seconds": 36.655091,
+      "build_seconds": 0.01835410000057891,
+      "mandatory_identification_seconds": 5.249999958323315e-05,
+      "replay_seconds": 0.052697600000101374,
+      "after_first_solution_seconds": 0.5696901000004857,
+      "first_search": {
+        "status": "FEASIBLE",
+        "objective": 41631,
+        "best_bound": 1020,
+        "integers": 127,
+        "booleans": 2431,
+        "conflicts": 1304,
+        "branches": 45103,
+        "propagations": 1603414,
+        "integer_propagations": 20677690,
+        "restarts": 9,
+        "lp_iterations": 2711,
+        "walltime": 36.0641,
+        "usertime": 36.0641,
+        "deterministic_time": 8.25089,
+        "gap_integral": 0,
+        "solution_fingerprint": "0x9a5b10e29620e0c0"
+      },
+      "presolve_to_search_seconds_rounded": 0.07,
+      "lp_optimal_status_counter": 1765413,
+      "total_branches": 51011,
+      "total_conflicts": 1492,
+      "makespan": 1570,
+      "executions": 14,
+      "validator": "VALID",
+      "initial_model_identical_to_same_presence_mode": true
+    }
+  },
+  "presolve": {
+    "all_11_mandatory_presences_already_fixed_by_baseline_presolve": [
+      {
+        "activity": "模块A功能调测",
+        "presence_variable": "use:15",
+        "baseline_presolve_domain": [
+          1,
+          1
+        ]
+      },
+      {
+        "activity": "模块B调测",
+        "presence_variable": "use:18",
+        "baseline_presolve_domain": [
+          1,
+          1
+        ]
+      },
+      {
+        "activity": "安全验收",
+        "presence_variable": "use:9",
+        "baseline_presolve_domain": [
+          1,
+          1
+        ]
+      },
+      {
+        "activity": "模块D安装",
+        "presence_variable": "use:6",
+        "baseline_presolve_domain": [
+          1,
+          1
+        ]
+      },
+      {
+        "activity": "上电",
+        "presence_variable": "use:12",
+        "baseline_presolve_domain": [
+          1,
+          1
+        ]
+      },
+      {
+        "activity": "扩展功能联调",
+        "presence_variable": "use:27",
+        "baseline_presolve_domain": [
+          1,
+          1
+        ]
+      },
+      {
+        "activity": "模块A安装",
+        "presence_variable": "use:0",
+        "baseline_presolve_domain": [
+          1,
+          1
+        ]
+      },
+      {
+        "activity": "集成检测完成",
+        "presence_variable": "use:1",
+        "baseline_presolve_domain": [
+          1,
+          1
+        ]
+      },
+      {
+        "activity": "模块B安装",
+        "presence_variable": "use:2",
+        "baseline_presolve_domain": [
+          1,
+          1
+        ]
+      },
+      {
+        "activity": "联调扩展件安装",
+        "presence_variable": "use:24",
+        "baseline_presolve_domain": [
+          1,
+          1
+        ]
+      },
+      {
+        "activity": "模块C安装",
+        "presence_variable": "use:5",
+        "baseline_presolve_domain": [
+          1,
+          1
+        ]
+      }
+    ],
+    "same_presolved_counts": {
+      "variables": 564,
+      "booleans": 437,
+      "intervals": 30,
+      "optional_intervals": 19,
+      "linear2": 806,
+      "cumulative": 3,
+      "no_overlap": 5
+    },
+    "domain_differences": {
+      "e:2": {
+        "baseline": [
+          40,
+          44920
+        ],
+        "mandatory": [
+          40,
+          44940
+        ]
+      },
+      "e:5": {
+        "baseline": [
+          100,
+          44860
+        ],
+        "mandatory": [
+          100,
+          44900
+        ]
+      },
+      "s:6": {
+        "baseline": [
+          1,
+          44860
+        ],
+        "mandatory": [
+          0,
+          44860
+        ]
+      },
+      "e:6": {
+        "baseline": [
+          41,
+          44900
+        ],
+        "mandatory": [
+          40,
+          44940
+        ]
+      },
+      "s:7": {
+        "baseline": [
+          0,
+          0,
+          41,
+          44900
+        ],
+        "mandatory": [
+          0,
+          0,
+          40,
+          44900
+        ]
+      },
+      "e:7": {
+        "baseline": [
+          0,
+          0,
+          81,
+          44940
+        ],
+        "mandatory": [
+          0,
+          0,
+          80,
+          44940
+        ]
+      },
+      "s:8": {
+        "baseline": [
+          0,
+          0,
+          81,
+          44900
+        ],
+        "mandatory": [
+          0,
+          0,
+          80,
+          44900
+        ]
+      },
+      "e:8": {
+        "baseline": [
+          0,
+          0,
+          121,
+          44940
+        ],
+        "mandatory": [
+          0,
+          0,
+          120,
+          44940
+        ]
+      },
+      "e:9": {
+        "baseline": [
+          140,
+          44900
+        ],
+        "mandatory": [
+          140,
+          44940
+        ]
+      },
+      "s:12": {
+        "baseline": [
+          1,
+          44880
+        ],
+        "mandatory": [
+          0,
+          44880
+        ]
+      },
+      "e:12": {
+        "baseline": [
+          31,
+          44910
+        ],
+        "mandatory": [
+          30,
+          44940
+        ]
+      },
+      "s:13": {
+        "baseline": [
+          0,
+          0,
+          31,
+          44910
+        ],
+        "mandatory": [
+          0,
+          0,
+          30,
+          44910
+        ]
+      },
+      "e:13": {
+        "baseline": [
+          0,
+          0,
+          61,
+          44940
+        ],
+        "mandatory": [
+          0,
+          0,
+          60,
+          44940
+        ]
+      },
+      "s:14": {
+        "baseline": [
+          0,
+          0,
+          61,
+          44910
+        ],
+        "mandatory": [
+          0,
+          0,
+          60,
+          44910
+        ]
+      },
+      "e:14": {
+        "baseline": [
+          0,
+          0,
+          91,
+          44940
+        ],
+        "mandatory": [
+          0,
+          0,
+          90,
+          44940
+        ]
+      },
+      "e:15": {
+        "baseline": [
+          110,
+          44910
+        ],
+        "mandatory": [
+          110,
+          44940
+        ]
+      },
+      "s:18": {
+        "baseline": [
+          1,
+          44840
+        ],
+        "mandatory": [
+          0,
+          44840
+        ]
+      },
+      "e:18": {
+        "baseline": [
+          51,
+          44890
+        ],
+        "mandatory": [
+          50,
+          44940
+        ]
+      },
+      "s:19": {
+        "baseline": [
+          0,
+          0,
+          51,
+          44890
+        ],
+        "mandatory": [
+          0,
+          0,
+          50,
+          44890
+        ]
+      },
+      "e:19": {
+        "baseline": [
+          0,
+          0,
+          101,
+          44940
+        ],
+        "mandatory": [
+          0,
+          0,
+          100,
+          44940
+        ]
+      },
+      "s:20": {
+        "baseline": [
+          0,
+          0,
+          101,
+          44890
+        ],
+        "mandatory": [
+          0,
+          0,
+          100,
+          44890
+        ]
+      },
+      "e:20": {
+        "baseline": [
+          0,
+          0,
+          151,
+          44940
+        ],
+        "mandatory": [
+          0,
+          0,
+          150,
+          44940
+        ]
+      },
+      "e:24": {
+        "baseline": [
+          990,
+          44910
+        ],
+        "mandatory": [
+          990,
+          44940
+        ]
+      },
+      "s:27": {
+        "baseline": [
+          1,
+          44910
+        ],
+        "mandatory": [
+          0,
+          44910
+        ]
+      },
+      "e:27": {
+        "baseline": [
+          31,
+          44940
+        ],
+        "mandatory": [
+          30,
+          44940
+        ]
+      },
+      "s:28": {
+        "baseline": [
+          0,
+          0,
+          31,
+          44910
+        ],
+        "mandatory": [
+          0,
+          0,
+          30,
+          44910
+        ]
+      },
+      "e:28": {
+        "baseline": [
+          0,
+          0,
+          61,
+          44940
+        ],
+        "mandatory": [
+          0,
+          0,
+          60,
+          44940
+        ]
+      },
+      "s:29": {
+        "baseline": [
+          0,
+          0,
+          61,
+          44910
+        ],
+        "mandatory": [
+          0,
+          0,
+          60,
+          44910
+        ]
+      },
+      "e:29": {
+        "baseline": [
+          0,
+          0,
+          91,
+          44940
+        ],
+        "mandatory": [
+          0,
+          0,
+          90,
+          44940
+        ]
+      },
+      "support:4": {
+        "baseline": [
+          0,
+          1
+        ],
+        "mandatory": [
+          1,
+          1
+        ]
+      },
+      "support:5": {
+        "baseline": [
+          0,
+          1
+        ],
+        "mandatory": [
+          1,
+          1
+        ]
+      },
+      "support:6": {
+        "baseline": [
+          0,
+          1
+        ],
+        "mandatory": [
+          1,
+          1
+        ]
+      },
+      "support:13": {
+        "baseline": [
+          0,
+          1
+        ],
+        "mandatory": [
+          1,
+          1
+        ]
+      },
+      "support:14": {
+        "baseline": [
+          0,
+          1
+        ],
+        "mandatory": [
+          1,
+          1
+        ]
+      },
+      "support:34": {
+        "baseline": [
+          0,
+          1
+        ],
+        "mandatory": [
+          1,
+          1
+        ]
+      },
+      "supported_at:38": {
+        "baseline": [
+          100,
+          44860
+        ],
+        "mandatory": [
+          100,
+          44900
+        ]
+      },
+      "support:38": {
+        "baseline": [
+          0,
+          1
+        ],
+        "mandatory": [
+          1,
+          1
+        ]
+      },
+      "support:90": {
+        "baseline": [
+          0,
+          1
+        ],
+        "mandatory": [
+          1,
+          1
+        ]
+      },
+      "support:151": {
+        "baseline": [
+          0,
+          1
+        ],
+        "mandatory": [
+          1,
+          1
+        ]
+      }
+    },
+    "model_horizon_working_minutes": 44940
+  },
+  "findings": [
+    "The regression is almost entirely before the first validated candidate. Build, detection, replay, feedback certification and count minimization do not explain the 31-second increase.",
+    "Baseline presolve already fixes the same 11 first-occurrence presence variables. The added constraints provide no additional presence reduction in this particular case, but change presolve transformations and search trajectory.",
+    "Mandatory first search has 20,677,690 integer propagations versus 6,359,231; LP OPTIMAL counter is 1,765,413 versus 86,320. Branch count alone hides the much higher work per search.",
+    "Ablation of LP relaxation alone reduces mandatory time to about 21 seconds but leaves a strong regression. It does not isolate LP as the sole cause.",
+    "Switching only new_linear_propagation to false, with byte-identical initial models, reduces both modes to about 1.3 seconds. Mandatory repeat preserves exact branch/conflict counts. This isolates an unfavorable interaction with the default linear propagation/search path.",
+    "Changing propagation_loop_detection_factor from 10 to 1 alone leaves the first-search branch, conflict and propagation counters identical; that threshold does not resolve this case.",
+    "Large working-time domains (44,940) and conditional state support/threat/interval inequalities are present in both cases. They are plausible amplifiers, not a separately measured cause.",
+    "This is not proof of an OR-Tools correctness bug, nor a C++ instruction-level profile. Parameter changes also change the search path; native per-propagator CPU attribution remains unavailable.",
+    "No production solver setting or business rule was changed. These are independent diagnostic experiments on one frozen case and seed."
+  ],
+  "official_parameter_reference": "https://github.com/google/or-tools/blob/v9.15/ortools/sat/sat_parameters.proto#L1444-L1447"
+}

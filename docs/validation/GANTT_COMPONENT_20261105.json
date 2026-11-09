@@ -1,0 +1,18 @@
+{
+  "component": "@svar-ui/react-gantt@2.8.2",
+  "license": "MIT",
+  "production_build": "passed",
+  "browser_tests": {
+    "passed": 7,
+    "skipped": 2,
+    "skipped_reason": "Existing tests that submit real worker jobs were not rerun for this frontend-only change.",
+    "coverage": ["minute geometry", "timezone independent labels", "repeated and parallel executions", "calendar pause segments", "snapshot labels", "readonly", "20 and 150 activity frozen real results", "virtual scrolling", "scroll and scale persistence on improvement", "metrics-only stability", "five-second polling", "time-window forms"]
+  },
+  "live_smoke": {"url": "http://127.0.0.1:8016/", "execution_count": 20, "browser_errors": [], "api_access": "GET only"},
+  "backend_changed": false,
+  "database_changed": false,
+  "backup": "output/gantt-component/before-cutover/frontend",
+  "screenshots": "output/gantt-component/screenshots",
+  "live_screenshot": "output/gantt-component/live-8016.png",
+  "isolated_preview_stopped": true
+}

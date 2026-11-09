@@ -103,6 +103,7 @@ def create_activity(
         "max_instances": payload.get("max_instances"),
         "is_milestone": derived_milestone(payload.get("preconditions", [])),
         "is_active": bool(payload.get("is_active", True)),
+        "metadata": copy.deepcopy(payload.get("metadata", {})),
     }
     if activity["duration"] <= 0:
         raise PlannerScenarioError("INVALID_DURATION", "Activity duration must be positive")
@@ -130,7 +131,7 @@ def update_activity(scenario: dict[str, Any], activity_id: str, payload: dict[st
     old_name = activity["name"]
     for field in (
         "name", "duration", "preconditions", "additional_output_state_ids", "resource_reqs",
-        "event_reqs", "max_instances", "is_active", "delete_effect_state_ids",
+        "event_reqs", "max_instances", "is_active", "delete_effect_state_ids", "metadata",
     ):
         if field in payload:
             activity[field] = copy.deepcopy(payload[field])
@@ -154,6 +155,29 @@ def update_activity(scenario: dict[str, Any], activity_id: str, payload: dict[st
         toggle_value(scenario.setdefault("target_activity_ids", []), activity_id, bool(payload["is_target"]))
     rebuild_mirror(scenario)
     return activity
+
+
+def update_resource(scenario: dict[str, Any], resource_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    resource = require_item(scenario.get("resources", []), resource_id, "RESOURCE_NOT_FOUND")
+    updated = {**resource, **{key: copy.deepcopy(value) for key, value in payload.items()
+                            if key in {"name", "capacity", "is_active", "kind"}}}
+    if type(updated.get("capacity")) is not int or updated["capacity"] < 1:
+        raise PlannerScenarioError("INVALID_RESOURCE_CAPACITY", "资源容量必须为正整数")
+    refs = [{"id": a["id"], "name": a["name"], "quantity": a["resource_reqs"][resource_id]}
+            for a in scenario.get("activities", []) if resource_id in a.get("resource_reqs", {})]
+    if refs and (not updated.get("is_active", True) or any(r["quantity"] > updated["capacity"] for r in refs)):
+        raise PlannerScenarioError("RESOURCE_IN_USE", "资源仍被活动引用，不能停用或将容量降至需求以下", details={"references": refs})
+    resource.update(updated)
+    return resource
+
+
+def delete_resource(scenario: dict[str, Any], resource_id: str) -> None:
+    require_item(scenario.get("resources", []), resource_id, "RESOURCE_NOT_FOUND")
+    refs = [{"id": a["id"], "name": a["name"]} for a in scenario.get("activities", [])
+            if resource_id in a.get("resource_reqs", {})]
+    if refs:
+        raise PlannerScenarioError("RESOURCE_IN_USE", "资源仍被活动引用", details={"references": refs})
+    scenario["resources"] = [r for r in scenario["resources"] if r["id"] != resource_id]
 
 
 def update_event(scenario: dict[str, Any], event_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -206,6 +230,8 @@ def delete_activity(scenario: dict[str, Any], activity_id: str) -> None:
             "BODY_IN_USE", "Activity output is used by another activity", details={"consumer_activity_ids": consumers}
         )
     scenario["activities"] = [item for item in scenario.get("activities", []) if item["id"] != activity_id]
+    if isinstance(scenario.get("time_windows"), list):
+        scenario["time_windows"] = [w for w in scenario["time_windows"] if w.get("activity_id") != activity_id]
     scenario["states"] = [item for item in scenario.get("states", []) if item["id"] not in output_ids]
     scenario["activity_package_memberships"] = [
         item for item in scenario.get("activity_package_memberships", []) if item["activity_id"] != activity_id
@@ -386,6 +412,9 @@ def expand_packages(scenario: dict[str, Any]) -> dict[str, Any]:
         expanded["activities"] = [item for item in expanded.get("activities", []) if item["id"] in scope_ids]
 
     expanded["activities"] = [item for item in expanded.get("activities", []) if item.get("is_active", True)]
+    if isinstance(expanded.get("time_windows"), list):
+        included = {item["id"] for item in expanded["activities"]}
+        expanded["time_windows"] = [w for w in expanded["time_windows"] if isinstance(w, dict) and w.get("activity_id") in included]
     for item in expanded["activities"]:
         for key in ("display_code", "output_name_customized", "is_active"):
             item.pop(key, None)
@@ -407,6 +436,16 @@ def expand_packages(scenario: dict[str, Any]) -> dict[str, Any]:
 def validate_scenario(scenario: dict[str, Any]) -> list[dict[str, Any]]:
     synchronize_activity_milestones(scenario)
     issues: list[dict[str, Any]] = []
+    from app.services.planner_rules import validate_exclusive_rules
+    try:
+        validate_exclusive_rules(scenario)
+    except ValueError as exc:
+        issues.append(issue('INVALID_EXCLUSIVE_RULES', str(exc)))
+    from app.services.planner_calendars import validate_calendars
+    try:
+        validate_calendars(scenario)
+    except (ValueError, TypeError, KeyError) as exc:
+        issues.append(issue('INVALID_WORK_CALENDAR', str(exc)))
     version = scenario.get("schema_version", 1)
     if type(version) is not int or version not in {1, 2}:
         issues.append(issue("UNSUPPORTED_SCENARIO_SCHEMA", "Only schema versions 1 and 2 are supported"))
@@ -479,6 +518,7 @@ def validate_scenario(scenario: dict[str, Any]) -> list[dict[str, Any]]:
 
     states = set(ids_by_kind["state"])
     resources = {item["id"]: int(item["capacity"]) for item in scenario.get("resources", [])}
+    inactive_resources = {item["id"] for item in scenario.get("resources", []) if not item.get("is_active", True)}
     events = set(ids_by_kind["event"])
     for key in ("initial_state_ids", "goal_state_ids", "forbidden_state_ids"):
         for state_id in scenario.get(key, []):
@@ -511,6 +551,8 @@ def validate_scenario(scenario: dict[str, Any]) -> list[dict[str, Any]]:
                 issues.append(issue("UNKNOWN_RESOURCE", "Activity references an unknown resource", object_id=activity.get("id"), details={"resource_id": resource_id}))
             elif int(quantity) <= 0 or int(quantity) > resources[resource_id]:
                 issues.append(issue("RESOURCE_CAPACITY_EXCEEDED", "Resource demand must be within aggregate capacity", object_id=activity.get("id"), details={"resource_id": resource_id}))
+            elif activity.get("is_active", True) and resource_id in inactive_resources:
+                issues.append(issue("RESOURCE_INACTIVE", "启用的活动不能占用已停用资源", object_id=activity.get("id"), details={"resource_id": resource_id}))
         for event_id in activity.get("event_reqs", []):
             if event_id not in events:
                 issues.append(issue("UNKNOWN_EVENT", "Activity references an unknown event", object_id=activity.get("id"), details={"event_id": event_id}))
@@ -552,6 +594,33 @@ def validate_scenario(scenario: dict[str, Any]) -> list[dict[str, Any]]:
         issues.append(issue("INVALID_MAX_STEPS", "max_steps must be positive"))
     if scenario.get("execution_mode") not in {"serial", "parallel"}:
         issues.append(issue("INVALID_EXECUTION_MODE", "execution_mode must be serial or parallel"))
+    from app.services.planner_run_windows import frozen_run_windows
+    try:
+        frozen_run_windows(expanded)
+    except ValueError as exc:
+        issues.append(issue("INVALID_RUN_TIME_WINDOWS", str(exc)))
+    windows = scenario.get("time_windows", [])
+    if not isinstance(windows, list):
+        issues.append(issue("INVALID_TIME_WINDOWS", "活动时间窗口必须为列表"))
+    else:
+        seen_window_ids, windowed_activities = set(), set()
+        for window in windows:
+            if not isinstance(window, dict):
+                issues.append(issue("INVALID_TIME_WINDOW", "活动时间窗口必须为对象"))
+                continue
+            wid, aid = window.get("id"), window.get("activity_id")
+            if not isinstance(wid, str) or not wid or not isinstance(aid, str):
+                issues.append(issue("INVALID_TIME_WINDOW", "时间窗口需要唯一编号及活动编号"))
+                continue
+            if wid in seen_window_ids or aid in windowed_activities or aid not in activity_by_id:
+                issues.append(issue("INVALID_TIME_WINDOW", "时间窗口编号或活动重复，或活动不存在", object_id=wid))
+                continue
+            seen_window_ids.add(wid)
+            windowed_activities.add(aid)
+            opening, closing = window.get("earliest_start"), window.get("latest_finish")
+            if (type(opening) is not int or type(closing) is not int or opening < scenario.get("start_time", 0)
+                    or closing < opening + int(activity_by_id[aid]["duration"])):
+                issues.append(issue("INVALID_TIME_WINDOW", "时间窗口需满足开始下限及完成上限，并容纳完整活动", object_id=wid))
     return issues
 
 
@@ -650,6 +719,16 @@ def scenario_hash(scenario: dict[str, Any]) -> str:
 def normalize_import(payload: dict[str, Any], *, preserve_ids: bool) -> dict[str, Any]:
     """Normalize imported JSON and regenerate every derived mirror object."""
     imported = copy.deepcopy(payload)
+    from app.services.planner_rules import validate_exclusive_rules
+    try:
+        validate_exclusive_rules(imported)
+    except ValueError as exc:
+        raise PlannerScenarioError('INVALID_EXCLUSIVE_RULES', str(exc)) from exc
+    from app.services.planner_calendars import validate_calendars
+    try:
+        validate_calendars(imported)
+    except (ValueError, TypeError, KeyError) as exc:
+        raise PlannerScenarioError('INVALID_WORK_CALENDAR', str(exc)) from exc
     version = imported.get("schema_version", 1)
     if type(version) is not int or version not in {1, 2}:
         raise PlannerScenarioError("UNSUPPORTED_SCENARIO_SCHEMA", "Only schema versions 1 and 2 are supported")
@@ -747,6 +826,14 @@ def _regenerate_import_ids(payload: dict[str, Any]) -> dict[str, Any]:
     package_map: dict[str, str] = {}
     resource_map: dict[str, str] = {}
     event_map: dict[str, str] = {}
+    calendar_map = {c['id']: technical_id('calendar') for c in result.get('work_calendars', [])}
+    for calendar in result.get('work_calendars', []):
+        calendar['id'] = calendar_map[calendar['id']]
+    if result.get('work_calendar_id'):
+        result['work_calendar_id'] = calendar_map.get(result['work_calendar_id'], result['work_calendar_id'])
+    result.pop('calendar_context', None)
+    result.pop('working_intervals', None)
+    result.pop('lift_day_windows', None)
     primary_outputs = {
         activity.get("output_state_id") or f"{activity.get('id') or f'A{index:03d}'}:output"
         for index, activity in enumerate(payload.get("activities", []), start=1)
@@ -784,6 +871,10 @@ def _regenerate_import_ids(payload: dict[str, Any]) -> dict[str, Any]:
     for state in result["states"]:
         if state.get("source_activity_id") in activity_map:
             state["source_activity_id"] = activity_map[state["source_activity_id"]]
+    if isinstance(result.get("time_windows"), list):
+        for window in result["time_windows"]:
+            if isinstance(window, dict):
+                window["activity_id"] = activity_map.get(window.get("activity_id"), window.get("activity_id"))
     result["resources"] = []
     for resource in payload.get("resources", []):
         old_id = resource.get("id") or f"R{len(resource_map) + 1:03d}"

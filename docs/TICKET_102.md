@@ -1,0 +1,36 @@
+# TICKET-102：长预算三引擎快速验证
+
+> Status: complete with recorded interruption/resume deviation — 2026-11-02
+> Scope: implement and execute the user-approved long-quick study in D:/planner. Reuse the completed TICKET-101 batch. No algorithm fixes, search-parameter changes, business models, database changes or deployment.
+
+- [x] Add optional CLI profile/baseline flags; retain standard generation defaults.
+- [x] Copy 18 frozen measured models plus G01 warmup, old answers/proof records, and matched ten-second seed-11 evidence; preserve old output.
+- [x] Freeze 22 paired blocks / 66 runs: A=54 at 30s, B=6 at 60s, C=6 at 300s; alternate scale/group in A.
+- [x] Enforce configured 4200-second cap; CLI/resume can only tighten; recover committed run counts and preserve UNRUN items.
+- [x] Protect every baseline Python source except the five named orchestration/report modules; freeze a new full application-source snapshot.
+- [x] Extend reports/checkpoints/selectors, phase coverage and per-run paired comparisons, including repeated/non-causal action counts and exact initial-candidate action identity.
+- [x] New profile tests (10), existing benchmark tests (17), three-engine fresh-process smoke and browser selector/layout QA.
+- [x] Freeze final delivery and verify detached formal execution started in phase A.
+- [x] Inspect final coverage, paired changes, A* seed/repetition evidence and GA first-submission thresholds after execution completes.
+
+Budgets total 3780 seconds of maximum solving; batch cap 4200 seconds. The measured conditions use generation seed 101 and solver seed 11 exactly once. A has 18 models; B/C each have only two large C0 models, so their pooled success rates are not a time-response curve. Unknown optimum remains unknown. Internal solver limits and early exits are retained.
+
+Validation: new profile 10/10 passed; all 17 existing benchmark tests passed in the full regression. The complete suite initially ran 100 tests with one failure and three temporary-directory permission errors. All three runner tests passed with TEMP/TMP routed into D:/planner/tmp. The unchanged generic-model GA test still returned makespan 117 rather than its asserted 111 within three seconds on an isolated retry (7/8 in that file passed). This is recorded as an existing time-budget-sensitive quality assertion, not hidden or repaired; protected engine/execution sources match TICKET-101. Do not describe the full suite as 100/100 passed. Logs: D:/planner/tmp/long-quick-regression.log, long-quick-runner-recheck.log, long-quick-generalized-recheck.log.
+
+QA only: D:/planner/runs/three-engine-long-quick-qa (not formal statistics). Three G01 engines solved makespan 10; HTML has no JS errors, correct 30/60/300 options, B/C only 128/256, and C4/C6 only 30 seconds. Formal target: D:/planner/runs/three-engine-long-quick-20261102. Runbook: D:/planner/docs/three-engine-benchmark.md.
+
+ANCHOR: no violations. TICKET-101 remains complete; TICKET-098 remains deferred. No Solver application source changed in this follow-up. Final execution and readout are complete; algorithm fixes require a separate user-authorized task.
+
+Launch: 2026-11-02 02:13 Asia/Shanghai, detached hidden runner. Formal batch state is RUNNING / phase A, uses baseline_reuse and a persisted 4200-second cap. `launch-checks.json` confirms 90 protected source files, 186 frozen reference evidence files, all 19 copied inputs byte-identical (18 measured + warmup), and complete ZIP/source-hash agreement. `runner.stdout.log` / `runner.stderr.log` and `batch_state.json` are the authoritative live records. Final execution/analysis is pending; do not claim 66/66 completion yet.
+
+02:14 checkpoint: first paired block completed (3/66). All three engines found a valid makespan-69 plan on n8-C0-g101. GA ran to the actual 30-second external limit and retained 140 valid candidates, first at 0.011 seconds; actual CPU affinity is logical CPU 0 and its shared-input hash equals the frozen ten-second reference. Post-launch source guard passed. These are startup checks only, not evidence about the large-model hypotheses.
+
+11:09 recovery: old runner exited at 63/66 with the last n256-C0-g101 / 300s block incomplete. User explicitly requested checkpoint resume. Confirmed the lock was free and frozen guard passed; all 63 committed run.json results remain untouched. The incomplete ASTAR attempt is preserved in `ASTAR.interrupted-1` and restarted with the same input, seed and budget; GA/LEGACY remain pending. Original state bytes and recovery accounting are preserved in `recovery/20261102T030916Z/`. Accounted active time is 1969.048 + a conservative 395-second charge for the interrupted attempt = 2364.048 seconds; original cap remains 4200 seconds, leaving 1835.952 seconds. The 30185-second inactive checkpoint gap is recorded separately: the original continuous wall-clock experiment was interrupted, and this resumed batch must not be described as uninterrupted completion within 70 wall-clock minutes. Detached runner restarted at 11:09 Asia/Shanghai (actual PID 3712 at launch), phase C / ASTAR, with separate `runner.resume-20261102-1109.stdout.log` and `.stderr.log`. Preserve frozen sources and await final three results before concluding the study.
+
+Final readout: COMPLETED 66/66 at 2026-11-02 11:19 Asia/Shanghai. Independent raw-event/run.json/CSV reconciliation passed for all 66 runs; shared hashes match baseline, CPU affinity is zero, frozen guard passes and candidate rejections/proof contradictions/input conflicts are zero. Evidence: D:/planner/runs/three-engine-long-quick-20261102/final-analysis.json, computed by D:/planner/tmp/analyze_long_quick_final.py.
+
+Phase A (18 models at 30s), LEGACY/ASTAR/GA: solved 14/14/12; PAR-2 13.716/14.164/21.043s; known-optimum hits 8/3/6 of eight each. No LEGACY or ASTAR paired makespan improvements. GA C6 improves N16 83→76, N32 262→218, N64 710→357; these optima remain unknown.
+
+At C0 N128/N256, ASTAR stays 375/440 for 10/30/60/300-second budgets, versus proved optima 194/222. The 300-second runs still emit only the seed, with identical initial/final actions and 127/255 non-causal repeats, zero reconstructed search trajectories and 110758/43123 expanded nodes. Actual calls stop after about 234/266s under the original internal time rules. GA N128 submits optimum 194 after 49.803s at budget60 and 38.178s at budget300; these are independent runs. GA N256/300 consumes 300s and emits zero candidates, with zero validator rejections and no final decode diagnostics. LEGACY reaches the two optima after 0.461/2.049s at budget300. These support persistent ASTAR incumbent replacement failure and GA first-emission scalability, without proving GA infeasibility or its exact internal stall.
+
+Accounted active time including conservative interrupted-attempt charge: 2951.700s, about49.2min. This was interrupted/resumed and does not meet the original uninterrupted70min wall-clock protocol. Each condition has one observation; do not generalize a ranking or pool the different phase populations. The original GA3s regression assertion remains a known failed check. No algorithm was changed. All scoped execution and analysis work is complete with those explicit caveats.

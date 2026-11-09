@@ -1,5 +1,13 @@
 # State-Driven Process Planning + Resource Optimization System
 
+2026-11-09 源码快照分支同时包含运行所需的共享 `planner_experiment` 源码；从本分支启动或打包时，按 [solver/README.md](solver/README.md) 将 `PLANNER_PROJECT_PATH` / `PlannerRoot` 指向仓库内的 `solver` 目录。
+
+Windows 完整离线部署入口为发布包中的 **`deploy.bat`**，内置前端、后端、Python、PostgreSQL 和共享求解器，并执行真实异步求解自检。源码打包与隔离部署说明见 [一键部署](docs/ONE_CLICK_DEPLOYMENT.md)。`start*.bat` 保留为已有开发环境的启动入口，不用于新机器完整部署。
+
+默认前端已替换为 **React 联合求解工作区**：活动、活动包、资源与异步联合 CP-SAT 四页真实数据闭环。部署需迁移至 `020_planner_async_jobs` 并运行独立 worker；启动与验收说明见 [React 工作区](docs/REACT_WORKBENCH.md)。旧 Vue 页面不再作为默认入口，旧后端 API 和历史数据保留。
+
+「多引擎求解」现已增加 **联合 CP-SAT** 和显式四引擎对比，直接联合选择活动与排程；原三引擎默认行为保留。支持边界、数据库迁移和验收结果见 [联合 CP-SAT 使用说明](docs/JOINT_CP_SAT.md)。
+
 Planner exploration 支持四类状态关系：前置保留、转移消耗、系统自动绑定的实现效果，以及独立破坏效果。活动完成时统一生效，三引擎共享回放校验。新场景采用 [V2 契约](docs/PLANNER_SHARED_SCENARIO_V2.md)，保留 V1 输入兼容；实现与测试见 [TICKET-099](docs/TICKET_099.md) 和[验收记录](docs/validation/PLANNER_DELETE_EFFECTS_20261028.md)。
 
 基于 FastAPI + PostgreSQL + OR-Tools 的两阶段求解系统：Planner 构建 RAG（状态推导有向无环图），Scheduler 基于 RAG + 资源约束做 CP-SAT 最优排程。
@@ -315,19 +323,19 @@ pytest tests/e2e -v
 
 ## 发布 Windows 验证机 Beta
 
-发布包由白名单脚本生成，不包含 `.env`、数据库、日志、虚拟环境、依赖缓存或历史 ZIP。发布前必须先提交前端生产构建产物，并保持 Git 工作区干净：
+发布包由白名单脚本生成，包含前端构建、后端、求解器、Python、PostgreSQL 程序和离线依赖，不包含现有 `.env`、数据库、日志或历史 ZIP。正式发布要求主仓库及共享求解器工作区干净；打包在独立目录构建前端，不覆盖当前运行系统：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy\scripts\package_release.ps1 -Version 0.3.0-beta.2
+powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy\scripts\package_release.ps1 -Version 0.3.1-beta.1 -PlannerRoot D:\planner -OutputDirectory D:\releases\planner-0.3.1
 ```
 
-脚本默认执行后端全量测试、部署就绪检查、Chromium 回归和 Vite 生产构建，然后在 `release/` 生成 ZIP、SHA-256 和发布说明。验证机升级时先用 `pg_dump -Fc` 备份数据库，将现有 `.env` 复制到解压后的新版本目录，再运行：
+打包完成生成 ZIP、SHA-256、文件清单和版本来源信息。验收未提交改动时显式使用 `-AllowDirty`，产物会标记为工作区快照。发布前需完成相关回归测试，并在隔离环境解压 ZIP 验证。验证机无需另装 Python、Node.js 或 PostgreSQL；解压到新目录后运行：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy\scripts\install_verify.ps1 -ExpectedCommit <发布提交的完整 SHA>
+.\deploy.bat --api-port 8026 --db-port 55450
 ```
 
-只有安装验证通过后才为同一提交创建 annotated Git Tag。Beta 发布不触发 STATE/TICKET 归档或版本切换。
+入口会初始化独立数据库、执行迁移、启动 API/worker 并完成真实异步求解与回放校验。不要复制原系统 `.env` 或指向正在运行的业务库。重复运行会先备份本安装数据库；`stop.bat` 只停止本目录实例。旧数据迁移和正式发布流程见 [一键部署说明](docs/ONE_CLICK_DEPLOYMENT.md)。正式发布验证通过后才为对应提交创建 annotated Git Tag；工作区快照不创建正式版本标签。
 
 ## 相关文档
 

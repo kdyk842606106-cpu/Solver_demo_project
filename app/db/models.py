@@ -1294,6 +1294,17 @@ class PlannerRunRecord(Base):
     )
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    job_status: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, index=True)
+    client_request_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=True)
+    execution_token: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    lease_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    progress_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    plan_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    progress_json: Mapped[Optional[dict]] = mapped_column(JSONB, deferred=True)
+    live_plan_json: Mapped[Optional[dict]] = mapped_column(JSONB, deferred=True)
+
     __table_args__ = (
-        CheckConstraint("engine IN ('LEGACY', 'ASTAR', 'GA', 'ALL')", name="ck_planner_run_engine"),
+        CheckConstraint("engine IN ('LEGACY', 'ASTAR', 'GA', 'ALL', 'JOINT_CP_SAT', 'ALL_WITH_CP_SAT')", name="ck_planner_run_engine"),
     )

@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import PlannerScenarioRecord
+from app.db.models import PlannerScenarioRecord, PlannerRunRecord
 from app.db.session import get_db_session
 from app.services.planner_scenarios import (
     PlannerScenarioError,
@@ -30,6 +30,8 @@ from app.services.planner_scenarios import (
     technical_id,
     update_activity,
     update_event,
+    update_resource,
+    delete_resource,
     update_package,
     validate_scenario,
 )
@@ -44,7 +46,15 @@ class StrictModel(BaseModel):
 
 
 class ScenarioCreate(StrictModel):
+    execution_mode: Literal["serial", "parallel"] = "parallel"
     name: str = Field(min_length=1, max_length=128)
+
+
+class InitialStateCheck(StrictModel):
+    expected_revision: int
+    current_state_ids: list[str] = Field(default_factory=list)
+    target_state_ids: list[str] = Field(default_factory=list)
+    draft_scenario: dict[str, Any] | None = None
 
 
 class ScenarioUpdate(StrictModel):
@@ -54,6 +64,11 @@ class ScenarioUpdate(StrictModel):
     start_time: int | None = Field(default=None, ge=0)
     max_steps: int | None = Field(default=None, gt=0)
     default_budget: dict[str, Any] | None = None
+    time_windows: list[dict[str, Any]] | None = None
+    work_calendars: list[dict[str, Any]] | None = None
+    work_calendar_id: str | None = None
+    night_lift_rule: dict[str, Any] | None = None
+    exclusive_rules: dict[str, Any] | None = None
     initial_state_ids: list[str] | None = None
     goal_state_ids: list[str] | None = None
     forbidden_state_ids: list[str] | None = None
@@ -76,6 +91,7 @@ class ActivityCreate(StrictModel):
     is_milestone: bool = False
     is_active: bool = True
     is_target: bool = False
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ActivityUpdate(StrictModel):
@@ -92,6 +108,7 @@ class ActivityUpdate(StrictModel):
     is_milestone: bool | None = None
     is_active: bool | None = None
     is_target: bool | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class PackageCreate(StrictModel):
@@ -124,9 +141,18 @@ class SeedStateCreate(StrictModel):
 
 
 class ResourceCreate(StrictModel):
+    kind: Literal["crew", "crane", "workspace", "tool", "material", "unclassified"] = "unclassified"
     name: str = Field(min_length=1, max_length=128)
     capacity: int = Field(gt=0)
     is_active: bool = True
+
+
+class ResourceUpdate(StrictModel):
+    expected_revision: int | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    capacity: int | None = Field(default=None, gt=0)
+    is_active: bool | None = None
+    kind: Literal["crew", "crane", "workspace", "tool", "material", "unclassified"] | None = None
 
 
 class EventCreate(StrictModel):
@@ -167,7 +193,7 @@ class DraftOperation(StrictModel):
     operation: Literal[
         "create_package", "update_package", "delete_package", "create_activity",
         "update_activity", "delete_activity", "add_membership", "remove_membership",
-        "create_seed_state", "create_resource", "create_event", "update_event", "update_scenario", "update_layout",
+        "create_seed_state", "create_resource", "update_resource", "delete_resource", "create_event", "update_event", "update_scenario", "update_layout",
     ]
     client_ref: str | None = None
     object_id: str | None = None
@@ -188,6 +214,8 @@ async def list_scenarios(db: AsyncSession = Depends(get_db_session)):
 @router.post("", status_code=201)
 async def create_scenario(payload: ScenarioCreate, db: AsyncSession = Depends(get_db_session)):
     scenario = new_scenario(payload.name)
+    scenario["execution_mode"] = payload.execution_mode
+    scenario["default_budget"]["time_limit_seconds"] = 60
     record = PlannerScenarioRecord(
         id=scenario["id"], display_code=scenario["display_code"], name=scenario["name"], scenario_json=scenario
     )
@@ -210,6 +238,22 @@ async def get_scenario(scenario_id: str, db: AsyncSession = Depends(get_db_sessi
     return _serialize(await _record(db, scenario_id))
 
 
+@router.post("/{scenario_id}/initial-state-check")
+async def check_initial_states(scenario_id: str, payload: InitialStateCheck, db: AsyncSession = Depends(get_db_session)):
+    """Inspect a saved version or an explicitly supplied draft, without persisting."""
+    record = await _record(db, scenario_id)
+    _check_revision(record, payload.expected_revision)
+    scenario = payload.draft_scenario if payload.draft_scenario is not None else _scenario(record)
+    if scenario.get('id') != scenario_id:
+        raise HTTPException(status_code=422, detail={'error_code': 'SCENARIO_ID_MISMATCH', 'error_message': '诊断草稿不属于当前项目。'})
+    from app.services.planner_initial_diagnosis import diagnose_initial_states
+    try:
+        result = _domain(diagnose_initial_states, scenario, payload.current_state_ids, payload.target_state_ids)
+    except (KeyError, TypeError, AttributeError, ValueError):
+        raise HTTPException(status_code=422, detail={'error_code': 'INVALID_DIAGNOSIS_INPUT', 'error_message': '诊断数据格式不完整，请核对草稿。'})
+    return dict(result, scenario_id=scenario_id, revision=record.revision, source='draft' if payload.draft_scenario is not None else 'saved')
+
+
 @router.post("/{scenario_id}/draft-commit")
 async def commit_draft(scenario_id: str, payload: DraftCommit, db: AsyncSession = Depends(get_db_session)):
     """Apply a page editing session atomically to one scenario snapshot."""
@@ -229,12 +273,22 @@ async def commit_draft(scenario_id: str, payload: DraftCommit, db: AsyncSession 
         if isinstance(value, list):
             return [resolved(item) for item in value]
         if isinstance(value, dict):
-            return {key: resolved(item) for key, item in value.items()}
+            return {resolved(key): resolved(item) for key, item in value.items()}
         return value
 
     for item in payload.operations:
         data = resolved(copy.deepcopy(item.payload))
         object_id = resolved(item.object_id) if item.object_id else None
+        schemas = {"create_activity": ActivityCreate, "update_activity": ActivityUpdate,
+                   "create_package": PackageCreate, "update_package": PackageUpdate,
+                   "create_resource": ResourceCreate, "update_resource": ResourceUpdate,
+                   "create_seed_state": SeedStateCreate, "update_scenario": ScenarioUpdate}
+        if item.operation in schemas:
+            try:
+                data = schemas[item.operation].model_validate(data).model_dump(exclude_unset=True)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail={"error_code": "DRAFT_PAYLOAD_INVALID", "message": str(exc)})
+            data.pop("expected_revision", None)
         if item.operation in {"create_activity", "update_activity", "update_scenario"}:
             _reject_deprecated_targets(data)
         if item.operation == "create_package":
@@ -267,6 +321,11 @@ async def commit_draft(scenario_id: str, payload: DraftCommit, db: AsyncSession 
         elif item.operation == "create_resource":
             created = {"id": technical_id("resource"), **data}
             scenario.setdefault("resources", []).append(created)
+        elif item.operation == "update_resource":
+            created = _domain(update_resource, scenario, object_id, data)
+        elif item.operation == "delete_resource":
+            _domain(delete_resource, scenario, object_id)
+            created = None
         elif item.operation == "create_event":
             created = {"id": technical_id("event"), **data}
             scenario.setdefault("external_events", []).append(created)
@@ -302,12 +361,20 @@ async def commit_draft(scenario_id: str, payload: DraftCommit, db: AsyncSession 
 
     rebuild_mirror(scenario)
     issues = validate_scenario(copy.deepcopy(scenario))
-    if issues:
-        raise HTTPException(status_code=422, detail={"error_code": "DRAFT_VALIDATION_FAILED", "issues": issues})
+    # Definitions may be reused with different run-level initial/goal states.
+    # An unreachable default is advisory while editing, not corrupt data.
+    # Run creation still performs the full preflight on the submitted states.
+    warnings = [issue for issue in issues if issue['code'] == 'GOAL_STRUCTURALLY_UNREACHABLE']
+    blocking = [issue for issue in issues if issue['code'] != 'GOAL_STRUCTURALLY_UNREACHABLE']
+    if blocking:
+        raise HTTPException(status_code=422, detail={"error_code": "DRAFT_VALIDATION_FAILED", "issues": blocking})
     record.next_activity_number = activity_number
     record.next_package_number = package_number
     _save(record, scenario)
-    return {"revision": record.revision, "created_refs": refs, "created_output_refs": output_refs, "scenario": _scenario(record), "graph": graph_projection(scenario)}
+    # Return a revision only after it is durable; an immediate GET must not see
+    # the previous revision while dependency cleanup commits in the background.
+    await db.commit()
+    return {"revision": record.revision, "created_refs": refs, "created_output_refs": output_refs, "scenario": _scenario(record), "graph": graph_projection(scenario), "warnings": warnings}
 
 
 @router.patch("/{scenario_id}")
@@ -318,6 +385,11 @@ async def patch_scenario(scenario_id: str, payload: ScenarioUpdate, db: AsyncSes
     values = payload.model_dump(exclude_unset=True, exclude={"expected_revision"})
     _reject_deprecated_targets(values)
     scenario.update(copy.deepcopy(values))
+    from app.services.planner_calendars import validate_calendars
+    try:
+        validate_calendars(scenario)
+    except (ValueError, TypeError, KeyError) as exc:
+        raise HTTPException(status_code=422, detail={'error_code': 'INVALID_WORK_CALENDAR', 'error_message': str(exc)}) from exc
     if "name" in values:
         record.name = values["name"]
     rebuild_mirror(scenario)
@@ -328,6 +400,9 @@ async def patch_scenario(scenario_id: str, payload: ScenarioUpdate, db: AsyncSes
 @router.delete("/{scenario_id}", status_code=204)
 async def remove_scenario(scenario_id: str, db: AsyncSession = Depends(get_db_session)):
     record = await _record(db, scenario_id, for_update=True)
+    running = (await db.execute(select(PlannerRunRecord.id).where(PlannerRunRecord.scenario_id == scenario_id, PlannerRunRecord.job_status.in_(["QUEUED", "RUNNING"])).limit(1))).first()
+    if running:
+        raise HTTPException(status_code=409, detail={"error_code": "SCENARIO_HAS_ACTIVE_RUN"})
     await db.delete(record)
     return Response(status_code=204)
 
@@ -445,6 +520,26 @@ async def post_resource(scenario_id: str, payload: ResourceCreate, db: AsyncSess
     scenario.setdefault("resources", []).append(resource)
     _save(record, scenario)
     return {"revision": record.revision, "resource": resource}
+
+
+@router.patch("/{scenario_id}/resources/{resource_id}")
+async def patch_resource(scenario_id: str, resource_id: str, payload: ResourceUpdate, db: AsyncSession = Depends(get_db_session)):
+    record = await _record(db, scenario_id, for_update=True)
+    _check_revision(record, payload.expected_revision)
+    scenario = copy.deepcopy(record.scenario_json)
+    _domain(update_resource, scenario, resource_id, payload.model_dump(exclude_unset=True, exclude={"expected_revision"}))
+    _save(record, scenario)
+    return _serialize(record)
+
+
+@router.delete("/{scenario_id}/resources/{resource_id}", status_code=204)
+async def remove_resource(scenario_id: str, resource_id: str, expected_revision: int, db: AsyncSession = Depends(get_db_session)):
+    record = await _record(db, scenario_id, for_update=True)
+    _check_revision(record, expected_revision)
+    scenario = copy.deepcopy(record.scenario_json)
+    _domain(delete_resource, scenario, resource_id)
+    _save(record, scenario)
+    return Response(status_code=204)
 
 
 @router.post("/{scenario_id}/external-events", status_code=201)

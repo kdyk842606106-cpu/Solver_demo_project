@@ -1,0 +1,169 @@
+{
+  "validated_at": "2026-11-04",
+  "status": "PASS",
+  "scope": "Windows x64, same-host isolated deployment; not a clean-OS/VM certification",
+  "package": "D:\\Solver_demo_project_planner_exploration\\output\\deploy-acceptance\\planner-windows-x64-verified.zip",
+  "package_bytes": 130552988,
+  "sha256": "307b4eef3170b3020bd892109d71b9b8e1be0f5d478b24ff8749f7d74a7e3bed",
+  "version": {
+    "app_version": "0.3.1-beta.1",
+    "app_commit": "f743f1b0586446f2e5e9a33e17c6ac3019623cd2",
+    "release_id": "0.3.1-beta.1+20261104T082039Z.a19bcbcb",
+    "release_level": "working-tree snapshot (not a formal release)",
+    "source": {
+      "commit": "f743f1b0586446f2e5e9a33e17c6ac3019623cd2",
+      "dirty": true
+    },
+    "solver_source": {
+      "commit": "fc93579478aaf5ecd567350b788c662d300946bd",
+      "dirty": true
+    },
+    "migration_heads": [
+      "020_planner_async_jobs"
+    ],
+    "python_version": [
+      3,
+      12,
+      10
+    ],
+    "platform": "windows-x64",
+    "built_at": "20261104T082039Z"
+  },
+  "installation": "D:\\Solver_demo_project_planner_exploration\\output\\deploy-acceptance\\verified install\\planner-windows-x64-verified",
+  "url": "http://127.0.0.1:8026/",
+  "database_port": 55450,
+  "components": [
+    "React production build",
+    "FastAPI",
+    "PostgreSQL 15",
+    "Python 3.12",
+    "CP-SAT",
+    "Simulator/Validator",
+    "durable worker",
+    "41 offline wheels"
+  ],
+  "deployment": {
+    "url": "http://127.0.0.1:8026",
+    "database_port": 55450,
+    "migration": {
+      "current_heads": [
+        "020_planner_async_jobs"
+      ],
+      "expected_heads": [
+        "020_planner_async_jobs"
+      ],
+      "is_current": true
+    },
+    "solver_path": "D:\\Solver_demo_project_planner_exploration\\output\\deploy-acceptance\\verified install\\planner-windows-x64-verified\\solver",
+    "smoke": {
+      "run_id": "planner-run:cf995704-1daf-4ff7-a1be-34f1cee57a86",
+      "scenario_id": "scenario:0c346a37-15b7-4173-b8e6-014197d313a5",
+      "status": "OPTIMAL",
+      "validator": "VALID",
+      "makespan": 900,
+      "executions": 4,
+      "elapsed_seconds": 0.013775,
+      "data_retained": false
+    },
+    "release_id": "0.3.1-beta.1+20261104T082039Z.a19bcbcb",
+    "status": "ready"
+  },
+  "runtime_isolation": {
+    "python_prefix": "D:\\Solver_demo_project_planner_exploration\\output\\deploy-acceptance\\verified install\\planner-windows-x64-verified\\.venv",
+    "python_base_prefix": "D:\\Solver_demo_project_planner_exploration\\output\\deploy-acceptance\\verified install\\planner-windows-x64-verified\\runtime\\python",
+    "ortools": "D:\\Solver_demo_project_planner_exploration\\output\\deploy-acceptance\\verified install\\planner-windows-x64-verified\\.venv\\Lib\\site-packages\\ortools\\__init__.py",
+    "solver": "D:\\Solver_demo_project_planner_exploration\\output\\deploy-acceptance\\verified install\\planner-windows-x64-verified\\solver\\planner_experiment\\__init__.py"
+  },
+  "solver_150": {
+    "scenario_id": "scenario:8917b623-1b5f-4358-8b2f-2c7f06d5d3ac",
+    "run_id": "planner-run:c51eb574-540d-4a1d-86eb-a0a1419f479d",
+    "status": "OPTIMAL",
+    "validator": "VALID",
+    "solve_seconds": 14.144171,
+    "executions": 150,
+    "fragile_lifts": 10,
+    "exclusive_activities": 78,
+    "makespan_minutes": 3033,
+    "lower_bound": 3033,
+    "independent_replay": "PASS",
+    "exclusive_interval_sweep": "PASS",
+    "capacity_checks": [
+      {
+        "name": "综合装配责任组",
+        "capacity": 6,
+        "peak": 6
+      },
+      {
+        "name": "共享装配作业区",
+        "capacity": 3,
+        "peak": 2
+      },
+      {
+        "name": "标准周转物料套件",
+        "capacity": 4,
+        "peak": 4
+      },
+      {
+        "name": "通用行吊池",
+        "capacity": 1,
+        "peak": 1
+      }
+    ],
+    "work_durations_and_daylight_windows": "PASS"
+  },
+  "night_wait_filling_events": 6,
+  "browser": {
+    "status": "PASS",
+    "url": "http://127.0.0.1:8026/",
+    "activities": 150,
+    "rules_checked": 3,
+    "result_rows": 150,
+    "gantt_rows": 150,
+    "refresh_history": "PASS",
+    "errors": []
+  },
+  "busy_stop_protection": {
+    "status": "PASS",
+    "exit_code": 1,
+    "message": "[DEPLOY ERROR] Active solve jobs: stop refused to avoid interrupting execution"
+  },
+  "restart_persistence": {
+    "status": "PASS",
+    "run_id": "planner-run:c51eb574-540d-4a1d-86eb-a0a1419f479d",
+    "scenario_id": "scenario:8917b623-1b5f-4358-8b2f-2c7f06d5d3ac"
+  },
+  "backup_archives": [
+    {
+      "name": "planner-20261104T082318-855f9f.dump",
+      "bytes": 455366
+    }
+  ],
+  "backup_validation": "pg_dump custom format generated; pg_restore --list passed (full restore drill not performed)",
+  "occupied_port_protection": "PASS: refuses original port 8016 before initializing any database or virtual environment",
+  "stop_restart_test": "PASS on byte-identical runtime from prior ZIP; only README and VERSION differ",
+  "unit_tests": {
+    "passed": 13,
+    "files": [
+      "tests/unit/test_release_packaging.py",
+      "tests/unit/test_deploy_script_safety.py"
+    ]
+  },
+  "original_system": {
+    "url": "http://127.0.0.1:8016/",
+    "database_port": 55440,
+    "projects": 6,
+    "runs": 13,
+    "fingerprints_unchanged": true,
+    "frontend_dist_unchanged": true,
+    "env_unchanged": true,
+    "api_launcher_pid": 3236,
+    "worker_launcher_pid": 13336
+  },
+  "limitations": [
+    "Working-tree snapshot, not a tagged formal release",
+    "Loopback binding by default",
+    "No Windows service/boot autostart registration",
+    "Existing business database migration requires a separate backed-up restore plan"
+  ],
+  "evidence_directory": "D:\\Solver_demo_project_planner_exploration\\output\\deploy-acceptance\\delivery-validation"
+}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from io import BytesIO
 from typing import Any
 
@@ -12,16 +13,18 @@ from app.services.planner_scenarios import PlannerScenarioError, normalize_impor
 
 
 SHEETS = {
-    "场景": ["场景名称", "执行模式", "起始时间", "最大活动实例数", "时间预算秒", "转换预算"],
+    "场景": ["场景名称", "执行模式", "起始时间", "最大活动实例数", "时间预算秒", "转换预算", "应用日历ID", "精密吊装夜班规则JSON", "作业独占规则JSON"],
+    "工作日历": ["日历ID", "名称", "工作日JSON", "时段JSON"],
+    "日历例外": ["日历ID", "日期", "时段JSON"],
     "活动包": ["包引用", "名称", "父包引用", "排序"],
-    "活动": ["活动引用", "名称", "工期", "最大实例数", "实现效果名称", "效果名称自定义"],
+    "活动": ["活动引用", "名称", "工期", "最大实例数", "实现效果名称", "效果名称自定义", "业务元数据JSON"],
     "包成员": ["包引用", "活动引用", "排序"],
     "种子状态": ["状态引用", "名称", "初始激活", "目标必需", "目标禁止"],
     "活动前置": ["活动引用", "状态引用", "关系角色"],
     "活动破坏效果": ["活动引用", "状态引用"],
     "活动附加输出": ["活动引用", "状态引用"],
     "状态目标": ["用途", "状态引用"],
-    "资源": ["资源引用", "名称", "容量"],
+    "资源": ["资源引用", "名称", "容量", "资源分类"],
     "活动资源": ["活动引用", "资源引用", "需求数量"],
     "外部事件": ["事件引用", "名称", "发生时间"],
     "事件状态": ["事件引用", "操作", "状态引用"],
@@ -29,7 +32,7 @@ SHEETS = {
     "包目标范围": ["用途", "包引用"],
 }
 
-OPTIONAL_SHEETS = {"活动破坏效果", "活动附加输出", "状态目标"}
+OPTIONAL_SHEETS = {"活动破坏效果", "活动附加输出", "状态目标", "工作日历", "日历例外"}
 
 
 def template_workbook() -> bytes:
@@ -60,7 +63,14 @@ def export_workbook(scenario: dict[str, Any]) -> bytes:
         scenario["name"], scenario.get("execution_mode", "serial"), scenario.get("start_time", 0),
         scenario.get("max_steps", 20), scenario.get("default_budget", {}).get("time_limit_seconds", 5),
         scenario.get("default_budget", {}).get("transition_limit", 20000),
+        scenario.get('work_calendar_id'),
+        json.dumps(scenario.get('night_lift_rule'),ensure_ascii=False),
+        json.dumps(scenario.get('exclusive_rules'),ensure_ascii=False),
     ])
+    for calendar in scenario.get('work_calendars', []):
+        workbook['工作日历'].append([calendar['id'],calendar['name'],json.dumps(calendar['weekdays']),json.dumps(calendar['periods'])])
+        for ex in calendar.get('exceptions',[]):
+            workbook['日历例外'].append([calendar['id'],ex['date'],json.dumps(ex['periods'])])
     package_refs = {item["id"]: f"P{index:03d}" for index, item in enumerate(scenario.get("activity_packages", []), 1)}
     activity_refs = {item["id"]: f"A{index:03d}" for index, item in enumerate(scenario.get("activities", []), 1)}
     resource_refs = {item["id"]: f"R{index:03d}" for index, item in enumerate(scenario.get("resources", []), 1)}
@@ -76,7 +86,7 @@ def export_workbook(scenario: dict[str, Any]) -> bytes:
     for item in scenario.get("activity_packages", []):
         workbook["活动包"].append([package_refs[item["id"]], item["name"], package_refs.get(item.get("parent_id"), ""), item.get("sort_order", 0)])
     for item in scenario.get("activities", []):
-        workbook["活动"].append([activity_refs[item["id"]], item["name"], item["duration"], item.get("max_instances"), item.get("output_state_name", f"{item['name']}完成"), _yn(item.get("output_name_customized", False))])
+        workbook["活动"].append([activity_refs[item["id"]], item["name"], item["duration"], item.get("max_instances"), item.get("output_state_name", f"{item['name']}完成"), _yn(item.get("output_name_customized", False)), json.dumps(item.get("metadata", {}), ensure_ascii=False)])
         for relation in item.get("preconditions", []):
             workbook["活动前置"].append([activity_refs[item["id"]], state_refs.get(relation["state_id"], relation["state_id"]), relation.get("relation_role", "required")])
         for state_id in item.get("delete_effect_state_ids", []):
@@ -92,7 +102,7 @@ def export_workbook(scenario: dict[str, Any]) -> bytes:
     for state in seed_states:
         workbook["种子状态"].append([state_refs[state["id"]], state["name"], _yn(state["id"] in scenario.get("initial_state_ids", [])), _yn(state["id"] in scenario.get("goal_state_ids", [])), _yn(state["id"] in scenario.get("forbidden_state_ids", []))])
     for item in scenario.get("resources", []):
-        workbook["资源"].append([resource_refs[item["id"]], item.get("name", resource_refs[item["id"]]), item["capacity"]])
+        workbook["资源"].append([resource_refs[item["id"]], item.get("name", resource_refs[item["id"]]), item["capacity"], item.get("kind", "unclassified")])
     for item in scenario.get("external_events", []):
         workbook["外部事件"].append([event_refs[item["id"]], item.get("name", event_refs[item["id"]]), item["time"]])
         for state_id in item.get("add_state_ids", []): workbook["事件状态"].append([event_refs[item["id"]], "add", state_refs.get(state_id, state_id)])
@@ -122,6 +132,20 @@ def import_workbook(content: bytes) -> dict[str, Any]:
         "activity_package_scope_ids": [],
     }
     package_refs, activity_refs, state_refs, resource_refs, event_refs = set(), set(), set(), set(), set()
+    try:
+        payload['night_lift_rule']=json.loads(config.get('精密吊装夜班规则JSON') or 'null')
+        payload['exclusive_rules']=json.loads(config.get('作业独占规则JSON') or 'null')
+        payload['work_calendars'] = [{'id':row['日历ID'],'name':row['名称'],
+            'weekdays':json.loads(row['工作日JSON']), 'periods':json.loads(row['时段JSON']), 'exceptions':[]}
+            for row in rows['工作日历']]
+        calendar_by_id={c['id']:c for c in payload['work_calendars']}
+        for row in rows['日历例外']:
+            calendar_by_id[row['日历ID']]['exceptions'].append({'date':str(row['日期']), 'periods':json.loads(row['时段JSON'])})
+        payload['work_calendar_id'] = config.get('应用日历ID') or None
+        from app.services.planner_calendars import validate_calendars
+        validate_calendars(payload)
+    except (ValueError, TypeError, KeyError) as exc:
+        raise PlannerScenarioError('INVALID_WORK_CALENDAR', str(exc)) from exc
     for row in rows["活动包"]:
         ref = _required(row, "包引用", "活动包")
         if ref in package_refs: raise PlannerScenarioError("EXCEL_REF_DUPLICATE", f"Duplicate package ref: {ref}")
@@ -141,6 +165,12 @@ def import_workbook(content: bytes) -> dict[str, Any]:
         if ref in activity_refs: raise PlannerScenarioError("EXCEL_REF_DUPLICATE", f"Duplicate activity ref: {ref}")
         activity_refs.add(ref)
         activity = {"id": ref, "display_code": ref, "name": _required(row, "名称", ref), "duration": int(row.get("工期") or 0), "preconditions": [], "output_state_id": f"{ref}:OUTPUT", "output_state_name": f"{row.get('名称')}完成", "additional_output_state_ids": [], "resource_reqs": {}, "event_reqs": [], "max_instances": int(row["最大实例数"]) if row.get("最大实例数") not in (None, "") else None, "is_active": True}
+        try:
+            activity["metadata"] = json.loads(row.get("业务元数据JSON") or "{}")
+            if not isinstance(activity["metadata"], dict):
+                raise ValueError("Expected an object")
+        except (ValueError, TypeError) as exc:
+            raise PlannerScenarioError("INVALID_METADATA", f"活动 {ref} 的业务元数据必须为 JSON 对象") from exc
         payload["activities"].append(activity); activity_by_ref[ref] = activity
         if _bool(row.get("是否目标活动")): payload["target_activity_ids"].append(ref)
     for row in rows["活动前置"]:
@@ -163,7 +193,7 @@ def import_workbook(content: bytes) -> dict[str, Any]:
         package_ref = _known(row, "包引用", package_refs); activity_ref = _known(row, "活动引用", activity_refs)
         payload["activity_package_memberships"].append({"id": f"MEMBER:{len(payload['activity_package_memberships'])+1}", "package_id": package_ref, "activity_id": activity_ref, "sort_order": int(row.get("排序") or 0), "layout": {}})
     for row in rows["资源"]:
-        ref = _required(row, "资源引用", "资源"); resource_refs.add(ref); payload["resources"].append({"id": ref, "name": _required(row, "名称", ref), "capacity": int(row.get("容量") or 0), "is_active": True})
+        ref = _required(row, "资源引用", "资源"); resource_refs.add(ref); payload["resources"].append({"id": ref, "name": _required(row, "名称", ref), "capacity": int(row.get("容量") or 0), "kind": row.get("资源分类") or "unclassified", "is_active": True})
     for row in rows["活动资源"]: activity_by_ref[_known(row, "活动引用", activity_refs)]["resource_reqs"][_known(row, "资源引用", resource_refs)] = int(row.get("需求数量") or 0)
     event_by_ref = {}
     for row in rows["外部事件"]:

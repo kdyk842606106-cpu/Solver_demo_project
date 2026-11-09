@@ -63,6 +63,8 @@ dmypy.json
 *.log
 logs/
 /.deploy/
+/.deployment/
+/.deployment.lock
 
 # Generated demo/review artifacts in active working locations
 /MS010_*.html
@@ -93,3 +95,6 @@ node_modules/
 
 # OpenClaw / MCP files
 .opencode/
+
+frontend/playwright-report-react/
+frontend/tsconfig.tsbuildinfo

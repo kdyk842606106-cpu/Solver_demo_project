@@ -1,0 +1,978 @@
+{
+  "source_revision": 15,
+  "method": {
+    "seed": 11,
+    "worker_threads": 1,
+    "budget_seconds": 60,
+    "sequential_fresh_processes": true,
+    "project_or_history_writes": false,
+    "only_toggle": "unique-support mandatory activity presence constraints",
+    "limits": "One seed; late case repeated in reverse order. Not a general performance guarantee."
+  },
+  "inputs": {
+    "source_revision": 15,
+    "anchor": "2026-11-06T08:00:00+08:00",
+    "seed": 11,
+    "cases": {
+      "normal": {
+        "initial": [
+          "下电完成",
+          "模块A拆卸完成",
+          "模块C拆卸完成"
+        ],
+        "goal": "模块联调完成",
+        "budget": {
+          "mode": "auto",
+          "policy": "activity_tiers_v1",
+          "activity_count": 16,
+          "time_limit_seconds": 60
+        },
+        "run_windows": [],
+        "execution_bound": 48
+      },
+      "late": {
+        "initial": [
+          "下电完成",
+          "模块A拆卸完成",
+          "模块C拆卸完成"
+        ],
+        "goal": "扩展功能联调完成",
+        "budget": {
+          "mode": "auto",
+          "policy": "activity_tiers_v1",
+          "activity_count": 16,
+          "time_limit_seconds": 60
+        },
+        "run_windows": [
+          {
+            "id": "run-window:activity:ede06859-d172-4f57-87d4-eca32b1ebef7",
+            "activity_id": "activity:ede06859-d172-4f57-87d4-eca32b1ebef7",
+            "earliest_start": 1440,
+            "latest_finish": null
+          }
+        ],
+        "execution_bound": 48
+      }
+    }
+  },
+  "cases": {
+    "normal": {
+      "results": {
+        "baseline": {
+          "status": "OPTIMAL",
+          "first_solution_seconds": 0.3143638000001374,
+          "elapsed_seconds": 0.856556,
+          "lower_bound": 400,
+          "proven_optimal": true,
+          "branches": 13925,
+          "conflicts": 542,
+          "best_makespan": 400,
+          "best_execution_count": 10,
+          "worker_threads": 1,
+          "input_sha256": "6c27f9ebd7e3ab6ac67e9d4a73a31307600f5ddc9566622eefe4e6632a709428",
+          "model": {
+            "variables": 497,
+            "constraints": 1304,
+            "optional_occurrence_slots": 27,
+            "support_choices": 181,
+            "threat_checks": 173,
+            "interval_locks": 302,
+            "mandatory_activities": {
+              "policy": "disabled_for_comparison",
+              "proofs": {},
+              "added_constraints": 0
+            }
+          },
+          "mandatory_names": [],
+          "validator": "VALID",
+          "schedule": [
+            {
+              "name": "集成检测完成",
+              "ordinal": 1,
+              "start": 0,
+              "end": 20
+            },
+            {
+              "name": "模块A安装",
+              "ordinal": 1,
+              "start": 20,
+              "end": 80
+            },
+            {
+              "name": "模块B安装",
+              "ordinal": 1,
+              "start": 80,
+              "end": 100
+            },
+            {
+              "name": "模块C安装",
+              "ordinal": 1,
+              "start": 100,
+              "end": 120
+            },
+            {
+              "name": "模块D安装",
+              "ordinal": 1,
+              "start": 120,
+              "end": 160
+            },
+            {
+              "name": "安全验收",
+              "ordinal": 1,
+              "start": 160,
+              "end": 200
+            },
+            {
+              "name": "上电",
+              "ordinal": 1,
+              "start": 200,
+              "end": 230
+            },
+            {
+              "name": "模块B调测",
+              "ordinal": 1,
+              "start": 230,
+              "end": 340
+            },
+            {
+              "name": "模块A功能调测",
+              "ordinal": 1,
+              "start": 340,
+              "end": 370
+            },
+            {
+              "name": "模块联调",
+              "ordinal": 1,
+              "start": 370,
+              "end": 400
+            }
+          ],
+          "seed": 11,
+          "budget_seconds": 60
+        },
+        "mandatory": {
+          "status": "OPTIMAL",
+          "first_solution_seconds": 0.26073639999958687,
+          "elapsed_seconds": 0.900903,
+          "lower_bound": 400,
+          "proven_optimal": true,
+          "branches": 16499,
+          "conflicts": 464,
+          "best_makespan": 400,
+          "best_execution_count": 10,
+          "worker_threads": 1,
+          "input_sha256": "6c27f9ebd7e3ab6ac67e9d4a73a31307600f5ddc9566622eefe4e6632a709428",
+          "model": {
+            "variables": 497,
+            "constraints": 1314,
+            "optional_occurrence_slots": 27,
+            "support_choices": 181,
+            "threat_checks": 173,
+            "interval_locks": 302,
+            "mandatory_activities": {
+              "policy": "unique_support_presence_v1",
+              "activity_ids": [
+                "activity:3034e5e4-23e9-4f79-892e-3c605607842c",
+                "activity:81206a95-1689-4f3e-a041-2f3dcadc29ac",
+                "activity:8a00aaad-4906-4bb8-873a-4e451852c3fa",
+                "activity:8b8856dc-d3cc-4999-bbfc-36a0ee6f3841",
+                "activity:8f7addd9-3cee-41c5-8a6e-9e16996fceee",
+                "activity:92507e64-bd8c-46e5-8b1d-01e3cacd5ac6",
+                "activity:a4201bba-5288-4e49-b840-ef762e0449b7",
+                "activity:bc4c32e0-cdde-4db0-ae7f-690583decaee",
+                "activity:cd49665c-5083-4ea1-b4e5-2dcedad88cb0",
+                "activity:fae9abb6-3324-4302-9aae-7501fea68f98"
+              ],
+              "proofs": {
+                "activity:92507e64-bd8c-46e5-8b1d-01e3cacd5ac6": {
+                  "reason": "positive_goal",
+                  "state_id": "state:92507e64-bd8c-46e5-8b1d-01e3cacd5ac6:output",
+                  "consumer_activity_id": null
+                },
+                "activity:3034e5e4-23e9-4f79-892e-3c605607842c": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:3034e5e4-23e9-4f79-892e-3c605607842c:output",
+                  "consumer_activity_id": "activity:92507e64-bd8c-46e5-8b1d-01e3cacd5ac6"
+                },
+                "activity:81206a95-1689-4f3e-a041-2f3dcadc29ac": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:81206a95-1689-4f3e-a041-2f3dcadc29ac:output",
+                  "consumer_activity_id": "activity:92507e64-bd8c-46e5-8b1d-01e3cacd5ac6"
+                },
+                "activity:8a00aaad-4906-4bb8-873a-4e451852c3fa": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:8a00aaad-4906-4bb8-873a-4e451852c3fa:output",
+                  "consumer_activity_id": "activity:92507e64-bd8c-46e5-8b1d-01e3cacd5ac6"
+                },
+                "activity:8f7addd9-3cee-41c5-8a6e-9e16996fceee": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:8f7addd9-3cee-41c5-8a6e-9e16996fceee:output",
+                  "consumer_activity_id": "activity:92507e64-bd8c-46e5-8b1d-01e3cacd5ac6"
+                },
+                "activity:a4201bba-5288-4e49-b840-ef762e0449b7": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:a4201bba-5288-4e49-b840-ef762e0449b7:output",
+                  "consumer_activity_id": "activity:3034e5e4-23e9-4f79-892e-3c605607842c"
+                },
+                "activity:cd49665c-5083-4ea1-b4e5-2dcedad88cb0": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:cd49665c-5083-4ea1-b4e5-2dcedad88cb0:output",
+                  "consumer_activity_id": "activity:81206a95-1689-4f3e-a041-2f3dcadc29ac"
+                },
+                "activity:8b8856dc-d3cc-4999-bbfc-36a0ee6f3841": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:8b8856dc-d3cc-4999-bbfc-36a0ee6f3841:output",
+                  "consumer_activity_id": "activity:8a00aaad-4906-4bb8-873a-4e451852c3fa"
+                },
+                "activity:fae9abb6-3324-4302-9aae-7501fea68f98": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:fae9abb6-3324-4302-9aae-7501fea68f98:output",
+                  "consumer_activity_id": "activity:8a00aaad-4906-4bb8-873a-4e451852c3fa"
+                },
+                "activity:bc4c32e0-cdde-4db0-ae7f-690583decaee": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:bc4c32e0-cdde-4db0-ae7f-690583decaee:output",
+                  "consumer_activity_id": "activity:a4201bba-5288-4e49-b840-ef762e0449b7"
+                }
+              },
+              "status": "complete",
+              "added_constraints": 10,
+              "seconds": 6.759999996575061e-05
+            }
+          },
+          "mandatory_names": [
+            "模块A功能调测",
+            "模块B调测",
+            "安全验收",
+            "模块D安装",
+            "上电",
+            "模块联调",
+            "模块A安装",
+            "集成检测完成",
+            "模块B安装",
+            "模块C安装"
+          ],
+          "validator": "VALID",
+          "schedule": [
+            {
+              "name": "集成检测完成",
+              "ordinal": 1,
+              "start": 0,
+              "end": 20
+            },
+            {
+              "name": "模块B安装",
+              "ordinal": 1,
+              "start": 20,
+              "end": 40
+            },
+            {
+              "name": "模块D安装",
+              "ordinal": 1,
+              "start": 40,
+              "end": 80
+            },
+            {
+              "name": "模块A安装",
+              "ordinal": 1,
+              "start": 80,
+              "end": 140
+            },
+            {
+              "name": "模块C安装",
+              "ordinal": 1,
+              "start": 140,
+              "end": 160
+            },
+            {
+              "name": "安全验收",
+              "ordinal": 1,
+              "start": 160,
+              "end": 200
+            },
+            {
+              "name": "上电",
+              "ordinal": 1,
+              "start": 200,
+              "end": 230
+            },
+            {
+              "name": "模块A功能调测",
+              "ordinal": 1,
+              "start": 230,
+              "end": 320
+            },
+            {
+              "name": "模块B调测",
+              "ordinal": 1,
+              "start": 320,
+              "end": 370
+            },
+            {
+              "name": "模块联调",
+              "ordinal": 1,
+              "start": 370,
+              "end": 400
+            }
+          ],
+          "seed": 11,
+          "budget_seconds": 60
+        }
+      },
+      "model_check": {
+        "variables_objective_hints_and_existing_constraints_identical": true,
+        "only_added_presence_constraints": 10,
+        "paired_inputs_identical": true,
+        "source_business_configuration_preserved": true
+      }
+    },
+    "late": {
+      "results": {
+        "baseline": {
+          "status": "OPTIMAL",
+          "first_solution_seconds": 5.634809299999688,
+          "elapsed_seconds": 6.101042,
+          "lower_bound": 1570,
+          "proven_optimal": true,
+          "branches": 39882,
+          "conflicts": 801,
+          "best_makespan": 1570,
+          "best_execution_count": 14,
+          "worker_threads": 1,
+          "input_sha256": "eccf29041216989ee311ad37b6726f3e969cf0af62d04257b7a47294f1fc31ff",
+          "model": {
+            "variables": 635,
+            "constraints": 1662,
+            "optional_occurrence_slots": 30,
+            "support_choices": 232,
+            "threat_checks": 236,
+            "interval_locks": 383,
+            "mandatory_activities": {
+              "policy": "disabled_for_comparison",
+              "proofs": {},
+              "added_constraints": 0
+            }
+          },
+          "mandatory_names": [],
+          "validator": "VALID",
+          "schedule": [
+            {
+              "name": "集成检测完成",
+              "ordinal": 1,
+              "start": 0,
+              "end": 20
+            },
+            {
+              "name": "模块B安装",
+              "ordinal": 1,
+              "start": 20,
+              "end": 40
+            },
+            {
+              "name": "模块A安装",
+              "ordinal": 1,
+              "start": 40,
+              "end": 100
+            },
+            {
+              "name": "模块C安装",
+              "ordinal": 1,
+              "start": 100,
+              "end": 120
+            },
+            {
+              "name": "模块D安装",
+              "ordinal": 1,
+              "start": 120,
+              "end": 160
+            },
+            {
+              "name": "安全验收",
+              "ordinal": 1,
+              "start": 160,
+              "end": 200
+            },
+            {
+              "name": "上电",
+              "ordinal": 1,
+              "start": 200,
+              "end": 230
+            },
+            {
+              "name": "模块B调测",
+              "ordinal": 1,
+              "start": 230,
+              "end": 340
+            },
+            {
+              "name": "模块A功能调测",
+              "ordinal": 1,
+              "start": 340,
+              "end": 370
+            },
+            {
+              "name": "下电",
+              "ordinal": 1,
+              "start": 370,
+              "end": 380
+            },
+            {
+              "name": "联调扩展件安装",
+              "ordinal": 1,
+              "start": 1440,
+              "end": 1470
+            },
+            {
+              "name": "安全验收",
+              "ordinal": 2,
+              "start": 1470,
+              "end": 1510
+            },
+            {
+              "name": "上电",
+              "ordinal": 2,
+              "start": 1510,
+              "end": 1540
+            },
+            {
+              "name": "扩展功能联调",
+              "ordinal": 1,
+              "start": 1540,
+              "end": 1570
+            }
+          ],
+          "seed": 11,
+          "budget_seconds": 60
+        },
+        "mandatory": {
+          "status": "OPTIMAL",
+          "first_solution_seconds": 36.87150010000005,
+          "elapsed_seconds": 37.397588,
+          "lower_bound": 1570,
+          "proven_optimal": true,
+          "branches": 51011,
+          "conflicts": 1492,
+          "best_makespan": 1570,
+          "best_execution_count": 14,
+          "worker_threads": 1,
+          "input_sha256": "eccf29041216989ee311ad37b6726f3e969cf0af62d04257b7a47294f1fc31ff",
+          "model": {
+            "variables": 635,
+            "constraints": 1673,
+            "optional_occurrence_slots": 30,
+            "support_choices": 232,
+            "threat_checks": 236,
+            "interval_locks": 383,
+            "mandatory_activities": {
+              "policy": "unique_support_presence_v1",
+              "activity_ids": [
+                "activity:3034e5e4-23e9-4f79-892e-3c605607842c",
+                "activity:81206a95-1689-4f3e-a041-2f3dcadc29ac",
+                "activity:8a00aaad-4906-4bb8-873a-4e451852c3fa",
+                "activity:8b8856dc-d3cc-4999-bbfc-36a0ee6f3841",
+                "activity:8f7addd9-3cee-41c5-8a6e-9e16996fceee",
+                "activity:91c49956-f032-466d-82f6-93cdc8dc8891",
+                "activity:a4201bba-5288-4e49-b840-ef762e0449b7",
+                "activity:bc4c32e0-cdde-4db0-ae7f-690583decaee",
+                "activity:cd49665c-5083-4ea1-b4e5-2dcedad88cb0",
+                "activity:ede06859-d172-4f57-87d4-eca32b1ebef7",
+                "activity:fae9abb6-3324-4302-9aae-7501fea68f98"
+              ],
+              "proofs": {
+                "activity:91c49956-f032-466d-82f6-93cdc8dc8891": {
+                  "reason": "positive_goal",
+                  "state_id": "state:91c49956-f032-466d-82f6-93cdc8dc8891:output",
+                  "consumer_activity_id": null
+                },
+                "activity:3034e5e4-23e9-4f79-892e-3c605607842c": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:3034e5e4-23e9-4f79-892e-3c605607842c:output",
+                  "consumer_activity_id": "activity:91c49956-f032-466d-82f6-93cdc8dc8891"
+                },
+                "activity:81206a95-1689-4f3e-a041-2f3dcadc29ac": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:81206a95-1689-4f3e-a041-2f3dcadc29ac:output",
+                  "consumer_activity_id": "activity:91c49956-f032-466d-82f6-93cdc8dc8891"
+                },
+                "activity:8a00aaad-4906-4bb8-873a-4e451852c3fa": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:8a00aaad-4906-4bb8-873a-4e451852c3fa:output",
+                  "consumer_activity_id": "activity:91c49956-f032-466d-82f6-93cdc8dc8891"
+                },
+                "activity:8f7addd9-3cee-41c5-8a6e-9e16996fceee": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:8f7addd9-3cee-41c5-8a6e-9e16996fceee:output",
+                  "consumer_activity_id": "activity:91c49956-f032-466d-82f6-93cdc8dc8891"
+                },
+                "activity:ede06859-d172-4f57-87d4-eca32b1ebef7": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:ede06859-d172-4f57-87d4-eca32b1ebef7:output",
+                  "consumer_activity_id": "activity:91c49956-f032-466d-82f6-93cdc8dc8891"
+                },
+                "activity:a4201bba-5288-4e49-b840-ef762e0449b7": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:a4201bba-5288-4e49-b840-ef762e0449b7:output",
+                  "consumer_activity_id": "activity:3034e5e4-23e9-4f79-892e-3c605607842c"
+                },
+                "activity:cd49665c-5083-4ea1-b4e5-2dcedad88cb0": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:cd49665c-5083-4ea1-b4e5-2dcedad88cb0:output",
+                  "consumer_activity_id": "activity:81206a95-1689-4f3e-a041-2f3dcadc29ac"
+                },
+                "activity:8b8856dc-d3cc-4999-bbfc-36a0ee6f3841": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:8b8856dc-d3cc-4999-bbfc-36a0ee6f3841:output",
+                  "consumer_activity_id": "activity:8a00aaad-4906-4bb8-873a-4e451852c3fa"
+                },
+                "activity:fae9abb6-3324-4302-9aae-7501fea68f98": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:fae9abb6-3324-4302-9aae-7501fea68f98:output",
+                  "consumer_activity_id": "activity:8a00aaad-4906-4bb8-873a-4e451852c3fa"
+                },
+                "activity:bc4c32e0-cdde-4db0-ae7f-690583decaee": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:bc4c32e0-cdde-4db0-ae7f-690583decaee:output",
+                  "consumer_activity_id": "activity:a4201bba-5288-4e49-b840-ef762e0449b7"
+                }
+              },
+              "status": "complete",
+              "added_constraints": 11,
+              "seconds": 5.269999928714242e-05
+            }
+          },
+          "mandatory_names": [
+            "模块A功能调测",
+            "模块B调测",
+            "安全验收",
+            "模块D安装",
+            "上电",
+            "扩展功能联调",
+            "模块A安装",
+            "集成检测完成",
+            "模块B安装",
+            "联调扩展件安装",
+            "模块C安装"
+          ],
+          "validator": "VALID",
+          "schedule": [
+            {
+              "name": "集成检测完成",
+              "ordinal": 1,
+              "start": 0,
+              "end": 20
+            },
+            {
+              "name": "模块A安装",
+              "ordinal": 1,
+              "start": 20,
+              "end": 80
+            },
+            {
+              "name": "模块B安装",
+              "ordinal": 1,
+              "start": 80,
+              "end": 100
+            },
+            {
+              "name": "模块D安装",
+              "ordinal": 1,
+              "start": 100,
+              "end": 140
+            },
+            {
+              "name": "模块C安装",
+              "ordinal": 1,
+              "start": 140,
+              "end": 160
+            },
+            {
+              "name": "安全验收",
+              "ordinal": 1,
+              "start": 160,
+              "end": 200
+            },
+            {
+              "name": "上电",
+              "ordinal": 1,
+              "start": 200,
+              "end": 230
+            },
+            {
+              "name": "模块B调测",
+              "ordinal": 1,
+              "start": 230,
+              "end": 340
+            },
+            {
+              "name": "模块A功能调测",
+              "ordinal": 1,
+              "start": 340,
+              "end": 370
+            },
+            {
+              "name": "下电",
+              "ordinal": 1,
+              "start": 370,
+              "end": 380
+            },
+            {
+              "name": "联调扩展件安装",
+              "ordinal": 1,
+              "start": 1440,
+              "end": 1470
+            },
+            {
+              "name": "安全验收",
+              "ordinal": 2,
+              "start": 1470,
+              "end": 1510
+            },
+            {
+              "name": "上电",
+              "ordinal": 2,
+              "start": 1510,
+              "end": 1540
+            },
+            {
+              "name": "扩展功能联调",
+              "ordinal": 1,
+              "start": 1540,
+              "end": 1570
+            }
+          ],
+          "seed": 11,
+          "budget_seconds": 60
+        }
+      },
+      "model_check": {
+        "variables_objective_hints_and_existing_constraints_identical": true,
+        "only_added_presence_constraints": 11,
+        "paired_inputs_identical": true,
+        "source_business_configuration_preserved": true
+      },
+      "repeat_reverse_order": {
+        "mandatory": {
+          "status": "OPTIMAL",
+          "first_solution_seconds": 36.0686153000006,
+          "elapsed_seconds": 36.573599,
+          "lower_bound": 1570,
+          "proven_optimal": true,
+          "branches": 51011,
+          "conflicts": 1492,
+          "best_makespan": 1570,
+          "best_execution_count": 14,
+          "worker_threads": 1,
+          "input_sha256": "eccf29041216989ee311ad37b6726f3e969cf0af62d04257b7a47294f1fc31ff",
+          "model": {
+            "variables": 635,
+            "constraints": 1673,
+            "optional_occurrence_slots": 30,
+            "support_choices": 232,
+            "threat_checks": 236,
+            "interval_locks": 383,
+            "mandatory_activities": {
+              "policy": "unique_support_presence_v1",
+              "activity_ids": [
+                "activity:3034e5e4-23e9-4f79-892e-3c605607842c",
+                "activity:81206a95-1689-4f3e-a041-2f3dcadc29ac",
+                "activity:8a00aaad-4906-4bb8-873a-4e451852c3fa",
+                "activity:8b8856dc-d3cc-4999-bbfc-36a0ee6f3841",
+                "activity:8f7addd9-3cee-41c5-8a6e-9e16996fceee",
+                "activity:91c49956-f032-466d-82f6-93cdc8dc8891",
+                "activity:a4201bba-5288-4e49-b840-ef762e0449b7",
+                "activity:bc4c32e0-cdde-4db0-ae7f-690583decaee",
+                "activity:cd49665c-5083-4ea1-b4e5-2dcedad88cb0",
+                "activity:ede06859-d172-4f57-87d4-eca32b1ebef7",
+                "activity:fae9abb6-3324-4302-9aae-7501fea68f98"
+              ],
+              "proofs": {
+                "activity:91c49956-f032-466d-82f6-93cdc8dc8891": {
+                  "reason": "positive_goal",
+                  "state_id": "state:91c49956-f032-466d-82f6-93cdc8dc8891:output",
+                  "consumer_activity_id": null
+                },
+                "activity:3034e5e4-23e9-4f79-892e-3c605607842c": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:3034e5e4-23e9-4f79-892e-3c605607842c:output",
+                  "consumer_activity_id": "activity:91c49956-f032-466d-82f6-93cdc8dc8891"
+                },
+                "activity:81206a95-1689-4f3e-a041-2f3dcadc29ac": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:81206a95-1689-4f3e-a041-2f3dcadc29ac:output",
+                  "consumer_activity_id": "activity:91c49956-f032-466d-82f6-93cdc8dc8891"
+                },
+                "activity:8a00aaad-4906-4bb8-873a-4e451852c3fa": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:8a00aaad-4906-4bb8-873a-4e451852c3fa:output",
+                  "consumer_activity_id": "activity:91c49956-f032-466d-82f6-93cdc8dc8891"
+                },
+                "activity:8f7addd9-3cee-41c5-8a6e-9e16996fceee": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:8f7addd9-3cee-41c5-8a6e-9e16996fceee:output",
+                  "consumer_activity_id": "activity:91c49956-f032-466d-82f6-93cdc8dc8891"
+                },
+                "activity:ede06859-d172-4f57-87d4-eca32b1ebef7": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:ede06859-d172-4f57-87d4-eca32b1ebef7:output",
+                  "consumer_activity_id": "activity:91c49956-f032-466d-82f6-93cdc8dc8891"
+                },
+                "activity:a4201bba-5288-4e49-b840-ef762e0449b7": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:a4201bba-5288-4e49-b840-ef762e0449b7:output",
+                  "consumer_activity_id": "activity:3034e5e4-23e9-4f79-892e-3c605607842c"
+                },
+                "activity:cd49665c-5083-4ea1-b4e5-2dcedad88cb0": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:cd49665c-5083-4ea1-b4e5-2dcedad88cb0:output",
+                  "consumer_activity_id": "activity:81206a95-1689-4f3e-a041-2f3dcadc29ac"
+                },
+                "activity:8b8856dc-d3cc-4999-bbfc-36a0ee6f3841": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:8b8856dc-d3cc-4999-bbfc-36a0ee6f3841:output",
+                  "consumer_activity_id": "activity:8a00aaad-4906-4bb8-873a-4e451852c3fa"
+                },
+                "activity:fae9abb6-3324-4302-9aae-7501fea68f98": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:fae9abb6-3324-4302-9aae-7501fea68f98:output",
+                  "consumer_activity_id": "activity:8a00aaad-4906-4bb8-873a-4e451852c3fa"
+                },
+                "activity:bc4c32e0-cdde-4db0-ae7f-690583decaee": {
+                  "reason": "mandatory_precondition",
+                  "state_id": "state:bc4c32e0-cdde-4db0-ae7f-690583decaee:output",
+                  "consumer_activity_id": "activity:a4201bba-5288-4e49-b840-ef762e0449b7"
+                }
+              },
+              "status": "complete",
+              "added_constraints": 11,
+              "seconds": 5.149999924469739e-05
+            }
+          },
+          "mandatory_names": [
+            "模块A功能调测",
+            "模块B调测",
+            "安全验收",
+            "模块D安装",
+            "上电",
+            "扩展功能联调",
+            "模块A安装",
+            "集成检测完成",
+            "模块B安装",
+            "联调扩展件安装",
+            "模块C安装"
+          ],
+          "validator": "VALID",
+          "schedule": [
+            {
+              "name": "集成检测完成",
+              "ordinal": 1,
+              "start": 0,
+              "end": 20
+            },
+            {
+              "name": "模块A安装",
+              "ordinal": 1,
+              "start": 20,
+              "end": 80
+            },
+            {
+              "name": "模块B安装",
+              "ordinal": 1,
+              "start": 80,
+              "end": 100
+            },
+            {
+              "name": "模块D安装",
+              "ordinal": 1,
+              "start": 100,
+              "end": 140
+            },
+            {
+              "name": "模块C安装",
+              "ordinal": 1,
+              "start": 140,
+              "end": 160
+            },
+            {
+              "name": "安全验收",
+              "ordinal": 1,
+              "start": 160,
+              "end": 200
+            },
+            {
+              "name": "上电",
+              "ordinal": 1,
+              "start": 200,
+              "end": 230
+            },
+            {
+              "name": "模块B调测",
+              "ordinal": 1,
+              "start": 230,
+              "end": 340
+            },
+            {
+              "name": "模块A功能调测",
+              "ordinal": 1,
+              "start": 340,
+              "end": 370
+            },
+            {
+              "name": "下电",
+              "ordinal": 1,
+              "start": 370,
+              "end": 380
+            },
+            {
+              "name": "联调扩展件安装",
+              "ordinal": 1,
+              "start": 1440,
+              "end": 1470
+            },
+            {
+              "name": "安全验收",
+              "ordinal": 2,
+              "start": 1470,
+              "end": 1510
+            },
+            {
+              "name": "上电",
+              "ordinal": 2,
+              "start": 1510,
+              "end": 1540
+            },
+            {
+              "name": "扩展功能联调",
+              "ordinal": 1,
+              "start": 1540,
+              "end": 1570
+            }
+          ],
+          "seed": 11,
+          "budget_seconds": 60
+        },
+        "baseline": {
+          "status": "OPTIMAL",
+          "first_solution_seconds": 5.563116200000877,
+          "elapsed_seconds": 6.034452,
+          "lower_bound": 1570,
+          "proven_optimal": true,
+          "branches": 39882,
+          "conflicts": 801,
+          "best_makespan": 1570,
+          "best_execution_count": 14,
+          "worker_threads": 1,
+          "input_sha256": "eccf29041216989ee311ad37b6726f3e969cf0af62d04257b7a47294f1fc31ff",
+          "model": {
+            "variables": 635,
+            "constraints": 1662,
+            "optional_occurrence_slots": 30,
+            "support_choices": 232,
+            "threat_checks": 236,
+            "interval_locks": 383,
+            "mandatory_activities": {
+              "policy": "disabled_for_comparison",
+              "proofs": {},
+              "added_constraints": 0
+            }
+          },
+          "mandatory_names": [],
+          "validator": "VALID",
+          "schedule": [
+            {
+              "name": "集成检测完成",
+              "ordinal": 1,
+              "start": 0,
+              "end": 20
+            },
+            {
+              "name": "模块B安装",
+              "ordinal": 1,
+              "start": 20,
+              "end": 40
+            },
+            {
+              "name": "模块A安装",
+              "ordinal": 1,
+              "start": 40,
+              "end": 100
+            },
+            {
+              "name": "模块C安装",
+              "ordinal": 1,
+              "start": 100,
+              "end": 120
+            },
+            {
+              "name": "模块D安装",
+              "ordinal": 1,
+              "start": 120,
+              "end": 160
+            },
+            {
+              "name": "安全验收",
+              "ordinal": 1,
+              "start": 160,
+              "end": 200
+            },
+            {
+              "name": "上电",
+              "ordinal": 1,
+              "start": 200,
+              "end": 230
+            },
+            {
+              "name": "模块B调测",
+              "ordinal": 1,
+              "start": 230,
+              "end": 340
+            },
+            {
+              "name": "模块A功能调测",
+              "ordinal": 1,
+              "start": 340,
+              "end": 370
+            },
+            {
+              "name": "下电",
+              "ordinal": 1,
+              "start": 370,
+              "end": 380
+            },
+            {
+              "name": "联调扩展件安装",
+              "ordinal": 1,
+              "start": 1440,
+              "end": 1470
+            },
+            {
+              "name": "安全验收",
+              "ordinal": 2,
+              "start": 1470,
+              "end": 1510
+            },
+            {
+              "name": "上电",
+              "ordinal": 2,
+              "start": 1510,
+              "end": 1540
+            },
+            {
+              "name": "扩展功能联调",
+              "ordinal": 1,
+              "start": 1540,
+              "end": 1570
+            }
+          ],
+          "seed": 11,
+          "budget_seconds": 60
+        }
+      }
+    }
+  },
+  "conclusion": {
+    "solution_quality": "Both cases retain the proven optimal makespan and execution count; all returned schedules pass replay validation.",
+    "normal": "Small wall-time difference; branch count increases. Equal-optimal installation ordering may differ.",
+    "late": "Reproducible performance regression: about 6.1x wall time. Mandatory detection is not a universal acceleration.",
+    "cause_limit": "The only model delta is entailed presence constraints. The exact internal presolve/search cause was not profiled."
+  }
+}

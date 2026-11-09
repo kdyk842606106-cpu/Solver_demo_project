@@ -31,5 +31,8 @@ export const importPlannerExcel = (file) => {
   return api.post('/planner-scenarios/import.xlsx', form, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 export const getPlannerCapabilities = () => api.get('/planner-runs/capabilities')
-export const createPlannerRun = (payload) => api.post('/planner-runs', payload, { silentError: true })
+export const createPlannerRun = (payload) => api.post('/planner-runs', payload, {
+  silentError: true,
+  timeout: Math.max(30000, (Number(payload.budget?.time_limit_seconds) || 5) * 1000 + 30000),
+})
 export const listPlannerRuns = (scenarioId) => api.get('/planner-runs', { params: scenarioId ? { scenario_id: scenarioId } : {} })

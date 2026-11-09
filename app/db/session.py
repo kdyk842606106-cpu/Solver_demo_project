@@ -75,6 +75,8 @@ def patch_sqlite_types(force: bool = False):
         models.PlannerScenarioRecord.__table__.c.scenario_json,
         models.PlannerRunRecord.__table__.c.request_json,
         models.PlannerRunRecord.__table__.c.result_json,
+        models.PlannerRunRecord.__table__.c.progress_json,
+        models.PlannerRunRecord.__table__.c.live_plan_json,
     ]
     for column in json_columns:
         column.type = JSON()

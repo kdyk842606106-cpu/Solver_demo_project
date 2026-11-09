@@ -1,0 +1,528 @@
+{
+  "policy": "activity_repeat_proof_v2",
+  "tests_passed": 108,
+  "mixed_input": {
+    "schema_version": 2,
+    "id": "mixed-recovery-pruning",
+    "execution_mode": "parallel",
+    "max_steps": 8,
+    "initial_state_ids": [
+      "ready",
+      "permit"
+    ],
+    "goal_state_ids": [
+      "token",
+      "done:finalize",
+      "done:audit"
+    ],
+    "forbidden_state_ids": [
+      "permit"
+    ],
+    "resources": [
+      {
+        "id": "crew",
+        "capacity": 1
+      }
+    ],
+    "activities": [
+      {
+        "id": "prepare",
+        "name": "prepare",
+        "duration": 1,
+        "output_state_id": "done:prepare",
+        "additional_output_state_ids": [],
+        "resource_reqs": {
+          "crew": 1
+        },
+        "max_instances": null,
+        "preconditions": [
+          {
+            "state_id": "ready",
+            "relation_role": "required"
+          }
+        ]
+      },
+      {
+        "id": "restore",
+        "name": "restore",
+        "duration": 1,
+        "output_state_id": "done:restore",
+        "additional_output_state_ids": [
+          "token"
+        ],
+        "resource_reqs": {
+          "crew": 1
+        },
+        "max_instances": null,
+        "preconditions": [
+          {
+            "state_id": "done:prepare",
+            "relation_role": "required"
+          }
+        ]
+      },
+      {
+        "id": "use",
+        "name": "use",
+        "duration": 1,
+        "output_state_id": "done:use",
+        "additional_output_state_ids": [],
+        "resource_reqs": {
+          "crew": 1
+        },
+        "max_instances": 1,
+        "preconditions": [
+          {
+            "state_id": "token",
+            "relation_role": "transition"
+          }
+        ]
+      },
+      {
+        "id": "finalize",
+        "name": "finalize",
+        "duration": 1,
+        "output_state_id": "done:finalize",
+        "additional_output_state_ids": [],
+        "resource_reqs": {
+          "crew": 1
+        },
+        "max_instances": null,
+        "preconditions": [
+          {
+            "state_id": "token",
+            "relation_role": "required"
+          },
+          {
+            "state_id": "done:use",
+            "relation_role": "required"
+          }
+        ]
+      },
+      {
+        "id": "audit",
+        "name": "audit",
+        "duration": 1,
+        "output_state_id": "done:audit",
+        "additional_output_state_ids": [],
+        "resource_reqs": {
+          "crew": 1
+        },
+        "max_instances": null,
+        "preconditions": [
+          {
+            "state_id": "permit",
+            "relation_role": "transition"
+          }
+        ]
+      }
+    ]
+  },
+  "cases": {
+    "mixed_pruned": {
+      "status": "OPTIMAL",
+      "makespan": 6,
+      "executions": 6,
+      "validator": "VALID",
+      "wall_seconds": 0.019831199999316595,
+      "branches": 92,
+      "model": {
+        "candidate_activities": 5,
+        "optional_occurrence_slots": 12,
+        "occurrence_pruning": {
+          "policy": "activity_repeat_proof_v2",
+          "eligible": true,
+          "applied": true,
+          "skip_reason": null,
+          "input_slots": 33,
+          "effective_slots": 12,
+          "removed_slots": 21,
+          "activity_limits": {
+            "prepare": {
+              "input_limit": 8,
+              "effective_limit": 1
+            },
+            "finalize": {
+              "input_limit": 8,
+              "effective_limit": 1
+            },
+            "audit": {
+              "input_limit": 8,
+              "effective_limit": 1
+            }
+          },
+          "activity_proofs": {
+            "prepare": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "done:prepare"
+              ]
+            },
+            "finalize": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "done:finalize"
+              ]
+            },
+            "audit": {
+              "reason": "nonrenewable_transition",
+              "state_ids": [
+                "permit"
+              ]
+            }
+          },
+          "retained_activities": {
+            "restore": {
+              "reason": "output_can_be_removed",
+              "state_ids": [
+                "token"
+              ]
+            },
+            "use": {
+              "reason": "state_removal_or_transition",
+              "state_ids": [
+                "token"
+              ]
+            }
+          }
+        },
+        "exclusive_activity_count": 0,
+        "exclusive_occurrence_slots": 0,
+        "state_count": 8,
+        "horizon": 8,
+        "support_choices": 38,
+        "threat_checks": 16,
+        "interval_locks": 53,
+        "variables": 83,
+        "constraints": 242,
+        "execution_mode": "parallel",
+        "time_window_count": 0,
+        "model_time_axis": "elapsed_minutes"
+      }
+    },
+    "mixed_unpruned": {
+      "status": "OPTIMAL",
+      "makespan": 6,
+      "executions": 6,
+      "validator": "VALID",
+      "wall_seconds": 0.03202949999831617,
+      "branches": 183,
+      "model": {
+        "candidate_activities": 5,
+        "optional_occurrence_slots": 33,
+        "occurrence_pruning": {
+          "policy": "unpruned_control"
+        },
+        "exclusive_activity_count": 0,
+        "exclusive_occurrence_slots": 0,
+        "state_count": 8,
+        "horizon": 8,
+        "support_choices": 192,
+        "threat_checks": 128,
+        "interval_locks": 256,
+        "variables": 356,
+        "constraints": 1068,
+        "execution_mode": "parallel",
+        "time_window_count": 0,
+        "model_time_axis": "elapsed_minutes"
+      }
+    },
+    "test_a": {
+      "source_run_id": "planner-run:01c77535-00d6-4dda-9294-657d036bb1cc",
+      "status": "OPTIMAL",
+      "makespan": 758,
+      "executions": 9,
+      "validator": "VALID",
+      "wall_seconds": 0.05183219999889843,
+      "branches": 21,
+      "model": {
+        "candidate_activities": 10,
+        "optional_occurrence_slots": 10,
+        "occurrence_pruning": {
+          "policy": "activity_repeat_proof_v2",
+          "eligible": true,
+          "applied": true,
+          "skip_reason": null,
+          "input_slots": 210,
+          "effective_slots": 10,
+          "removed_slots": 200,
+          "activity_limits": {
+            "activity:a4201bba-5288-4e49-b840-ef762e0449b7": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:bc4c32e0-cdde-4db0-ae7f-690583decaee": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:cd49665c-5083-4ea1-b4e5-2dcedad88cb0": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:fae9abb6-3324-4302-9aae-7501fea68f98": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:8b8856dc-d3cc-4999-bbfc-36a0ee6f3841": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:8a00aaad-4906-4bb8-873a-4e451852c3fa": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:8f7addd9-3cee-41c5-8a6e-9e16996fceee": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:3034e5e4-23e9-4f79-892e-3c605607842c": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:81206a95-1689-4f3e-a041-2f3dcadc29ac": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:92507e64-bd8c-46e5-8b1d-01e3cacd5ac6": {
+              "input_limit": 21,
+              "effective_limit": 1
+            }
+          },
+          "activity_proofs": {
+            "activity:a4201bba-5288-4e49-b840-ef762e0449b7": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:a4201bba-5288-4e49-b840-ef762e0449b7:output"
+              ]
+            },
+            "activity:bc4c32e0-cdde-4db0-ae7f-690583decaee": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:bc4c32e0-cdde-4db0-ae7f-690583decaee:output"
+              ]
+            },
+            "activity:cd49665c-5083-4ea1-b4e5-2dcedad88cb0": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:cd49665c-5083-4ea1-b4e5-2dcedad88cb0:output"
+              ]
+            },
+            "activity:fae9abb6-3324-4302-9aae-7501fea68f98": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:fae9abb6-3324-4302-9aae-7501fea68f98:output"
+              ]
+            },
+            "activity:8b8856dc-d3cc-4999-bbfc-36a0ee6f3841": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:8b8856dc-d3cc-4999-bbfc-36a0ee6f3841:output"
+              ]
+            },
+            "activity:8a00aaad-4906-4bb8-873a-4e451852c3fa": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:8a00aaad-4906-4bb8-873a-4e451852c3fa:output"
+              ]
+            },
+            "activity:8f7addd9-3cee-41c5-8a6e-9e16996fceee": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:8f7addd9-3cee-41c5-8a6e-9e16996fceee:output"
+              ]
+            },
+            "activity:3034e5e4-23e9-4f79-892e-3c605607842c": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:3034e5e4-23e9-4f79-892e-3c605607842c:output"
+              ]
+            },
+            "activity:81206a95-1689-4f3e-a041-2f3dcadc29ac": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:81206a95-1689-4f3e-a041-2f3dcadc29ac:output"
+              ]
+            },
+            "activity:92507e64-bd8c-46e5-8b1d-01e3cacd5ac6": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:92507e64-bd8c-46e5-8b1d-01e3cacd5ac6:output"
+              ]
+            }
+          },
+          "retained_activities": {}
+        },
+        "exclusive_activity_count": 5,
+        "exclusive_occurrence_slots": 5,
+        "state_count": 10,
+        "horizon": 142998,
+        "support_choices": 17,
+        "threat_checks": 0,
+        "interval_locks": 14,
+        "variables": 48,
+        "constraints": 117,
+        "execution_mode": "parallel",
+        "time_window_count": 0,
+        "model_time_axis": "working_minutes"
+      }
+    },
+    "assembly20": {
+      "source_run_id": "planner-run:dbb48cc2-2c7f-42a9-8e21-006155a2610c",
+      "status": "OPTIMAL",
+      "makespan": 625,
+      "executions": 20,
+      "validator": "VALID",
+      "wall_seconds": 0.03125249999720836,
+      "branches": 38,
+      "model": {
+        "candidate_activities": 20,
+        "optional_occurrence_slots": 20,
+        "occurrence_pruning": {
+          "policy": "activity_repeat_proof_v2",
+          "eligible": true,
+          "applied": false,
+          "skip_reason": null,
+          "input_slots": 20,
+          "effective_slots": 20,
+          "removed_slots": 0,
+          "activity_limits": {},
+          "activity_proofs": {
+            "activity:51c17609-26fd-444c-ab45-ddff20497f7e": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:51c17609-26fd-444c-ab45-ddff20497f7e:output"
+              ]
+            },
+            "activity:acbfd04e-e831-4e5e-b781-461cb020ce7d": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:acbfd04e-e831-4e5e-b781-461cb020ce7d:output"
+              ]
+            },
+            "activity:d3aa577e-c14a-4fd2-8bd2-086c20c8bca9": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:d3aa577e-c14a-4fd2-8bd2-086c20c8bca9:output"
+              ]
+            },
+            "activity:995983e4-7014-4d99-8aa0-e7cc91ba3fe1": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:995983e4-7014-4d99-8aa0-e7cc91ba3fe1:output"
+              ]
+            },
+            "activity:eb0d1128-aced-49a9-9121-290c39a3baea": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:eb0d1128-aced-49a9-9121-290c39a3baea:output"
+              ]
+            },
+            "activity:9493e1ed-d675-4363-8b40-5f444d73c6b1": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:9493e1ed-d675-4363-8b40-5f444d73c6b1:output"
+              ]
+            },
+            "activity:3876dd3c-6a62-4df3-9103-383a9099eeb2": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:3876dd3c-6a62-4df3-9103-383a9099eeb2:output"
+              ]
+            },
+            "activity:ce107442-a8e7-43fb-9f08-281f2c92355e": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:ce107442-a8e7-43fb-9f08-281f2c92355e:output"
+              ]
+            },
+            "activity:6daf2aae-6962-4a84-91ae-60d8cd88366e": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:6daf2aae-6962-4a84-91ae-60d8cd88366e:output"
+              ]
+            },
+            "activity:bf04aa1e-c455-4150-ba5b-f4950e3fb515": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:bf04aa1e-c455-4150-ba5b-f4950e3fb515:output"
+              ]
+            },
+            "activity:d9f20724-94a9-4d79-9c0d-89921a70ea2b": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:d9f20724-94a9-4d79-9c0d-89921a70ea2b:output"
+              ]
+            },
+            "activity:557fd9e5-7590-4370-948a-c2b70dc1f185": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:557fd9e5-7590-4370-948a-c2b70dc1f185:output"
+              ]
+            },
+            "activity:cd1b723f-7d7b-4115-aa04-5eeaeec20d48": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:cd1b723f-7d7b-4115-aa04-5eeaeec20d48:output"
+              ]
+            },
+            "activity:dd3168d3-4e61-44a2-9073-0c080476d3da": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:dd3168d3-4e61-44a2-9073-0c080476d3da:output"
+              ]
+            },
+            "activity:d7a2a273-22aa-4745-b478-34a8b2e6895d": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:d7a2a273-22aa-4745-b478-34a8b2e6895d:output"
+              ]
+            },
+            "activity:3c59889c-5a57-4162-af45-14c57e3b2634": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:3c59889c-5a57-4162-af45-14c57e3b2634:output"
+              ]
+            },
+            "activity:fce83e00-c62d-43e8-bf5b-df6673172644": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:fce83e00-c62d-43e8-bf5b-df6673172644:output"
+              ]
+            },
+            "activity:28984bf0-a764-48a2-9d0e-1dc79b89ee04": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:28984bf0-a764-48a2-9d0e-1dc79b89ee04:output"
+              ]
+            },
+            "activity:97e3d665-8a5b-41f8-b741-88148e41a5bb": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:97e3d665-8a5b-41f8-b741-88148e41a5bb:output"
+              ]
+            },
+            "activity:4365cc42-e27c-4cce-8ed7-2d871f58d637": {
+              "reason": "persistent_outputs",
+              "state_ids": [
+                "state:4365cc42-e27c-4cce-8ed7-2d871f58d637:output"
+              ]
+            }
+          },
+          "retained_activities": {}
+        },
+        "exclusive_activity_count": 11,
+        "exclusive_occurrence_slots": 11,
+        "state_count": 23,
+        "horizon": 900,
+        "support_choices": 61,
+        "threat_checks": 0,
+        "interval_locks": 59,
+        "variables": 122,
+        "constraints": 348,
+        "execution_mode": "parallel",
+        "time_window_count": 0,
+        "model_time_axis": "working_minutes"
+      }
+    }
+  }
+}

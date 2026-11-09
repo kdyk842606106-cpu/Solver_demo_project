@@ -1,0 +1,14 @@
+.schedule-gantt { min-width: 0; border: 1px solid #d5dfeb; background: #fff; }
+.schedule-gantt-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid #d5dfeb; font-size: 12px; color: #4a5c74; }
+.schedule-gantt-toolbar label { display: flex; gap: 8px; align-items: center; }
+.schedule-gantt-toolbar select { width: 110px; padding: 5px 8px; }
+.schedule-gantt-toolbar small { color: #6c7d93; }
+.schedule-gantt-canvas { height: 580px; min-height: 300px; max-height: 70vh; }
+.schedule-gantt-canvas .wx-theme { height: 100%; min-height: 0; }
+.schedule-gantt .wx-willow-theme { --wx-font-family: inherit; --wx-font-size: 12px; --wx-color-primary: #2150ed; --wx-gantt-border-color: #d5dfeb; --wx-gantt-task-color: transparent; --wx-gantt-task-border: none; --wx-gantt-bar-shadow: none; }
+.schedule-gantt .wx-bar.wx-task { background: transparent; border: 0; box-shadow: none; border-radius: 0; }
+.schedule-gantt .execution-bar { position: absolute; inset: 0; border-top: 1px dashed #9baeca; border-bottom: 1px dashed #9baeca; }
+.schedule-gantt .execution-work { position: absolute; height: 100%; background: #2459db; color: #fff; border-radius: 2px; overflow: hidden; white-space: nowrap; display: flex; align-items: center; }
+.schedule-gantt .execution-work > span { padding: 0 5px; font-size: 11px; }
+.schedule-gantt .wx-selected .execution-work { background: #123aab; }
+@media (max-width: 800px) { .schedule-gantt-canvas { height: 460px; } }

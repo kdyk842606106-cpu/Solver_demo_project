@@ -640,6 +640,33 @@ test('all engines display one shared snapshot and valid replay results', async (
   await expect(page.getByText('VALID', { exact: true })).toHaveCount(4)
 })
 
+test('joint CP-SAT selection displays proof, first solution and normalization metrics', async ({ page }) => {
+  await page.route('**/api/v1/planner-runs', async (route, request) => {
+    const body = request.postDataJSON()
+    const joint = {
+      ...result('JOINT_CP_SAT'), status: 'OPTIMAL', proven_optimal: true, lower_bound: 5,
+      first_solution_seconds: 0.012,
+      stats: { branches: 18, normalization: { raw_schedule_makespan: 12, left_shift_saved_time: 5, terminal_tail_saved_time: 2 } },
+    }
+    await route.fulfill({ status: 201, json: { id: 'planner-run:joint', status: 'OPTIMAL', scenario_hash: 'same-hash', request: body,
+      result: { engines_share_mutable_state: false, results: { JOINT_CP_SAT: joint } } } })
+  })
+  await page.goto('/')
+  await page.getByText('多引擎求解', { exact: true }).click()
+  await page.locator('.el-form-item').filter({ hasText: '运行方式' }).locator('.el-select').click()
+  await page.getByRole('option', { name: '联合 CP-SAT', exact: true }).click()
+  const runRequest = page.waitForRequest(r => r.url().endsWith('/api/v1/planner-runs') && r.method() === 'POST')
+  await page.getByRole('button', { name: '开始求解' }).click()
+  expect((await runRequest).postDataJSON().engine).toBe('JOINT_CP_SAT')
+  await expect(page.locator('.comparison-card')).toContainText('已证明最优')
+  await expect(page.locator('.comparison-card')).toContainText('0.012')
+  await expect(page.getByTestId('gantt-chart-canvas').locator('canvas')).toBeVisible()
+  await page.getByRole('tab', { name: '求解指标' }).click()
+  await expect(page.getByText('工期下界', { exact: true })).toBeVisible()
+  await expect(page.getByText('原始排程工期', { exact: true })).toBeVisible()
+  await expect(page.getByText('达成目标后截尾节省', { exact: true })).toBeVisible()
+})
+
 test('current and target trees cascade packages and submit canonical states once', async ({ page }) => {
   await page.goto('/')
   await page.getByText('多引擎求解', { exact: true }).click()

@@ -1,0 +1,1942 @@
+{
+  "source": "D:\\planner\\runs\\mainline-joint-cpsat-windows30-20261103\\input.json",
+  "source_sha256": "f72aa2f75bbcbffc74679fa83110aa94d7a69ade56b1dbe89f37ab59415e67f2",
+  "semantic_roundtrip_checked": true,
+  "activity_count": 256,
+  "window_count": 30,
+  "result": {
+    "algorithm": "JOINT_CP_SAT",
+    "run_id": "product-joint-acceptance",
+    "seed": 11,
+    "status": "OPTIMAL",
+    "first_solution_seconds": 15.784031299997878,
+    "improvements": [],
+    "stats": {
+      "proven_optimal": true,
+      "proven_infeasible": false,
+      "candidate_count": 1,
+      "validator_rejections": [],
+      "late_candidate_count": 0,
+      "candidate_history": [
+        {
+          "seconds": 15.784031299997878,
+          "solver_objective": 1451.0,
+          "raw_schedule_makespan": 1451,
+          "shifted_schedule_makespan": 1451,
+          "delivered_makespan": 1451,
+          "left_shift_saved_time": 0,
+          "terminal_tail_saved_time": 0
+        }
+      ],
+      "normalization_policy": "preserve_disjoint_orders_left_shift_then_stop_at_goal",
+      "worker_threads": 1,
+      "random_seed": 11,
+      "lower_bound": 1451,
+      "best_makespan": 1451,
+      "time_limit_seconds": 60.0,
+      "budget_policy": "cooperative deadline includes build and validation; late candidates excluded",
+      "proof_scope": "input execution count bounds",
+      "transition_limit_applied": false,
+      "model": {
+        "candidate_activities": 256,
+        "optional_occurrence_slots": 282,
+        "state_count": 264,
+        "horizon": 4170,
+        "support_choices": 2586,
+        "threat_checks": 11976,
+        "interval_locks": 4327,
+        "variables": 14605,
+        "constraints": 34560,
+        "execution_mode": "parallel",
+        "time_window_count": 30
+      },
+      "build_seconds": 0.2240070999978343,
+      "normalization": {
+        "seconds": 15.784031299997878,
+        "solver_objective": 1451.0,
+        "raw_schedule_makespan": 1451,
+        "shifted_schedule_makespan": 1451,
+        "delivered_makespan": 1451,
+        "left_shift_saved_time": 0,
+        "terminal_tail_saved_time": 0,
+        "omitted_tail_occurrences": []
+      },
+      "solver_status": "OPTIMAL",
+      "branches": 125385,
+      "conflicts": 1806,
+      "response_stats": "CpSolverResponse summary:\nstatus: OPTIMAL\nobjective: 1451\nbest_bound: 1451\nintegers: 372\nbooleans: 12708\nconflicts: 1806\nbranches: 125385\npropagations: 519186\ninteger_propagations: 1021648\nrestarts: 5\nlp_iterations: 136\nwalltime: 15.5655\nusertime: 15.5655\ndeterministic_time: 1.46518\ngap_integral: 0\nsolution_fingerprint: 0x823413e8e2b91fd5\n",
+      "stop_reason": "OPTIMAL",
+      "elapsed_seconds": 15.796178399999917,
+      "validator_accepted": 1,
+      "validator_rejected": 0
+    },
+    "diagnosis": {
+      "error_code": "JOINT_CP_SAT_OPTIMAL",
+      "error_message": ""
+    },
+    "error": null,
+    "elapsed_seconds": 16.808264,
+    "scenario_hash": "c2636273cfc9c0b4cb2c319324238ce5b6dc09f7e8c52ad04d0198291c19dc51",
+    "input_schema": "planner-shared-scenario/v2",
+    "validator_shared": true,
+    "engine_pipeline": "joint_state_planning_cp_sat+validated_normalization",
+    "requested_objectives": [
+      {
+        "type": "minimize_makespan",
+        "weight": 1.0
+      }
+    ],
+    "applied_objectives": [
+      {
+        "type": "minimize_makespan",
+        "weight": 1.0
+      }
+    ],
+    "proven_optimal": true,
+    "proven_infeasible": false,
+    "lower_bound": 1451,
+    "validator_time_windows": 30,
+    "paths": [
+      {
+        "path_id": "joint_cp_sat-b497baa774eb",
+        "metrics": {
+          "goal_check": true,
+          "makespan": 1451,
+          "execution_count": 254,
+          "transition_count": 2,
+          "state_revisit_count": 0,
+          "goal_regression_count": 0,
+          "non_causal_action_count": 12,
+          "total_wait": 55,
+          "missing_goal_facts": 0,
+          "activity_duration_sum": 1602,
+          "serial_baseline_makespan": 1602,
+          "parallel_savings": 151,
+          "compression_ratio": 0.09425717852684144,
+          "peak_parallelism": 3,
+          "average_parallelism": 1.1040661612680909,
+          "resource_peak": [
+            [
+              "electricians",
+              2
+            ],
+            [
+              "install_team",
+              1
+            ],
+            [
+              "instrument",
+              1
+            ]
+          ],
+          "resource_utilization": [
+            [
+              "electricians",
+              0.543762922122674
+            ],
+            [
+              "install_team",
+              0.13439007580978635
+            ],
+            [
+              "instrument",
+              0.2866988283942109
+            ]
+          ],
+          "critical_path_length": 1451,
+          "idle_wait_time": 55
+        },
+        "validator_status": "VALID",
+        "validator_version": "temporal-event-validator-v5",
+        "raw_makespan": 1451,
+        "normalization_saved_time": 0,
+        "discovered_at_seconds": 15.784031299997878,
+        "final_state_ids": [
+          "done:B1_01",
+          "done:B1_02",
+          "done:B1_03",
+          "done:B1_04",
+          "done:B1_05",
+          "done:B1_06",
+          "done:B1_07",
+          "done:B1_08",
+          "done:B1_09",
+          "done:B1_10",
+          "done:B1_11",
+          "done:B1_12",
+          "done:B1_13",
+          "done:B1_14",
+          "done:B1_15",
+          "done:B1_16",
+          "done:B1_17",
+          "done:B1_18",
+          "done:B1_19",
+          "done:B1_20",
+          "done:B2_01",
+          "done:B2_02",
+          "done:B2_03",
+          "done:B2_04",
+          "done:B2_05",
+          "done:B2_06",
+          "done:B2_07",
+          "done:B2_08",
+          "done:B2_09",
+          "done:B2_10",
+          "done:B2_11",
+          "done:B2_12",
+          "done:B2_13",
+          "done:B2_14",
+          "done:B2_15",
+          "done:B2_16",
+          "done:B2_17",
+          "done:B2_18",
+          "done:B2_19",
+          "done:B2_20",
+          "done:B3_01",
+          "done:B3_02",
+          "done:B3_03",
+          "done:B3_04",
+          "done:B3_05",
+          "done:B3_06",
+          "done:B3_07",
+          "done:B3_08",
+          "done:B3_09",
+          "done:B3_10",
+          "done:B3_11",
+          "done:B3_12",
+          "done:B3_13",
+          "done:B3_14",
+          "done:B3_15",
+          "done:B3_16",
+          "done:B3_17",
+          "done:B3_18",
+          "done:B3_19",
+          "done:B3_20",
+          "done:CHECK_B1_05",
+          "done:CHECK_B1_10",
+          "done:CHECK_B1_15",
+          "done:CHECK_B1_20",
+          "done:CHECK_B2_05",
+          "done:CHECK_B2_10",
+          "done:CHECK_B2_15",
+          "done:CHECK_B2_20",
+          "done:CHECK_B3_05",
+          "done:CHECK_B3_10",
+          "done:CHECK_B3_15",
+          "done:CHECK_B3_20",
+          "done:M001",
+          "done:M002",
+          "done:M003",
+          "done:M004",
+          "done:M005",
+          "done:M006",
+          "done:M007",
+          "done:M008",
+          "done:M009",
+          "done:M010",
+          "done:M011",
+          "done:M012",
+          "done:M013",
+          "done:M014",
+          "done:M015",
+          "done:M016",
+          "done:M017",
+          "done:M018",
+          "done:M019",
+          "done:M020",
+          "done:M021",
+          "done:M022",
+          "done:M023",
+          "done:M024",
+          "done:M025",
+          "done:M026",
+          "done:M027",
+          "done:M028",
+          "done:M029",
+          "done:M030",
+          "done:M031",
+          "done:M032",
+          "done:M033",
+          "done:M034",
+          "done:M035",
+          "done:M036",
+          "done:M037",
+          "done:M038",
+          "done:M039",
+          "done:M040",
+          "done:M041",
+          "done:M042",
+          "done:M043",
+          "done:M044",
+          "done:M045",
+          "done:M046",
+          "done:M047",
+          "done:M048",
+          "done:M049",
+          "done:M050",
+          "done:M051",
+          "done:M052",
+          "done:M053",
+          "done:M054",
+          "done:M055",
+          "done:M056",
+          "done:M057",
+          "done:M058",
+          "done:M059",
+          "done:M060",
+          "done:M061",
+          "done:M062",
+          "done:M063",
+          "done:M064",
+          "done:M065",
+          "done:M066",
+          "done:M067",
+          "done:M068",
+          "done:M069",
+          "done:M070",
+          "done:M071",
+          "done:M072",
+          "done:M073",
+          "done:M074",
+          "done:M075",
+          "done:M076",
+          "done:M077",
+          "done:M078",
+          "done:M079",
+          "done:M080",
+          "done:M081",
+          "done:M082",
+          "done:M083",
+          "done:M084",
+          "done:M085",
+          "done:M086",
+          "done:M087",
+          "done:M088",
+          "done:M089",
+          "done:M090",
+          "done:M091",
+          "done:M092",
+          "done:M093",
+          "done:M094",
+          "done:M095",
+          "done:M096",
+          "done:M097",
+          "done:M098",
+          "done:M099",
+          "done:M100",
+          "done:M101",
+          "done:M102",
+          "done:M103",
+          "done:M104",
+          "done:M105",
+          "done:M106",
+          "done:M107",
+          "done:M108",
+          "done:M109",
+          "done:M110",
+          "done:M111",
+          "done:M112",
+          "done:M113",
+          "done:M114",
+          "done:M115",
+          "done:M116",
+          "done:M117",
+          "done:M118",
+          "done:M119",
+          "done:M120",
+          "done:M121",
+          "done:M122",
+          "done:M123",
+          "done:M124",
+          "done:M125",
+          "done:M126",
+          "done:M127",
+          "done:M128",
+          "done:M129",
+          "done:M130",
+          "done:M131",
+          "done:M132",
+          "done:M133",
+          "done:M134",
+          "done:M135",
+          "done:M136",
+          "done:M137",
+          "done:M138",
+          "done:M139",
+          "done:M140",
+          "done:M141",
+          "done:M142",
+          "done:M143",
+          "done:M144",
+          "done:M145",
+          "done:M146",
+          "done:M147",
+          "done:M148",
+          "done:M149",
+          "done:M150",
+          "done:M151",
+          "done:M152",
+          "done:M153",
+          "done:M154",
+          "done:M155",
+          "done:M156",
+          "done:M157",
+          "done:M158",
+          "done:M159",
+          "done:M160",
+          "done:M161",
+          "done:M162",
+          "done:M163",
+          "done:M164",
+          "done:M165",
+          "done:M166",
+          "done:M167",
+          "done:M168",
+          "done:M169",
+          "done:M170",
+          "done:M171",
+          "done:M172",
+          "done:M173",
+          "done:M174",
+          "done:M175",
+          "done:M176",
+          "done:M177",
+          "done:M178",
+          "done:M179",
+          "done:M180",
+          "done:power_on",
+          "done:unground",
+          "mode:on",
+          "valid:cal",
+          "valid:test"
+        ],
+        "executions": [
+          {
+            "activity_id": "M001",
+            "ordinal": 1,
+            "start_time": 0,
+            "end_time": 9
+          },
+          {
+            "activity_id": "M002",
+            "ordinal": 1,
+            "start_time": 9,
+            "end_time": 15
+          },
+          {
+            "activity_id": "M003",
+            "ordinal": 1,
+            "start_time": 15,
+            "end_time": 24
+          },
+          {
+            "activity_id": "M004",
+            "ordinal": 1,
+            "start_time": 24,
+            "end_time": 31
+          },
+          {
+            "activity_id": "M005",
+            "ordinal": 1,
+            "start_time": 31,
+            "end_time": 39
+          },
+          {
+            "activity_id": "M006",
+            "ordinal": 1,
+            "start_time": 39,
+            "end_time": 44
+          },
+          {
+            "activity_id": "M007",
+            "ordinal": 1,
+            "start_time": 44,
+            "end_time": 54
+          },
+          {
+            "activity_id": "M008",
+            "ordinal": 1,
+            "start_time": 54,
+            "end_time": 63
+          },
+          {
+            "activity_id": "M009",
+            "ordinal": 1,
+            "start_time": 63,
+            "end_time": 69
+          },
+          {
+            "activity_id": "M010",
+            "ordinal": 1,
+            "start_time": 69,
+            "end_time": 78
+          },
+          {
+            "activity_id": "M011",
+            "ordinal": 1,
+            "start_time": 78,
+            "end_time": 84
+          },
+          {
+            "activity_id": "M012",
+            "ordinal": 1,
+            "start_time": 84,
+            "end_time": 91
+          },
+          {
+            "activity_id": "M013",
+            "ordinal": 1,
+            "start_time": 91,
+            "end_time": 99
+          },
+          {
+            "activity_id": "M014",
+            "ordinal": 1,
+            "start_time": 99,
+            "end_time": 109
+          },
+          {
+            "activity_id": "M015",
+            "ordinal": 1,
+            "start_time": 109,
+            "end_time": 115
+          },
+          {
+            "activity_id": "M016",
+            "ordinal": 1,
+            "start_time": 115,
+            "end_time": 122
+          },
+          {
+            "activity_id": "M017",
+            "ordinal": 1,
+            "start_time": 122,
+            "end_time": 130
+          },
+          {
+            "activity_id": "M018",
+            "ordinal": 1,
+            "start_time": 130,
+            "end_time": 135
+          },
+          {
+            "activity_id": "M019",
+            "ordinal": 1,
+            "start_time": 135,
+            "end_time": 142
+          },
+          {
+            "activity_id": "M020",
+            "ordinal": 1,
+            "start_time": 142,
+            "end_time": 148
+          },
+          {
+            "activity_id": "B1_01",
+            "ordinal": 1,
+            "start_time": 148,
+            "end_time": 151
+          },
+          {
+            "activity_id": "B1_02",
+            "ordinal": 1,
+            "start_time": 151,
+            "end_time": 153
+          },
+          {
+            "activity_id": "M021",
+            "ordinal": 1,
+            "start_time": 148,
+            "end_time": 154
+          },
+          {
+            "activity_id": "B1_03",
+            "ordinal": 1,
+            "start_time": 153,
+            "end_time": 156
+          },
+          {
+            "activity_id": "M022",
+            "ordinal": 1,
+            "start_time": 154,
+            "end_time": 159
+          },
+          {
+            "activity_id": "B1_04",
+            "ordinal": 1,
+            "start_time": 156,
+            "end_time": 160
+          },
+          {
+            "activity_id": "B1_05",
+            "ordinal": 1,
+            "start_time": 160,
+            "end_time": 162
+          },
+          {
+            "activity_id": "CHECK_B1_05",
+            "ordinal": 1,
+            "start_time": 162,
+            "end_time": 164
+          },
+          {
+            "activity_id": "B1_06",
+            "ordinal": 1,
+            "start_time": 162,
+            "end_time": 166
+          },
+          {
+            "activity_id": "M023",
+            "ordinal": 1,
+            "start_time": 159,
+            "end_time": 167
+          },
+          {
+            "activity_id": "B1_07",
+            "ordinal": 1,
+            "start_time": 166,
+            "end_time": 168
+          },
+          {
+            "activity_id": "M024",
+            "ordinal": 1,
+            "start_time": 167,
+            "end_time": 176
+          },
+          {
+            "activity_id": "M025",
+            "ordinal": 1,
+            "start_time": 176,
+            "end_time": 183
+          },
+          {
+            "activity_id": "M026",
+            "ordinal": 1,
+            "start_time": 183,
+            "end_time": 189
+          },
+          {
+            "activity_id": "M027",
+            "ordinal": 1,
+            "start_time": 189,
+            "end_time": 197
+          },
+          {
+            "activity_id": "M028",
+            "ordinal": 1,
+            "start_time": 197,
+            "end_time": 204
+          },
+          {
+            "activity_id": "M029",
+            "ordinal": 1,
+            "start_time": 204,
+            "end_time": 210
+          },
+          {
+            "activity_id": "M030",
+            "ordinal": 1,
+            "start_time": 210,
+            "end_time": 220
+          },
+          {
+            "activity_id": "M031",
+            "ordinal": 1,
+            "start_time": 220,
+            "end_time": 228
+          },
+          {
+            "activity_id": "M032",
+            "ordinal": 1,
+            "start_time": 228,
+            "end_time": 236
+          },
+          {
+            "activity_id": "M033",
+            "ordinal": 1,
+            "start_time": 236,
+            "end_time": 242
+          },
+          {
+            "activity_id": "M034",
+            "ordinal": 1,
+            "start_time": 242,
+            "end_time": 247
+          },
+          {
+            "activity_id": "M035",
+            "ordinal": 1,
+            "start_time": 247,
+            "end_time": 255
+          },
+          {
+            "activity_id": "M036",
+            "ordinal": 1,
+            "start_time": 255,
+            "end_time": 263
+          },
+          {
+            "activity_id": "M037",
+            "ordinal": 1,
+            "start_time": 263,
+            "end_time": 270
+          },
+          {
+            "activity_id": "M038",
+            "ordinal": 1,
+            "start_time": 270,
+            "end_time": 276
+          },
+          {
+            "activity_id": "M039",
+            "ordinal": 1,
+            "start_time": 276,
+            "end_time": 281
+          },
+          {
+            "activity_id": "M040",
+            "ordinal": 1,
+            "start_time": 281,
+            "end_time": 291
+          },
+          {
+            "activity_id": "B2_01",
+            "ordinal": 1,
+            "start_time": 291,
+            "end_time": 295
+          },
+          {
+            "activity_id": "B2_02",
+            "ordinal": 1,
+            "start_time": 295,
+            "end_time": 298
+          },
+          {
+            "activity_id": "M041",
+            "ordinal": 1,
+            "start_time": 291,
+            "end_time": 300
+          },
+          {
+            "activity_id": "B1_08",
+            "ordinal": 1,
+            "start_time": 302,
+            "end_time": 307
+          },
+          {
+            "activity_id": "B1_09",
+            "ordinal": 1,
+            "start_time": 307,
+            "end_time": 310
+          },
+          {
+            "activity_id": "M042",
+            "ordinal": 1,
+            "start_time": 300,
+            "end_time": 310
+          },
+          {
+            "activity_id": "B2_03",
+            "ordinal": 1,
+            "start_time": 310,
+            "end_time": 315
+          },
+          {
+            "activity_id": "M043",
+            "ordinal": 1,
+            "start_time": 310,
+            "end_time": 317
+          },
+          {
+            "activity_id": "B2_04",
+            "ordinal": 1,
+            "start_time": 315,
+            "end_time": 318
+          },
+          {
+            "activity_id": "B2_05",
+            "ordinal": 1,
+            "start_time": 318,
+            "end_time": 323
+          },
+          {
+            "activity_id": "CHECK_B2_05",
+            "ordinal": 1,
+            "start_time": 323,
+            "end_time": 325
+          },
+          {
+            "activity_id": "B2_06",
+            "ordinal": 1,
+            "start_time": 323,
+            "end_time": 327
+          },
+          {
+            "activity_id": "M044",
+            "ordinal": 1,
+            "start_time": 317,
+            "end_time": 327
+          },
+          {
+            "activity_id": "B1_10",
+            "ordinal": 1,
+            "start_time": 327,
+            "end_time": 331
+          },
+          {
+            "activity_id": "CHECK_B1_10",
+            "ordinal": 1,
+            "start_time": 331,
+            "end_time": 333
+          },
+          {
+            "activity_id": "M045",
+            "ordinal": 1,
+            "start_time": 327,
+            "end_time": 334
+          },
+          {
+            "activity_id": "B2_07",
+            "ordinal": 1,
+            "start_time": 334,
+            "end_time": 336
+          },
+          {
+            "activity_id": "B1_11",
+            "ordinal": 1,
+            "start_time": 336,
+            "end_time": 342
+          },
+          {
+            "activity_id": "M046",
+            "ordinal": 1,
+            "start_time": 334,
+            "end_time": 342
+          },
+          {
+            "activity_id": "B1_12",
+            "ordinal": 1,
+            "start_time": 342,
+            "end_time": 348
+          },
+          {
+            "activity_id": "M047",
+            "ordinal": 1,
+            "start_time": 342,
+            "end_time": 350
+          },
+          {
+            "activity_id": "M048",
+            "ordinal": 1,
+            "start_time": 350,
+            "end_time": 356
+          },
+          {
+            "activity_id": "M049",
+            "ordinal": 1,
+            "start_time": 356,
+            "end_time": 364
+          },
+          {
+            "activity_id": "M050",
+            "ordinal": 1,
+            "start_time": 364,
+            "end_time": 369
+          },
+          {
+            "activity_id": "M051",
+            "ordinal": 1,
+            "start_time": 369,
+            "end_time": 377
+          },
+          {
+            "activity_id": "M052",
+            "ordinal": 1,
+            "start_time": 377,
+            "end_time": 387
+          },
+          {
+            "activity_id": "M053",
+            "ordinal": 1,
+            "start_time": 387,
+            "end_time": 397
+          },
+          {
+            "activity_id": "M054",
+            "ordinal": 1,
+            "start_time": 397,
+            "end_time": 405
+          },
+          {
+            "activity_id": "M055",
+            "ordinal": 1,
+            "start_time": 405,
+            "end_time": 410
+          },
+          {
+            "activity_id": "M056",
+            "ordinal": 1,
+            "start_time": 410,
+            "end_time": 418
+          },
+          {
+            "activity_id": "M057",
+            "ordinal": 1,
+            "start_time": 418,
+            "end_time": 424
+          },
+          {
+            "activity_id": "M058",
+            "ordinal": 1,
+            "start_time": 424,
+            "end_time": 433
+          },
+          {
+            "activity_id": "M059",
+            "ordinal": 1,
+            "start_time": 433,
+            "end_time": 438
+          },
+          {
+            "activity_id": "M060",
+            "ordinal": 1,
+            "start_time": 438,
+            "end_time": 445
+          },
+          {
+            "activity_id": "B3_01",
+            "ordinal": 1,
+            "start_time": 445,
+            "end_time": 447
+          },
+          {
+            "activity_id": "B3_02",
+            "ordinal": 1,
+            "start_time": 447,
+            "end_time": 449
+          },
+          {
+            "activity_id": "M061",
+            "ordinal": 1,
+            "start_time": 445,
+            "end_time": 450
+          },
+          {
+            "activity_id": "B3_03",
+            "ordinal": 1,
+            "start_time": 449,
+            "end_time": 454
+          },
+          {
+            "activity_id": "M062",
+            "ordinal": 1,
+            "start_time": 450,
+            "end_time": 457
+          },
+          {
+            "activity_id": "B3_04",
+            "ordinal": 1,
+            "start_time": 454,
+            "end_time": 459
+          },
+          {
+            "activity_id": "B3_05",
+            "ordinal": 1,
+            "start_time": 459,
+            "end_time": 463
+          },
+          {
+            "activity_id": "CHECK_B3_05",
+            "ordinal": 1,
+            "start_time": 463,
+            "end_time": 465
+          },
+          {
+            "activity_id": "M063",
+            "ordinal": 1,
+            "start_time": 457,
+            "end_time": 467
+          },
+          {
+            "activity_id": "B3_06",
+            "ordinal": 1,
+            "start_time": 463,
+            "end_time": 469
+          },
+          {
+            "activity_id": "B2_08",
+            "ordinal": 1,
+            "start_time": 469,
+            "end_time": 472
+          },
+          {
+            "activity_id": "B2_09",
+            "ordinal": 1,
+            "start_time": 472,
+            "end_time": 474
+          },
+          {
+            "activity_id": "M064",
+            "ordinal": 1,
+            "start_time": 467,
+            "end_time": 474
+          },
+          {
+            "activity_id": "M065",
+            "ordinal": 1,
+            "start_time": 474,
+            "end_time": 479
+          },
+          {
+            "activity_id": "B3_07",
+            "ordinal": 1,
+            "start_time": 479,
+            "end_time": 482
+          },
+          {
+            "activity_id": "M066",
+            "ordinal": 1,
+            "start_time": 479,
+            "end_time": 486
+          },
+          {
+            "activity_id": "B2_10",
+            "ordinal": 1,
+            "start_time": 482,
+            "end_time": 488
+          },
+          {
+            "activity_id": "B2_11",
+            "ordinal": 1,
+            "start_time": 488,
+            "end_time": 492
+          },
+          {
+            "activity_id": "M067",
+            "ordinal": 1,
+            "start_time": 486,
+            "end_time": 495
+          },
+          {
+            "activity_id": "B2_12",
+            "ordinal": 1,
+            "start_time": 492,
+            "end_time": 497
+          },
+          {
+            "activity_id": "CHECK_B2_10",
+            "ordinal": 1,
+            "start_time": 497,
+            "end_time": 499
+          },
+          {
+            "activity_id": "M068",
+            "ordinal": 1,
+            "start_time": 495,
+            "end_time": 501
+          },
+          {
+            "activity_id": "M069",
+            "ordinal": 1,
+            "start_time": 501,
+            "end_time": 506
+          },
+          {
+            "activity_id": "M070",
+            "ordinal": 1,
+            "start_time": 506,
+            "end_time": 514
+          },
+          {
+            "activity_id": "M071",
+            "ordinal": 1,
+            "start_time": 514,
+            "end_time": 520
+          },
+          {
+            "activity_id": "M072",
+            "ordinal": 1,
+            "start_time": 520,
+            "end_time": 527
+          },
+          {
+            "activity_id": "M073",
+            "ordinal": 1,
+            "start_time": 527,
+            "end_time": 532
+          },
+          {
+            "activity_id": "M074",
+            "ordinal": 1,
+            "start_time": 532,
+            "end_time": 538
+          },
+          {
+            "activity_id": "M075",
+            "ordinal": 1,
+            "start_time": 538,
+            "end_time": 546
+          },
+          {
+            "activity_id": "M076",
+            "ordinal": 1,
+            "start_time": 546,
+            "end_time": 556
+          },
+          {
+            "activity_id": "M077",
+            "ordinal": 1,
+            "start_time": 556,
+            "end_time": 566
+          },
+          {
+            "activity_id": "M078",
+            "ordinal": 1,
+            "start_time": 566,
+            "end_time": 573
+          },
+          {
+            "activity_id": "M079",
+            "ordinal": 1,
+            "start_time": 573,
+            "end_time": 583
+          },
+          {
+            "activity_id": "B3_08",
+            "ordinal": 1,
+            "start_time": 606,
+            "end_time": 611
+          },
+          {
+            "activity_id": "B3_09",
+            "ordinal": 1,
+            "start_time": 611,
+            "end_time": 613
+          },
+          {
+            "activity_id": "B3_10",
+            "ordinal": 1,
+            "start_time": 613,
+            "end_time": 615
+          },
+          {
+            "activity_id": "B3_11",
+            "ordinal": 1,
+            "start_time": 615,
+            "end_time": 619
+          },
+          {
+            "activity_id": "B3_12",
+            "ordinal": 1,
+            "start_time": 619,
+            "end_time": 625
+          },
+          {
+            "activity_id": "CHECK_B3_10",
+            "ordinal": 1,
+            "start_time": 625,
+            "end_time": 627
+          },
+          {
+            "activity_id": "unground",
+            "ordinal": 1,
+            "start_time": 627,
+            "end_time": 630
+          },
+          {
+            "activity_id": "power_on",
+            "ordinal": 1,
+            "start_time": 630,
+            "end_time": 635
+          },
+          {
+            "activity_id": "M080",
+            "ordinal": 1,
+            "start_time": 635,
+            "end_time": 644
+          },
+          {
+            "activity_id": "M081",
+            "ordinal": 1,
+            "start_time": 644,
+            "end_time": 652
+          },
+          {
+            "activity_id": "B1_13",
+            "ordinal": 1,
+            "start_time": 652,
+            "end_time": 655
+          },
+          {
+            "activity_id": "B1_14",
+            "ordinal": 1,
+            "start_time": 655,
+            "end_time": 658
+          },
+          {
+            "activity_id": "M082",
+            "ordinal": 1,
+            "start_time": 652,
+            "end_time": 658
+          },
+          {
+            "activity_id": "B1_15",
+            "ordinal": 1,
+            "start_time": 658,
+            "end_time": 663
+          },
+          {
+            "activity_id": "M083",
+            "ordinal": 1,
+            "start_time": 658,
+            "end_time": 666
+          },
+          {
+            "activity_id": "B1_16",
+            "ordinal": 1,
+            "start_time": 663,
+            "end_time": 669
+          },
+          {
+            "activity_id": "B1_17",
+            "ordinal": 1,
+            "start_time": 669,
+            "end_time": 675
+          },
+          {
+            "activity_id": "B1_18",
+            "ordinal": 1,
+            "start_time": 675,
+            "end_time": 679
+          },
+          {
+            "activity_id": "B1_19",
+            "ordinal": 1,
+            "start_time": 679,
+            "end_time": 683
+          },
+          {
+            "activity_id": "B1_20",
+            "ordinal": 1,
+            "start_time": 684,
+            "end_time": 688
+          },
+          {
+            "activity_id": "M084",
+            "ordinal": 1,
+            "start_time": 688,
+            "end_time": 697
+          },
+          {
+            "activity_id": "B2_13",
+            "ordinal": 1,
+            "start_time": 697,
+            "end_time": 702
+          },
+          {
+            "activity_id": "B2_14",
+            "ordinal": 1,
+            "start_time": 702,
+            "end_time": 704
+          },
+          {
+            "activity_id": "M085",
+            "ordinal": 1,
+            "start_time": 697,
+            "end_time": 704
+          },
+          {
+            "activity_id": "B2_15",
+            "ordinal": 1,
+            "start_time": 704,
+            "end_time": 708
+          },
+          {
+            "activity_id": "M086",
+            "ordinal": 1,
+            "start_time": 704,
+            "end_time": 710
+          },
+          {
+            "activity_id": "B2_16",
+            "ordinal": 1,
+            "start_time": 708,
+            "end_time": 714
+          },
+          {
+            "activity_id": "M087",
+            "ordinal": 1,
+            "start_time": 714,
+            "end_time": 724
+          },
+          {
+            "activity_id": "B3_13",
+            "ordinal": 1,
+            "start_time": 724,
+            "end_time": 726
+          },
+          {
+            "activity_id": "B3_14",
+            "ordinal": 1,
+            "start_time": 726,
+            "end_time": 728
+          },
+          {
+            "activity_id": "M088",
+            "ordinal": 1,
+            "start_time": 724,
+            "end_time": 733
+          },
+          {
+            "activity_id": "B3_15",
+            "ordinal": 1,
+            "start_time": 728,
+            "end_time": 734
+          },
+          {
+            "activity_id": "B3_16",
+            "ordinal": 1,
+            "start_time": 734,
+            "end_time": 739
+          },
+          {
+            "activity_id": "B2_17",
+            "ordinal": 1,
+            "start_time": 739,
+            "end_time": 742
+          },
+          {
+            "activity_id": "M089",
+            "ordinal": 1,
+            "start_time": 733,
+            "end_time": 743
+          },
+          {
+            "activity_id": "B2_18",
+            "ordinal": 1,
+            "start_time": 742,
+            "end_time": 744
+          },
+          {
+            "activity_id": "M090",
+            "ordinal": 1,
+            "start_time": 755,
+            "end_time": 760
+          },
+          {
+            "activity_id": "B2_19",
+            "ordinal": 1,
+            "start_time": 760,
+            "end_time": 765
+          },
+          {
+            "activity_id": "M091",
+            "ordinal": 1,
+            "start_time": 760,
+            "end_time": 765
+          },
+          {
+            "activity_id": "B3_17",
+            "ordinal": 1,
+            "start_time": 765,
+            "end_time": 769
+          },
+          {
+            "activity_id": "M092",
+            "ordinal": 1,
+            "start_time": 765,
+            "end_time": 770
+          },
+          {
+            "activity_id": "B3_18",
+            "ordinal": 1,
+            "start_time": 769,
+            "end_time": 775
+          },
+          {
+            "activity_id": "M093",
+            "ordinal": 1,
+            "start_time": 775,
+            "end_time": 780
+          },
+          {
+            "activity_id": "B3_19",
+            "ordinal": 1,
+            "start_time": 780,
+            "end_time": 782
+          },
+          {
+            "activity_id": "CHECK_B1_20",
+            "ordinal": 1,
+            "start_time": 782,
+            "end_time": 784
+          },
+          {
+            "activity_id": "CHECK_B1_15",
+            "ordinal": 1,
+            "start_time": 784,
+            "end_time": 786
+          },
+          {
+            "activity_id": "CHECK_B3_15",
+            "ordinal": 1,
+            "start_time": 786,
+            "end_time": 788
+          },
+          {
+            "activity_id": "M094",
+            "ordinal": 1,
+            "start_time": 780,
+            "end_time": 789
+          },
+          {
+            "activity_id": "CHECK_B2_15",
+            "ordinal": 1,
+            "start_time": 788,
+            "end_time": 790
+          },
+          {
+            "activity_id": "M095",
+            "ordinal": 1,
+            "start_time": 789,
+            "end_time": 796
+          },
+          {
+            "activity_id": "M096",
+            "ordinal": 1,
+            "start_time": 796,
+            "end_time": 805
+          },
+          {
+            "activity_id": "M097",
+            "ordinal": 1,
+            "start_time": 805,
+            "end_time": 815
+          },
+          {
+            "activity_id": "M098",
+            "ordinal": 1,
+            "start_time": 815,
+            "end_time": 823
+          },
+          {
+            "activity_id": "M099",
+            "ordinal": 1,
+            "start_time": 823,
+            "end_time": 828
+          },
+          {
+            "activity_id": "M100",
+            "ordinal": 1,
+            "start_time": 828,
+            "end_time": 838
+          },
+          {
+            "activity_id": "M101",
+            "ordinal": 1,
+            "start_time": 838,
+            "end_time": 848
+          },
+          {
+            "activity_id": "M102",
+            "ordinal": 1,
+            "start_time": 848,
+            "end_time": 857
+          },
+          {
+            "activity_id": "M103",
+            "ordinal": 1,
+            "start_time": 857,
+            "end_time": 866
+          },
+          {
+            "activity_id": "M104",
+            "ordinal": 1,
+            "start_time": 866,
+            "end_time": 874
+          },
+          {
+            "activity_id": "M105",
+            "ordinal": 1,
+            "start_time": 874,
+            "end_time": 884
+          },
+          {
+            "activity_id": "M106",
+            "ordinal": 1,
+            "start_time": 884,
+            "end_time": 890
+          },
+          {
+            "activity_id": "M107",
+            "ordinal": 1,
+            "start_time": 890,
+            "end_time": 900
+          },
+          {
+            "activity_id": "M108",
+            "ordinal": 1,
+            "start_time": 900,
+            "end_time": 906
+          },
+          {
+            "activity_id": "M109",
+            "ordinal": 1,
+            "start_time": 906,
+            "end_time": 912
+          },
+          {
+            "activity_id": "M110",
+            "ordinal": 1,
+            "start_time": 912,
+            "end_time": 922
+          },
+          {
+            "activity_id": "M111",
+            "ordinal": 1,
+            "start_time": 922,
+            "end_time": 931
+          },
+          {
+            "activity_id": "M112",
+            "ordinal": 1,
+            "start_time": 931,
+            "end_time": 939
+          },
+          {
+            "activity_id": "M113",
+            "ordinal": 1,
+            "start_time": 939,
+            "end_time": 945
+          },
+          {
+            "activity_id": "M114",
+            "ordinal": 1,
+            "start_time": 945,
+            "end_time": 950
+          },
+          {
+            "activity_id": "M115",
+            "ordinal": 1,
+            "start_time": 950,
+            "end_time": 956
+          },
+          {
+            "activity_id": "M116",
+            "ordinal": 1,
+            "start_time": 956,
+            "end_time": 963
+          },
+          {
+            "activity_id": "M117",
+            "ordinal": 1,
+            "start_time": 963,
+            "end_time": 970
+          },
+          {
+            "activity_id": "M118",
+            "ordinal": 1,
+            "start_time": 970,
+            "end_time": 978
+          },
+          {
+            "activity_id": "M119",
+            "ordinal": 1,
+            "start_time": 978,
+            "end_time": 983
+          },
+          {
+            "activity_id": "M120",
+            "ordinal": 1,
+            "start_time": 983,
+            "end_time": 988
+          },
+          {
+            "activity_id": "M121",
+            "ordinal": 1,
+            "start_time": 988,
+            "end_time": 997
+          },
+          {
+            "activity_id": "M122",
+            "ordinal": 1,
+            "start_time": 997,
+            "end_time": 1006
+          },
+          {
+            "activity_id": "M123",
+            "ordinal": 1,
+            "start_time": 1006,
+            "end_time": 1016
+          },
+          {
+            "activity_id": "M124",
+            "ordinal": 1,
+            "start_time": 1016,
+            "end_time": 1023
+          },
+          {
+            "activity_id": "M125",
+            "ordinal": 1,
+            "start_time": 1023,
+            "end_time": 1031
+          },
+          {
+            "activity_id": "M126",
+            "ordinal": 1,
+            "start_time": 1031,
+            "end_time": 1036
+          },
+          {
+            "activity_id": "M127",
+            "ordinal": 1,
+            "start_time": 1036,
+            "end_time": 1042
+          },
+          {
+            "activity_id": "M128",
+            "ordinal": 1,
+            "start_time": 1042,
+            "end_time": 1049
+          },
+          {
+            "activity_id": "M129",
+            "ordinal": 1,
+            "start_time": 1049,
+            "end_time": 1059
+          },
+          {
+            "activity_id": "B2_20",
+            "ordinal": 1,
+            "start_time": 1080,
+            "end_time": 1086
+          },
+          {
+            "activity_id": "M130",
+            "ordinal": 1,
+            "start_time": 1079,
+            "end_time": 1086
+          },
+          {
+            "activity_id": "CHECK_B2_20",
+            "ordinal": 1,
+            "start_time": 1086,
+            "end_time": 1088
+          },
+          {
+            "activity_id": "M131",
+            "ordinal": 1,
+            "start_time": 1086,
+            "end_time": 1091
+          },
+          {
+            "activity_id": "M132",
+            "ordinal": 1,
+            "start_time": 1091,
+            "end_time": 1098
+          },
+          {
+            "activity_id": "M133",
+            "ordinal": 1,
+            "start_time": 1098,
+            "end_time": 1104
+          },
+          {
+            "activity_id": "M134",
+            "ordinal": 1,
+            "start_time": 1104,
+            "end_time": 1111
+          },
+          {
+            "activity_id": "M135",
+            "ordinal": 1,
+            "start_time": 1111,
+            "end_time": 1119
+          },
+          {
+            "activity_id": "M136",
+            "ordinal": 1,
+            "start_time": 1119,
+            "end_time": 1125
+          },
+          {
+            "activity_id": "M137",
+            "ordinal": 1,
+            "start_time": 1125,
+            "end_time": 1133
+          },
+          {
+            "activity_id": "M138",
+            "ordinal": 1,
+            "start_time": 1133,
+            "end_time": 1138
+          },
+          {
+            "activity_id": "M139",
+            "ordinal": 1,
+            "start_time": 1138,
+            "end_time": 1147
+          },
+          {
+            "activity_id": "M140",
+            "ordinal": 1,
+            "start_time": 1147,
+            "end_time": 1154
+          },
+          {
+            "activity_id": "M141",
+            "ordinal": 1,
+            "start_time": 1154,
+            "end_time": 1160
+          },
+          {
+            "activity_id": "M142",
+            "ordinal": 1,
+            "start_time": 1160,
+            "end_time": 1165
+          },
+          {
+            "activity_id": "M143",
+            "ordinal": 1,
+            "start_time": 1165,
+            "end_time": 1172
+          },
+          {
+            "activity_id": "M144",
+            "ordinal": 1,
+            "start_time": 1172,
+            "end_time": 1182
+          },
+          {
+            "activity_id": "M145",
+            "ordinal": 1,
+            "start_time": 1182,
+            "end_time": 1188
+          },
+          {
+            "activity_id": "M146",
+            "ordinal": 1,
+            "start_time": 1188,
+            "end_time": 1193
+          },
+          {
+            "activity_id": "M147",
+            "ordinal": 1,
+            "start_time": 1193,
+            "end_time": 1198
+          },
+          {
+            "activity_id": "M148",
+            "ordinal": 1,
+            "start_time": 1198,
+            "end_time": 1208
+          },
+          {
+            "activity_id": "M149",
+            "ordinal": 1,
+            "start_time": 1208,
+            "end_time": 1216
+          },
+          {
+            "activity_id": "M150",
+            "ordinal": 1,
+            "start_time": 1216,
+            "end_time": 1225
+          },
+          {
+            "activity_id": "M151",
+            "ordinal": 1,
+            "start_time": 1225,
+            "end_time": 1233
+          },
+          {
+            "activity_id": "M152",
+            "ordinal": 1,
+            "start_time": 1233,
+            "end_time": 1243
+          },
+          {
+            "activity_id": "M153",
+            "ordinal": 1,
+            "start_time": 1243,
+            "end_time": 1252
+          },
+          {
+            "activity_id": "M154",
+            "ordinal": 1,
+            "start_time": 1252,
+            "end_time": 1257
+          },
+          {
+            "activity_id": "M155",
+            "ordinal": 1,
+            "start_time": 1257,
+            "end_time": 1264
+          },
+          {
+            "activity_id": "M156",
+            "ordinal": 1,
+            "start_time": 1264,
+            "end_time": 1270
+          },
+          {
+            "activity_id": "M157",
+            "ordinal": 1,
+            "start_time": 1270,
+            "end_time": 1277
+          },
+          {
+            "activity_id": "M158",
+            "ordinal": 1,
+            "start_time": 1277,
+            "end_time": 1285
+          },
+          {
+            "activity_id": "M159",
+            "ordinal": 1,
+            "start_time": 1285,
+            "end_time": 1295
+          },
+          {
+            "activity_id": "M160",
+            "ordinal": 1,
+            "start_time": 1295,
+            "end_time": 1301
+          },
+          {
+            "activity_id": "B3_20",
+            "ordinal": 1,
+            "start_time": 1307,
+            "end_time": 1310
+          },
+          {
+            "activity_id": "M161",
+            "ordinal": 1,
+            "start_time": 1301,
+            "end_time": 1310
+          },
+          {
+            "activity_id": "M162",
+            "ordinal": 1,
+            "start_time": 1310,
+            "end_time": 1319
+          },
+          {
+            "activity_id": "CHECK_B3_20",
+            "ordinal": 1,
+            "start_time": 1319,
+            "end_time": 1321
+          },
+          {
+            "activity_id": "M163",
+            "ordinal": 1,
+            "start_time": 1319,
+            "end_time": 1328
+          },
+          {
+            "activity_id": "M164",
+            "ordinal": 1,
+            "start_time": 1328,
+            "end_time": 1335
+          },
+          {
+            "activity_id": "M165",
+            "ordinal": 1,
+            "start_time": 1335,
+            "end_time": 1342
+          },
+          {
+            "activity_id": "M166",
+            "ordinal": 1,
+            "start_time": 1342,
+            "end_time": 1347
+          },
+          {
+            "activity_id": "M167",
+            "ordinal": 1,
+            "start_time": 1347,
+            "end_time": 1353
+          },
+          {
+            "activity_id": "M168",
+            "ordinal": 1,
+            "start_time": 1353,
+            "end_time": 1360
+          },
+          {
+            "activity_id": "M169",
+            "ordinal": 1,
+            "start_time": 1360,
+            "end_time": 1367
+          },
+          {
+            "activity_id": "M170",
+            "ordinal": 1,
+            "start_time": 1367,
+            "end_time": 1377
+          },
+          {
+            "activity_id": "M171",
+            "ordinal": 1,
+            "start_time": 1377,
+            "end_time": 1384
+          },
+          {
+            "activity_id": "M172",
+            "ordinal": 1,
+            "start_time": 1384,
+            "end_time": 1392
+          },
+          {
+            "activity_id": "M173",
+            "ordinal": 1,
+            "start_time": 1392,
+            "end_time": 1400
+          },
+          {
+            "activity_id": "M174",
+            "ordinal": 1,
+            "start_time": 1400,
+            "end_time": 1410
+          },
+          {
+            "activity_id": "M175",
+            "ordinal": 1,
+            "start_time": 1410,
+            "end_time": 1415
+          },
+          {
+            "activity_id": "M176",
+            "ordinal": 1,
+            "start_time": 1415,
+            "end_time": 1425
+          },
+          {
+            "activity_id": "M177",
+            "ordinal": 1,
+            "start_time": 1425,
+            "end_time": 1431
+          },
+          {
+            "activity_id": "M178",
+            "ordinal": 1,
+            "start_time": 1431,
+            "end_time": 1440
+          },
+          {
+            "activity_id": "M179",
+            "ordinal": 1,
+            "start_time": 1440,
+            "end_time": 1445
+          },
+          {
+            "activity_id": "M180",
+            "ordinal": 1,
+            "start_time": 1445,
+            "end_time": 1451
+          }
+        ]
+      }
+    ]
+  }
+}

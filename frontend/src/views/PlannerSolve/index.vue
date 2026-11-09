@@ -20,14 +20,16 @@
         </el-form-item>
         <el-form-item label="运行方式">
           <el-select v-model="form.engine" style="width:100%">
-            <el-option label="全部对比" value="ALL" />
+            <el-option label="原三引擎对比" value="ALL" />
+            <el-option label="四引擎对比（含联合 CP-SAT）" value="ALL_WITH_CP_SAT" />
             <el-option label="旧引擎" value="LEGACY" />
             <el-option label="Anytime A*" value="ASTAR" />
             <el-option label="遗传算法 GA" value="GA" />
+            <el-option label="联合 CP-SAT" value="JOINT_CP_SAT" />
           </el-select>
         </el-form-item>
         <el-form-item label="时间预算（秒）">
-          <el-input-number v-model="form.budget.time_limit_seconds" :min="0.1" :max="120" :step="0.5" style="width:100%" />
+          <el-input-number v-model="form.budget.time_limit_seconds" :min="0.1" :max="3600" :step="0.5" style="width:100%" />
         </el-form-item>
         <el-form-item label="随机种子">
           <el-input-number v-model="form.seed" style="width:100%" />
@@ -84,12 +86,13 @@
               <el-button text type="danger" :disabled="form.objectives.length === 1" @click="removeObjective(index)">删除</el-button>
             </div>
             <div class="objective-hint">
-              <span>权重仅由旧引擎的 CP-SAT Scheduler 使用；A*、GA 保持各自原生优化。</span>
+              <span>权重仅用于旧引擎；联合 CP-SAT 优化总工期，A*、GA 保持各自原生优化。</span>
               <el-button link type="primary" @click="addObjective">添加目标</el-button>
             </div>
           </div>
         </el-form-item>
       </el-form>
+      <el-alert v-if="['JOINT_CP_SAT', 'ALL_WITH_CP_SAT'].includes(form.engine)" type="info" :closable="false" show-icon class="selection-alert" title="联合 CP-SAT 同时选择活动与排程，支持串行、并行、恢复循环及活动时间窗口；暂不支持外部事件直接改变状态或工作日历。" />
       <el-alert v-if="invalidSuggestedStateLabels.length" type="error" :closable="false" show-icon class="selection-alert" :title="`建议状态已失效：${invalidSuggestedStateLabels.join('、')}`" />
       <el-alert v-else-if="selectedForbiddenTargetLabels.length" type="error" :closable="false" show-icon class="selection-alert" :title="`禁止状态不能作为目标：${selectedForbiddenTargetLabels.join('、')}`" />
       <div class="selection-summary" data-testid="state-selection-summary">
@@ -141,6 +144,8 @@
           <el-table-column prop="makespan" label="最短完工" width="100" />
           <el-table-column prop="executionCount" label="活动数" width="90" />
           <el-table-column prop="elapsed" label="耗时（秒）" width="120" />
+          <el-table-column prop="firstSolution" label="首解（秒）" width="110" />
+          <el-table-column prop="optimality" label="最优性" min-width="140" />
           <el-table-column label="统一校验" width="110"><template #default="{ row }"><el-tag v-if="row.validator" size="small" type="success">{{ row.validator }}</el-tag><span v-else>-</span></template></el-table-column>
           <el-table-column label="查看" width="90"><template #default="{ row }"><el-button link type="primary" @click="activeEngine = row.engine">详情</el-button></template></el-table-column>
         </el-table>
@@ -154,7 +159,7 @@
           </el-radio-group>
         </header>
 
-        <el-alert v-if="!activePresentation.path" :title="activePresentation.result?.error || activePresentation.result?.diagnosis?.error_message || '未找到合法方案'" type="error" :closable="false" show-icon />
+        <el-alert v-if="!activePresentation.path" :title="activePresentation.result?.error || activePresentation.result?.diagnosis?.error_message || '未找到合法方案'" :type="activePresentation.result?.status === 'ERROR' ? 'error' : 'warning'" :closable="false" show-icon />
         <template v-else>
           <div class="metric-strip">
             <div><span>总工期</span><strong>{{ activePresentation.makespan }}</strong></div>
@@ -188,6 +193,14 @@
               <el-descriptions :column="3" border>
                 <el-descriptions-item label="执行管线">{{ activePresentation.result?.engine_pipeline || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="实际优化目标" :span="2">{{ objectiveSummary(activePresentation.result?.applied_objectives) }}</el-descriptions-item>
+                <template v-if="activeEngine === 'JOINT_CP_SAT'">
+                  <el-descriptions-item label="最优性">{{ optimalityLabel(activePresentation.result) }}</el-descriptions-item>
+                  <el-descriptions-item label="工期下界">{{ activePresentation.result?.lower_bound ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="搜索分支">{{ activePresentation.result?.stats?.branches ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="原始排程工期">{{ activePresentation.result?.stats?.normalization?.raw_schedule_makespan ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="提前执行节省">{{ activePresentation.result?.stats?.normalization?.left_shift_saved_time ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="达成目标后截尾节省">{{ activePresentation.result?.stats?.normalization?.terminal_tail_saved_time ?? '-' }}</el-descriptions-item>
+                </template>
                 <el-descriptions-item v-for="item in metricRows" :key="item.key" :label="item.label">{{ item.value }}</el-descriptions-item>
               </el-descriptions>
             </el-tab-pane>
@@ -284,7 +297,7 @@ const presentations = computed(() => Object.fromEntries(Object.entries(results.v
 
 const engineRows = computed(() => Object.entries(results.value).map(([engine, result]) => {
   const path = result.paths?.[0]
-  return { engine, label: engineLabel(engine), status: result.status, pathCount: result.paths?.length || 0, makespan: path?.metrics?.makespan ?? '-', executionCount: path?.metrics?.execution_count ?? path?.executions?.length ?? '-', elapsed: result.elapsed_seconds ?? '-', validator: path?.validator_status || '' }
+  return { engine, label: engineLabel(engine), status: result.status, pathCount: result.paths?.length || 0, makespan: path?.metrics?.makespan ?? '-', executionCount: path?.metrics?.execution_count ?? path?.executions?.length ?? '-', elapsed: result.elapsed_seconds ?? '-', firstSolution: result.first_solution_seconds == null ? '-' : Number(result.first_solution_seconds).toFixed(3), optimality: optimalityLabel(result), validator: path?.validator_status || '' }
 }))
 
 const activePresentation = computed(() => presentations.value[activeEngine.value] || { result: results.value[activeEngine.value], path: null, tasks: [], makespan: 0, criticalPath: [], resourcePeak: 0 })
@@ -347,7 +360,7 @@ async function solve() {
     const resultEngines = Object.keys(results.value)
     activeEngine.value = resultEngines.find((engine) => results.value[engine]?.paths?.length) || resultEngines[0] || form.engine
     activeResultTab.value = 'gantt'
-    if (run.value.status === 'OK') ElMessage.success('求解完成并通过统一校验')
+    if (['OK', 'OPTIMAL', 'FEASIBLE'].includes(run.value.status)) ElMessage.success('求解完成并通过统一校验')
     else ElMessage.warning('运行结束，请检查各引擎结果')
   } catch (error) {
     const data = error?.response?.data || error.data || {}
@@ -486,7 +499,13 @@ function expandSelectedStates(nodeIds, index, forTarget) {
   return [...new Set(values)].filter((stateId) => index.states.has(stateId)).sort()
 }
 
-function engineLabel(engine) { return { LEGACY: '旧引擎', ASTAR: 'Anytime A*', GA: '遗传算法 GA' }[engine] || engine }
+function engineLabel(engine) { return { LEGACY: '旧引擎', ASTAR: 'Anytime A*', GA: '遗传算法 GA', JOINT_CP_SAT: '联合 CP-SAT' }[engine] || engine }
+function optimalityLabel(result) {
+  if (result?.proven_optimal) return '已证明最优'
+  if (result?.proven_infeasible) return '已证明无解'
+  if (result?.algorithm === 'JOINT_CP_SAT' && result?.paths?.length) return `未证明 · 下界 ${result.lower_bound ?? '-'}`
+  return '-'
+}
 function selectionCounts(current, target) {
   const currentIds = new Set(current)
   const satisfied = target.filter((id) => currentIds.has(id)).length

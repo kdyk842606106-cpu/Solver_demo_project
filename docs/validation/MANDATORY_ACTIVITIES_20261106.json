@@ -1,0 +1,195 @@
+{
+  "scope": "mandatory presence only; no business rule or database mutation",
+  "input_case": "Test A: only dismantling invalidates test/commissioning results",
+  "seed": 11,
+  "time_limit_seconds": 60,
+  "worker_threads": 1,
+  "baseline": {
+    "status": "TIMEOUT_EMPTY",
+    "first_solution_seconds": null,
+    "elapsed_seconds": 60.009066,
+    "lower_bound": 180,
+    "proven_optimal": false,
+    "branches": 803869,
+    "conflicts": 96958,
+    "best_makespan": null,
+    "best_execution_count": null,
+    "worker_threads": 1,
+    "input_sha256": "ea43a2e6f703b0ef250693d1f7d024a356f93e0523e7d34503e77ad71151ad33",
+    "model": {
+      "variables": 756,
+      "constraints": 1852,
+      "optional_occurrence_slots": 28,
+      "support_choices": 280,
+      "threat_checks": 303,
+      "interval_locks": 378,
+      "mandatory_activities": null
+    },
+    "mandatory_names": []
+  },
+  "mandatory": {
+    "status": "OPTIMAL",
+    "first_solution_seconds": 33.43838759999926,
+    "elapsed_seconds": 34.426774,
+    "lower_bound": 390,
+    "proven_optimal": true,
+    "branches": 251158,
+    "conflicts": 20874,
+    "best_makespan": 390,
+    "best_execution_count": 10,
+    "worker_threads": 1,
+    "input_sha256": "ea43a2e6f703b0ef250693d1f7d024a356f93e0523e7d34503e77ad71151ad33",
+    "model": {
+      "variables": 756,
+      "constraints": 1856,
+      "optional_occurrence_slots": 28,
+      "support_choices": 280,
+      "threat_checks": 303,
+      "interval_locks": 378,
+      "mandatory_activities": {
+        "policy": "unique_support_presence_v1",
+        "activity_ids": [
+          "activity:1fddd23f-e8fe-4a60-9048-148e3103e5d5",
+          "activity:3d8545b3-6b18-4f7f-88c0-18442bdef14d",
+          "activity:4f957769-e380-4997-b2d7-6db7ee603d04",
+          "activity:b9e12ccf-8595-41a7-b3cb-ba58f7185767"
+        ],
+        "proofs": {
+          "activity:3d8545b3-6b18-4f7f-88c0-18442bdef14d": {
+            "reason": "negative_goal",
+            "state_id": "state:abbde80e-399c-4aba-9d9c-6855104f476c:seed",
+            "consumer_activity_id": null
+          },
+          "activity:1fddd23f-e8fe-4a60-9048-148e3103e5d5": {
+            "reason": "mandatory_precondition",
+            "state_id": "state:1fddd23f-e8fe-4a60-9048-148e3103e5d5:output",
+            "consumer_activity_id": "activity:3d8545b3-6b18-4f7f-88c0-18442bdef14d"
+          },
+          "activity:4f957769-e380-4997-b2d7-6db7ee603d04": {
+            "reason": "mandatory_precondition",
+            "state_id": "state:4f957769-e380-4997-b2d7-6db7ee603d04:output",
+            "consumer_activity_id": "activity:3d8545b3-6b18-4f7f-88c0-18442bdef14d"
+          },
+          "activity:b9e12ccf-8595-41a7-b3cb-ba58f7185767": {
+            "reason": "mandatory_precondition",
+            "state_id": "state:b9e12ccf-8595-41a7-b3cb-ba58f7185767:output",
+            "consumer_activity_id": "activity:3d8545b3-6b18-4f7f-88c0-18442bdef14d"
+          }
+        },
+        "status": "complete",
+        "added_constraints": 4,
+        "seconds": 3.63000017387094e-05
+      }
+    },
+    "mandatory_names": [
+      "下电",
+      "模块A维修",
+      "模块A拆卸",
+      "模块C拆卸"
+    ],
+    "validator": "VALID",
+    "schedule": [
+      {
+        "name": "下电",
+        "ordinal": 1,
+        "start": 0,
+        "end": 10
+      },
+      {
+        "name": "模块C拆卸",
+        "ordinal": 1,
+        "start": 10,
+        "end": 30
+      },
+      {
+        "name": "模块A拆卸",
+        "ordinal": 1,
+        "start": 30,
+        "end": 60
+      },
+      {
+        "name": "模块A维修",
+        "ordinal": 1,
+        "start": 60,
+        "end": 120
+      },
+      {
+        "name": "模块A安装",
+        "ordinal": 1,
+        "start": 120,
+        "end": 180
+      },
+      {
+        "name": "模块C安装",
+        "ordinal": 1,
+        "start": 180,
+        "end": 200
+      },
+      {
+        "name": "安全验收",
+        "ordinal": 1,
+        "start": 200,
+        "end": 240
+      },
+      {
+        "name": "上电",
+        "ordinal": 1,
+        "start": 300,
+        "end": 330
+      },
+      {
+        "name": "模块A功能调测",
+        "ordinal": 1,
+        "start": 330,
+        "end": 360
+      },
+      {
+        "name": "扩展功能联调",
+        "ordinal": 1,
+        "start": 360,
+        "end": 390
+      }
+    ]
+  },
+  "model_delta": {
+    "only_presence_constraints_added": true,
+    "variables_unchanged": true,
+    "all_other_constraints_unchanged": true,
+    "objective_unchanged": true,
+    "no_solution_hint_added": true,
+    "new_constraints": 4,
+    "certificates": [
+      {
+        "activity": "下电",
+        "activity_id": "activity:1fddd23f-e8fe-4a60-9048-148e3103e5d5",
+        "original_model_without_activity": "INFEASIBLE",
+        "seconds": 0.0040768
+      },
+      {
+        "activity": "模块A维修",
+        "activity_id": "activity:3d8545b3-6b18-4f7f-88c0-18442bdef14d",
+        "original_model_without_activity": "INFEASIBLE",
+        "seconds": 0.0022792000000000003
+      },
+      {
+        "activity": "模块A拆卸",
+        "activity_id": "activity:4f957769-e380-4997-b2d7-6db7ee603d04",
+        "original_model_without_activity": "INFEASIBLE",
+        "seconds": 0.0027089
+      },
+      {
+        "activity": "模块C拆卸",
+        "activity_id": "activity:b9e12ccf-8595-41a7-b3cb-ba58f7185767",
+        "original_model_without_activity": "INFEASIBLE",
+        "seconds": 0.0028698
+      }
+    ]
+  },
+  "unit_tests": {
+    "tests": 221,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "performance_trials": 1
+}

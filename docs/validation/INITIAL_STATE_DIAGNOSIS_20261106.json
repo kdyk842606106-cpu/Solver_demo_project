@@ -1,0 +1,164 @@
+{
+  "scenario_id": "scenario:46d7aec2-d316-4965-81e7-4afef0dd0ffe",
+  "revision": 16,
+  "diagnoses": {
+    "missing-fault": "STRUCTURALLY_BLOCKED",
+    "repair-confirmed": "STRUCTURALLY_REACHABLE",
+    "cycle-no-start": "STRUCTURALLY_BLOCKED",
+    "cycle-confirm-C": "STRUCTURALLY_BLOCKED",
+    "cycle-confirm-A-C": "STRUCTURALLY_REACHABLE"
+  },
+  "solves": {
+    "normal": {
+      "status": "OPTIMAL",
+      "elapsed_seconds": 0.06066,
+      "first_solution_seconds": 0.03616619999957038,
+      "validator": "VALID",
+      "metrics": {
+        "goal_check": true,
+        "makespan": 380,
+        "execution_count": 9,
+        "transition_count": 3,
+        "state_revisit_count": 0,
+        "goal_regression_count": 0,
+        "non_causal_action_count": 0,
+        "total_wait": 0,
+        "missing_goal_facts": 0,
+        "activity_duration_sum": 320,
+        "serial_baseline_makespan": 380,
+        "parallel_savings": 0,
+        "compression_ratio": 0.0,
+        "peak_parallelism": 1,
+        "average_parallelism": 0.8421052631578947,
+        "resource_peak": [
+          [
+            "resource:104a6c40-e880-4891-8fe7-2c05fb000cd9",
+            2
+          ],
+          [
+            "resource:69df988c-0af7-48b9-86c6-8a421e362e3d",
+            1
+          ],
+          [
+            "resource:bea7ced7-ae1f-40a5-8aa9-3dd4f88b616f",
+            3
+          ],
+          [
+            "resource:c077e2fa-a03a-468b-93f4-352ddc96ff9b",
+            1
+          ],
+          [
+            "resource:f36630f8-a390-47da-bd04-d5fdbc9dec57",
+            1
+          ]
+        ],
+        "resource_utilization": [
+          [
+            "resource:104a6c40-e880-4891-8fe7-2c05fb000cd9",
+            0.10526315789473684
+          ],
+          [
+            "resource:69df988c-0af7-48b9-86c6-8a421e362e3d",
+            0.3157894736842105
+          ],
+          [
+            "resource:bea7ced7-ae1f-40a5-8aa9-3dd4f88b616f",
+            0.3355263157894737
+          ],
+          [
+            "resource:c077e2fa-a03a-468b-93f4-352ddc96ff9b",
+            0.42105263157894735
+          ],
+          [
+            "resource:f36630f8-a390-47da-bd04-d5fdbc9dec57",
+            0.21052631578947367
+          ]
+        ],
+        "critical_path_length": 230,
+        "idle_wait_time": 0
+      }
+    },
+    "recovery": {
+      "status": "OPTIMAL",
+      "elapsed_seconds": 3.965277,
+      "first_solution_seconds": 2.3233765000040876,
+      "validator": "VALID",
+      "metrics": {
+        "goal_check": true,
+        "makespan": 510,
+        "execution_count": 13,
+        "transition_count": 5,
+        "state_revisit_count": 2,
+        "goal_regression_count": 0,
+        "non_causal_action_count": 0,
+        "total_wait": 0,
+        "missing_goal_facts": 0,
+        "activity_duration_sum": 450,
+        "serial_baseline_makespan": 510,
+        "parallel_savings": 0,
+        "compression_ratio": 0.0,
+        "peak_parallelism": 1,
+        "average_parallelism": 0.8823529411764706,
+        "resource_peak": [
+          [
+            "resource:104a6c40-e880-4891-8fe7-2c05fb000cd9",
+            2
+          ],
+          [
+            "resource:69df988c-0af7-48b9-86c6-8a421e362e3d",
+            1
+          ],
+          [
+            "resource:bea7ced7-ae1f-40a5-8aa9-3dd4f88b616f",
+            3
+          ],
+          [
+            "resource:c077e2fa-a03a-468b-93f4-352ddc96ff9b",
+            1
+          ],
+          [
+            "resource:f36630f8-a390-47da-bd04-d5fdbc9dec57",
+            1
+          ]
+        ],
+        "resource_utilization": [
+          [
+            "resource:104a6c40-e880-4891-8fe7-2c05fb000cd9",
+            0.10784313725490197
+          ],
+          [
+            "resource:69df988c-0af7-48b9-86c6-8a421e362e3d",
+            0.29411764705882354
+          ],
+          [
+            "resource:bea7ced7-ae1f-40a5-8aa9-3dd4f88b616f",
+            0.3480392156862745
+          ],
+          [
+            "resource:c077e2fa-a03a-468b-93f4-352ddc96ff9b",
+            0.43137254901960786
+          ],
+          [
+            "resource:f36630f8-a390-47da-bd04-d5fdbc9dec57",
+            0.21568627450980393
+          ]
+        ],
+        "critical_path_length": 180,
+        "idle_wait_time": 0
+      }
+    }
+  },
+  "project_unchanged": true,
+  "history_unchanged": true,
+  "compiler_sha256": "a023feb8032c0637b1bd34fc655a043a1d275994604d8ab864c450c17fed678f",
+  "live_endpoint_verified": true,
+  "history_count_at_cutover": 52,
+  "worker_threads": 8,
+  "solver_compiler_unchanged": true,
+  "tests": {
+    "unit": 17,
+    "isolated_api": 4,
+    "browser_cases": 5,
+    "frontend_build": "passed"
+  }
+}

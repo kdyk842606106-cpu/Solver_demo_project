@@ -1,5 +1,7 @@
 # PROJECT ANCHOR
 
+> 修改记录（2026-11-04）：按用户明确批准的前端替换方案，将默认表示层改为 React + TypeScript + Vite，四页工作区接入现有联合 CP-SAT；保留既有后端领域边界和旧接口。新增独立 worker 管理持久化异步任务，数据库与求解核心技术栈不变。
+
 > **本文档定义系统的永久性约定，不随版本迭代更新。**
 > 开发时所有决策必须符合本文档定义的原则。
 > 修改本文档需标注原因和日期。
@@ -30,7 +32,7 @@
 | 后端 | Python 3.11+ / FastAPI / SQLAlchemy 2.0 (async) |
 | 求解 | Google OR-Tools CP-SAT |
 | 数据库 | PostgreSQL 15 / Alembic 迁移 |
-| 前端 | Vue 3 + Element Plus + ECharts + AntV X6 |
+| 前端 | React + TypeScript + Vite（旧 Vue 源码保留回溯） |
 | 容器 | Docker + Docker Compose |
 
 ---
@@ -38,14 +40,14 @@
 ## 分层架构（锁定）
 
 ```
-UI (Vue 3) → API (FastAPI) → Service → Domain (app/core/) → Persistence (SQLAlchemy)
+UI (React) → API (FastAPI) → Service → Domain (app/core/) → Persistence (SQLAlchemy)
 ```
 
 跨层调用规则：只能调用相邻下层，不可跨层。
 
 ```
 ┌─────────────────────────────────────────┐
-│  表示层 — Vue 3 + Element Plus          │
+│  表示层 — React + TypeScript          │
 ├─────────────────────────────────────────┤
 │  应用层 — FastAPI 路由                   │
 ├─────────────────────────────────────────┤

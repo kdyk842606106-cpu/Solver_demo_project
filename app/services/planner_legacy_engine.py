@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import time
 from typing import Any
 
 from ortools.sat.python import cp_model
@@ -30,6 +31,9 @@ def run_legacy_pipeline(
     run_id: str,
     modules: dict[str, Any],
     objectives: list[dict[str, Any]] | None = None,
+    deadline: float | None = None,
+    worker_threads: int | None = None,
+    random_seed: int | None = None,
 ) -> Any:
     """Run the original partial-order Pathfinder followed by CP-SAT scheduling."""
 
@@ -116,7 +120,14 @@ def run_legacy_pipeline(
     _apply_execution_mode_constraints(schedule_model, rag_data, activity_by_rule_id, activity_by_id, scenario.execution_mode)
 
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = float(budget.time_limit_seconds)
+    remaining = float(budget.time_limit_seconds) if deadline is None else max(0.0, deadline - time.perf_counter())
+    if remaining <= 0:
+        return modules["EngineResult"]("LEGACY", run_id, None, "TIMEOUT_EMPTY", stats={"stop_reason": "END_TO_END_DEADLINE", "pathfinder": pop.diagnostics})
+    solver.parameters.max_time_in_seconds = remaining
+    if worker_threads is not None:
+        solver.parameters.num_search_workers = worker_threads
+    if random_seed is not None:
+        solver.parameters.random_seed = random_seed
     status = solver.solve(schedule_model.model)
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         status_name = solver.status_name(status)

@@ -1,0 +1,206 @@
+{
+  "status": "implemented_and_verified",
+  "fix": "At the completed-search barrier, certify current lexicographic best instead of the older restart trigger.",
+  "business_changes": false,
+  "database_writes": false,
+  "single_source_direct_default": false,
+  "tests": {
+    "passed": 124,
+    "new_deterministic_cases": [
+      "better makespan after stop request",
+      "equal makespan fewer executions after stop request",
+      "worse last arrival must not replace best"
+    ],
+    "real_replay_certificate_and_next_search": true
+  },
+  "benchmark": {
+    "runs": 30,
+    "threads": 8,
+    "budget_seconds": 60,
+    "seeds": [
+      23,
+      71,
+      11
+    ],
+    "repeats_per_seed_per_version": 5,
+    "same_input": true,
+    "same_initial_model_sha256": "d7401201dbda85d7a56fc95ef398c4dd781494099179168d4fb3de1bcbd6c2d7",
+    "all_optimal_and_valid": true,
+    "makespan": 390,
+    "executions": 10,
+    "before_stale_certificates": 2,
+    "after_stale_certificates": 0,
+    "after_refreshed_trigger_count": 0
+  },
+  "summary": {
+    "23/before": {
+      "first": {
+        "min": 0.5172655999995186,
+        "median": 0.821554300000571,
+        "max": 2.743922499998007
+      },
+      "seconds": {
+        "min": 1.471897,
+        "median": 1.734277,
+        "max": 3.188537
+      },
+      "branches": {
+        "min": 8602,
+        "median": 11261,
+        "max": 16769
+      },
+      "restarts": {
+        "min": 1,
+        "median": 3,
+        "max": 6
+      },
+      "epochs": {
+        "min": 3,
+        "median": 5,
+        "max": 8
+      }
+    },
+    "23/after": {
+      "first": {
+        "min": 0.47531940000044415,
+        "median": 1.2979792000005546,
+        "max": 2.2512792000015907
+      },
+      "seconds": {
+        "min": 1.243609,
+        "median": 2.242915,
+        "max": 2.654507
+      },
+      "branches": {
+        "min": 3927,
+        "median": 13676,
+        "max": 53039
+      },
+      "restarts": {
+        "min": 1,
+        "median": 4,
+        "max": 5
+      },
+      "epochs": {
+        "min": 3,
+        "median": 6,
+        "max": 7
+      }
+    },
+    "71/before": {
+      "first": {
+        "min": 0.8489211999985855,
+        "median": 1.0941055000002962,
+        "max": 1.158810299999459
+      },
+      "seconds": {
+        "min": 1.386707,
+        "median": 1.754618,
+        "max": 2.099987
+      },
+      "branches": {
+        "min": 8018,
+        "median": 8524,
+        "max": 64049
+      },
+      "restarts": {
+        "min": 0,
+        "median": 2,
+        "max": 5
+      },
+      "epochs": {
+        "min": 2,
+        "median": 4,
+        "max": 7
+      }
+    },
+    "71/after": {
+      "first": {
+        "min": 0.5896068000001833,
+        "median": 0.6630301000004692,
+        "max": 1.9365007000014884
+      },
+      "seconds": {
+        "min": 1.419646,
+        "median": 1.527847,
+        "max": 3.102837
+      },
+      "branches": {
+        "min": 7768,
+        "median": 7903,
+        "max": 21079
+      },
+      "restarts": {
+        "min": 3,
+        "median": 4,
+        "max": 6
+      },
+      "epochs": {
+        "min": 5,
+        "median": 6,
+        "max": 8
+      }
+    },
+    "11/before": {
+      "first": {
+        "min": 0.555915200002346,
+        "median": 0.8175279999995837,
+        "max": 0.995228899999347
+      },
+      "seconds": {
+        "min": 1.376,
+        "median": 1.598805,
+        "max": 2.558429
+      },
+      "branches": {
+        "min": 4348,
+        "median": 13305,
+        "max": 41232
+      },
+      "restarts": {
+        "min": 3,
+        "median": 4,
+        "max": 6
+      },
+      "epochs": {
+        "min": 5,
+        "median": 6,
+        "max": 8
+      }
+    },
+    "11/after": {
+      "first": {
+        "min": 0.4549557999998797,
+        "median": 1.1495584000003873,
+        "max": 2.071188699999766
+      },
+      "seconds": {
+        "min": 0.974012,
+        "median": 2.141213,
+        "max": 2.697159
+      },
+      "branches": {
+        "min": 8099,
+        "median": 18576,
+        "max": 74380
+      },
+      "restarts": {
+        "min": 1,
+        "median": 5,
+        "max": 6
+      },
+      "epochs": {
+        "min": 3,
+        "median": 7,
+        "max": 8
+      }
+    }
+  },
+  "interpretation": [
+    "Correctness of refreshing stale feedback is demonstrated by deterministic in-flight callback tests using real replay and certificate solving.",
+    "No stale-trigger replacement was needed in the 15 post-fix stochastic benchmark runs. The 15 baseline runs had two stale feedback records. These samples do not measure the isolated speed gain from replacement.",
+    "The fix executes only after a search call has returned with a pending feedback request. It cannot directly improve first-solution search; observed first-solution differences are portfolio/timing variability.",
+    "Observed end-to-end medians improve for seed71 and regress for seeds23/11. No stable speedup or branch reduction is claimed.",
+    "Normal witness failure, timeout, proof and lexicographic behavior remains covered by regression tests. Current business snapshots and running history were not modified."
+  ]
+}

@@ -1,0 +1,148 @@
+{
+  "scope": "immutable historical snapshots; in-memory solve; no database writes",
+  "cases": {
+    "test_a": {
+      "source_run_id": "planner-run:01c77535-00d6-4dda-9294-657d036bb1cc",
+      "wall_seconds": 0.08675679999942076,
+      "status": "OPTIMAL",
+      "makespan": 758,
+      "executions": 9,
+      "validator": "VALID",
+      "branches": 21,
+      "conflicts": 0,
+      "model": {
+        "candidate_activities": 10,
+        "optional_occurrence_slots": 10,
+        "occurrence_pruning": {
+          "policy": "persistent_facts_single_occurrence_v1",
+          "eligible": true,
+          "applied": true,
+          "skip_reason": null,
+          "input_slots": 210,
+          "effective_slots": 10,
+          "removed_slots": 200,
+          "activity_limits": {
+            "activity:a4201bba-5288-4e49-b840-ef762e0449b7": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:bc4c32e0-cdde-4db0-ae7f-690583decaee": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:cd49665c-5083-4ea1-b4e5-2dcedad88cb0": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:fae9abb6-3324-4302-9aae-7501fea68f98": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:8b8856dc-d3cc-4999-bbfc-36a0ee6f3841": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:8a00aaad-4906-4bb8-873a-4e451852c3fa": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:8f7addd9-3cee-41c5-8a6e-9e16996fceee": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:3034e5e4-23e9-4f79-892e-3c605607842c": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:81206a95-1689-4f3e-a041-2f3dcadc29ac": {
+              "input_limit": 21,
+              "effective_limit": 1
+            },
+            "activity:92507e64-bd8c-46e5-8b1d-01e3cacd5ac6": {
+              "input_limit": 21,
+              "effective_limit": 1
+            }
+          }
+        },
+        "exclusive_activity_count": 5,
+        "exclusive_occurrence_slots": 5,
+        "state_count": 10,
+        "horizon": 142998,
+        "support_choices": 17,
+        "threat_checks": 0,
+        "interval_locks": 14,
+        "variables": 48,
+        "constraints": 117,
+        "execution_mode": "parallel",
+        "time_window_count": 0,
+        "model_time_axis": "working_minutes"
+      }
+    },
+    "assembly20": {
+      "source_run_id": "planner-run:dbb48cc2-2c7f-42a9-8e21-006155a2610c",
+      "wall_seconds": 0.03212800000073912,
+      "status": "OPTIMAL",
+      "makespan": 625,
+      "executions": 20,
+      "validator": "VALID",
+      "branches": 38,
+      "conflicts": 6,
+      "model": {
+        "candidate_activities": 20,
+        "optional_occurrence_slots": 20,
+        "occurrence_pruning": {
+          "policy": "persistent_facts_single_occurrence_v1",
+          "eligible": true,
+          "applied": false,
+          "skip_reason": null,
+          "input_slots": 20,
+          "effective_slots": 20,
+          "removed_slots": 0,
+          "activity_limits": {}
+        },
+        "exclusive_activity_count": 11,
+        "exclusive_occurrence_slots": 11,
+        "state_count": 23,
+        "horizon": 900,
+        "support_choices": 61,
+        "threat_checks": 0,
+        "interval_locks": 59,
+        "variables": 122,
+        "constraints": 348,
+        "execution_mode": "parallel",
+        "time_window_count": 0,
+        "model_time_axis": "working_minutes"
+      }
+    },
+    "test_a_unpruned_control": {
+      "source_run_id": "planner-run:01c77535-00d6-4dda-9294-657d036bb1cc",
+      "wall_seconds": 4.526928699999189,
+      "status": "OPTIMAL",
+      "makespan": 758,
+      "executions": 9,
+      "validator": "VALID",
+      "branches": 7874,
+      "conflicts": 136,
+      "model": {
+        "candidate_activities": 10,
+        "optional_occurrence_slots": 210,
+        "occurrence_pruning": {
+          "policy": "unpruned_control",
+          "effective_slots": 210
+        },
+        "exclusive_activity_count": 5,
+        "exclusive_occurrence_slots": 105,
+        "state_count": 10,
+        "horizon": 142998,
+        "support_choices": 6237,
+        "threat_checks": 0,
+        "interval_locks": 8274,
+        "variables": 6868,
+        "constraints": 22437,
+        "execution_mode": "parallel",
+        "time_window_count": 0,
+        "model_time_axis": "working_minutes"
+      }
+    }
+  }
+}

@@ -449,6 +449,11 @@ if ($StartMode -ne 'none') {
     Wait-SystemReady -Port $BackendPort -IncludeDataChecks:(-not $SkipDataChecks) -Commit $ExpectedCommit
 }
 
+if ($StartMode -ne 'none') {
+    Write-Section 'Starting durable Planner worker'
+    & (Join-Path $PSScriptRoot 'start_planner_worker.ps1') -ProjectRoot $ProjectRoot -PythonExe $PythonExe
+}
+
 Write-Section 'Install/restart complete'
 Write-Host ("Backend: http://127.0.0.1:{0}" -f $BackendPort)
 Write-Host ("Status:  http://127.0.0.1:{0}/api/v1/system/status?include_data_checks=true" -f $BackendPort)

@@ -1,0 +1,246 @@
+{
+  "input": "optional-20-input.json",
+  "source_result": "optional-20-result.json",
+  "scope": "post-run verification only; no production pruning change",
+  "pair_certificates": [
+    {
+      "install": "block:0:activity:931ed71c-6b11-43c9-b3a7-1520714cdd35",
+      "dismantle": "block:0:benchmark:dismantle:1",
+      "installed": [
+        "block:0:state:931ed71c-6b11-43c9-b3a7-1520714cdd35:output"
+      ],
+      "initial_token": [
+        "block:0:benchmark:dismantled:1"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:0:activity:6d85c402-1821-41ff-ac0b-eaf79e3d25b1",
+      "dismantle": "block:0:benchmark:dismantle:2",
+      "installed": [
+        "block:0:state:6d85c402-1821-41ff-ac0b-eaf79e3d25b1:output"
+      ],
+      "initial_token": [
+        "block:0:benchmark:dismantled:2"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:0:activity:243dc439-835a-40c4-86d8-8ec398fc3136",
+      "dismantle": "block:0:benchmark:dismantle:3",
+      "installed": [
+        "block:0:state:243dc439-835a-40c4-86d8-8ec398fc3136:output"
+      ],
+      "initial_token": [
+        "block:0:benchmark:dismantled:3"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:0:activity:124f5b25-7c27-4dc3-8328-e48dbcd61782",
+      "dismantle": "block:0:benchmark:dismantle:4",
+      "installed": [
+        "block:0:state:124f5b25-7c27-4dc3-8328-e48dbcd61782:output"
+      ],
+      "initial_token": [
+        "block:0:benchmark:dismantled:4"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:0:activity:4a720893-3f75-484a-9991-5f209ef02d97",
+      "dismantle": "block:0:benchmark:dismantle:5",
+      "installed": [
+        "block:0:state:4a720893-3f75-484a-9991-5f209ef02d97:output"
+      ],
+      "initial_token": [
+        "block:0:benchmark:dismantled:5"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:1:activity:931ed71c-6b11-43c9-b3a7-1520714cdd35",
+      "dismantle": "block:1:benchmark:dismantle:1",
+      "installed": [
+        "block:1:state:931ed71c-6b11-43c9-b3a7-1520714cdd35:output"
+      ],
+      "initial_token": [
+        "block:1:benchmark:dismantled:1"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:1:activity:6d85c402-1821-41ff-ac0b-eaf79e3d25b1",
+      "dismantle": "block:1:benchmark:dismantle:2",
+      "installed": [
+        "block:1:state:6d85c402-1821-41ff-ac0b-eaf79e3d25b1:output"
+      ],
+      "initial_token": [
+        "block:1:benchmark:dismantled:2"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:1:activity:243dc439-835a-40c4-86d8-8ec398fc3136",
+      "dismantle": "block:1:benchmark:dismantle:3",
+      "installed": [
+        "block:1:state:243dc439-835a-40c4-86d8-8ec398fc3136:output"
+      ],
+      "initial_token": [
+        "block:1:benchmark:dismantled:3"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:1:activity:124f5b25-7c27-4dc3-8328-e48dbcd61782",
+      "dismantle": "block:1:benchmark:dismantle:4",
+      "installed": [
+        "block:1:state:124f5b25-7c27-4dc3-8328-e48dbcd61782:output"
+      ],
+      "initial_token": [
+        "block:1:benchmark:dismantled:4"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:1:activity:4a720893-3f75-484a-9991-5f209ef02d97",
+      "dismantle": "block:1:benchmark:dismantle:5",
+      "installed": [
+        "block:1:state:4a720893-3f75-484a-9991-5f209ef02d97:output"
+      ],
+      "initial_token": [
+        "block:1:benchmark:dismantled:5"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:2:activity:931ed71c-6b11-43c9-b3a7-1520714cdd35",
+      "dismantle": "block:2:benchmark:dismantle:1",
+      "installed": [
+        "block:2:state:931ed71c-6b11-43c9-b3a7-1520714cdd35:output"
+      ],
+      "initial_token": [
+        "block:2:benchmark:dismantled:1"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:2:activity:6d85c402-1821-41ff-ac0b-eaf79e3d25b1",
+      "dismantle": "block:2:benchmark:dismantle:2",
+      "installed": [
+        "block:2:state:6d85c402-1821-41ff-ac0b-eaf79e3d25b1:output"
+      ],
+      "initial_token": [
+        "block:2:benchmark:dismantled:2"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:2:activity:243dc439-835a-40c4-86d8-8ec398fc3136",
+      "dismantle": "block:2:benchmark:dismantle:3",
+      "installed": [
+        "block:2:state:243dc439-835a-40c4-86d8-8ec398fc3136:output"
+      ],
+      "initial_token": [
+        "block:2:benchmark:dismantled:3"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:2:activity:124f5b25-7c27-4dc3-8328-e48dbcd61782",
+      "dismantle": "block:2:benchmark:dismantle:4",
+      "installed": [
+        "block:2:state:124f5b25-7c27-4dc3-8328-e48dbcd61782:output"
+      ],
+      "initial_token": [
+        "block:2:benchmark:dismantled:4"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:2:activity:4a720893-3f75-484a-9991-5f209ef02d97",
+      "dismantle": "block:2:benchmark:dismantle:5",
+      "installed": [
+        "block:2:state:4a720893-3f75-484a-9991-5f209ef02d97:output"
+      ],
+      "initial_token": [
+        "block:2:benchmark:dismantled:5"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:3:activity:931ed71c-6b11-43c9-b3a7-1520714cdd35",
+      "dismantle": "block:3:benchmark:dismantle:1",
+      "installed": [
+        "block:3:state:931ed71c-6b11-43c9-b3a7-1520714cdd35:output"
+      ],
+      "initial_token": [
+        "block:3:benchmark:dismantled:1"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:3:activity:6d85c402-1821-41ff-ac0b-eaf79e3d25b1",
+      "dismantle": "block:3:benchmark:dismantle:2",
+      "installed": [
+        "block:3:state:6d85c402-1821-41ff-ac0b-eaf79e3d25b1:output"
+      ],
+      "initial_token": [
+        "block:3:benchmark:dismantled:2"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:3:activity:243dc439-835a-40c4-86d8-8ec398fc3136",
+      "dismantle": "block:3:benchmark:dismantle:3",
+      "installed": [
+        "block:3:state:243dc439-835a-40c4-86d8-8ec398fc3136:output"
+      ],
+      "initial_token": [
+        "block:3:benchmark:dismantled:3"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:3:activity:124f5b25-7c27-4dc3-8328-e48dbcd61782",
+      "dismantle": "block:3:benchmark:dismantle:4",
+      "installed": [
+        "block:3:state:124f5b25-7c27-4dc3-8328-e48dbcd61782:output"
+      ],
+      "initial_token": [
+        "block:3:benchmark:dismantled:4"
+      ],
+      "checks_passed": true
+    },
+    {
+      "install": "block:3:activity:4a720893-3f75-484a-9991-5f209ef02d97",
+      "dismantle": "block:3:benchmark:dismantle:5",
+      "installed": [
+        "block:3:state:4a720893-3f75-484a-9991-5f209ef02d97:output"
+      ],
+      "initial_token": [
+        "block:3:benchmark:dismantled:5"
+      ],
+      "checks_passed": true
+    }
+  ],
+  "original_executions": 137,
+  "projected_executions": 80,
+  "removed_dismantles": 34,
+  "removed_repeat_installs": 23,
+  "original_makespan": 2415,
+  "fixed_time_projected_makespan": 2415,
+  "fixed_time_model_validation": "OPTIMAL",
+  "fixed_time_validation_seconds": 0.0141752,
+  "normalized_replay_makespan": 1955,
+  "normalized_replay_executions": 80,
+  "validator": "VALID",
+  "normalization": {
+    "raw_schedule_makespan": 2415,
+    "shifted_schedule_makespan": 1955,
+    "delivered_makespan": 1955,
+    "left_shift_saved_time": 460,
+    "terminal_tail_saved_time": 0,
+    "omitted_tail_occurrences": []
+  }
+}
